@@ -6,6 +6,7 @@ import {
   taskCoreApi,
   taskKeys,
   taskCoreInvalidation,
+  parseKindError,
   useCan,
 } from "@mediaos/web-core";
 import type { CreateTaskCoreRequest, TaskCoreResponseDto } from "@mediaos/contracts";
@@ -67,6 +68,17 @@ export interface TaskQuickAddProps {
   withDeadlineChip?: boolean;
   /** Thay thông điệp «thiếu tiêu đề» mặc định. */
   titleRequiredMessage?: string;
+  /** Lỗi 400/422 nghiệp vụ: hiện thông điệp của server (không bao giờ với 5xx/mạng). Mặc định tắt. */
+  showServerReason?: boolean;
+  /** Chuỗi dự phòng cho 400/422 khi server không kèm lý do (hộp gọn không có hạn/cột). */
+  badRequestMessage?: string;
+}
+
+/** Bỏ tiền tố mã slug `TASK-ERR-…: ` — chỉ giữ phần người đọc được; rỗng ⇒ null. */
+function readBusinessReason(error: unknown): string | null {
+  const { message } = parseKindError(error);
+  const text = message.replace(/^[A-Z][A-Z0-9-]*:\s*/, "").trim();
+  return text === "" || /^[A-Z][A-Z0-9-]+$/.test(text) ? null : text;
 }
 
 interface StickyAssignee {
@@ -151,6 +163,8 @@ export function TaskQuickAdd({
   titleRequiredMessage,
   closeOnBlur = true,
   onCreateError,
+  showServerReason = false,
+  badRequestMessage,
 }: TaskQuickAddProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -190,7 +204,11 @@ export function TaskQuickAdd({
       await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
     },
     onError: (err, body) => {
-      const message = t(`quickAdd.errors.${classifyTaskCreateError(err)}`);
+      const kind = classifyTaskCreateError(err);
+      const message =
+        kind === "badRequest" && showServerReason
+          ? (readBusinessReason(err) ?? badRequestMessage ?? t("quickAdd.errors.badRequest"))
+          : t(`quickAdd.errors.${kind}`);
       setError(message);
       onCreateError?.(message, body.title);
       setTitle((current) => (current === "" ? body.title : current));

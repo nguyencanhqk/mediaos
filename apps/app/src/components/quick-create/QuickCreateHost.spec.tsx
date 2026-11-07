@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError, authApi, taskCoreApi, taskProjectApi, useAuthStore } from "@mediaos/web-core";
-import { toast } from "@mediaos/ui";
+import { Sheet, toast } from "@mediaos/ui";
 import { QuickCreateHost } from "./QuickCreateHost";
 import { useQuickCreateStore } from "./quick-create.store";
 import { QUICK_CREATE_RECENT_PROJECT_KEY } from "./recent-project";
@@ -321,6 +321,110 @@ describe("QuickCreateHost — S20-X-QUICKCREATE-1", () => {
     });
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toContain("Việc F");
+  });
+
+  // ── Vòng 2 ────────────────────────────────────────────────────────────────
+  it("hộp mở trên Sheet: Esc từ phần tử KHÔNG phải ô nhập ⇒ chỉ hộp đóng, Sheet còn mở", async () => {
+    setCaps({ "create:task": true });
+    const sheetClose = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <Sheet open onClose={sheetClose} title="Chat">
+          <button>nền</button>
+        </Sheet>
+        <QuickCreateHost />
+      </QueryClientProvider>,
+    );
+    await openDialog();
+    const hint = screen.getByTestId("quick-create-message");
+    fireEvent.keyDown(hint, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("quick-create-dialog")).toBeNull());
+    expect(sheetClose).not.toHaveBeenCalled();
+  });
+
+  it("đóng bằng Esc ⇒ focus trở về phần tử đã focus lúc mở (không rơi về body)", async () => {
+    setCaps({ "create:task": true });
+    const client = new QueryClient();
+    render(
+      <QueryClientProvider client={client}>
+        <button data-testid="origin">gốc</button>
+        <QuickCreateHost />
+      </QueryClientProvider>,
+    );
+    screen.getByTestId("origin").focus();
+    await openDialog();
+    expect(document.activeElement).toBe(input());
+    fireEvent.keyDown(input(), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("quick-create-dialog")).toBeNull());
+    expect(document.activeElement).toBe(screen.getByTestId("origin"));
+  });
+
+  it("phần tử gốc đã biến mất ⇒ focus về nút topbar", async () => {
+    setCaps({ "create:task": true });
+    const client = new QueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <button data-testid="topbar-quick-create">+</button>
+        <button data-testid="origin">gốc</button>
+        <QuickCreateHost />
+      </QueryClientProvider>,
+    );
+    screen.getByTestId("origin").focus();
+    await openDialog();
+    rerender(
+      <QueryClientProvider client={client}>
+        <button data-testid="topbar-quick-create">+</button>
+        <QuickCreateHost />
+      </QueryClientProvider>,
+    );
+    fireEvent.keyDown(input(), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("quick-create-dialog")).toBeNull());
+    expect(document.activeElement).toBe(screen.getByTestId("topbar-quick-create"));
+  });
+
+  it("server từ chối khi hộp CÒN mở ⇒ chỉ dòng lỗi tại ô, KHÔNG toast", async () => {
+    setCaps({ "create:task": true });
+    vi.mocked(taskCoreApi.createTask).mockRejectedValue(new ApiError(403, "FORBIDDEN", "no"));
+    renderHost();
+    await openDialog();
+    fireEvent.change(input(), { target: { value: "Việc H" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("422 ⇒ hiện lý do của server (bỏ tiền tố mã), tiêu đề được giữ", async () => {
+    setCaps({ "create:task": true });
+    vi.mocked(taskCoreApi.createTask).mockRejectedValue(
+      new ApiError(422, "UNPROCESSABLE", "TASK-ERR-TITLE-DUP: Đã có việc trùng tiêu đề"),
+    );
+    renderHost();
+    await openDialog();
+    fireEvent.change(input(), { target: { value: "Việc I" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toBe("Đã có việc trùng tiêu đề");
+    expect(input().value).toBe("Việc I");
+  });
+
+  it("422 không kèm lý do ⇒ chuỗi dự phòng KHÔNG nhắc hạn/cột; 500 ⇒ không lộ message server", async () => {
+    setCaps({ "create:task": true });
+    vi.mocked(taskCoreApi.createTask).mockRejectedValueOnce(new ApiError(422, "UNPROCESSABLE", ""));
+    renderHost();
+    await openDialog();
+    fireEvent.change(input(), { target: { value: "Việc J" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    const first = (await screen.findByRole("alert")).textContent ?? "";
+    expect(first).toMatch(/tiêu đề/);
+    expect(first).not.toMatch(/hạn|cột/);
+    vi.mocked(taskCoreApi.createTask).mockRejectedValueOnce(
+      new ApiError(500, "INTERNAL", "SELECT secret FROM x"),
+    );
+    fireEvent.keyDown(input(), { key: "Enter" });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).not.toBe(first));
+    expect(screen.getByRole("alert").textContent).not.toMatch(/SELECT/);
   });
 
   it("request đang bay ⇒ «Thêm chi tiết» bị khoá (không mở form rỗng/tạo trùng)", async () => {

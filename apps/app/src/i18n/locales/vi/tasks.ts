@@ -17,6 +17,7 @@ export default {
     meFailed: "Không tải được thông tin của bạn nên chưa tạo nhanh được. Tải lại trang để thử lại.",
     recentProject: "Dự án gần nhất: {{name}}",
     created: "Đã tạo việc",
+    badRequest: "Không tạo được — kiểm tra lại tiêu đề công việc.",
     createFailed: "Chưa tạo được việc «{{title}}». {{reason}}",
     open: "Mở",
   },

@@ -39,3 +39,16 @@ Thêm `components/quick-create/**` (nằm trong paths); sửa `routes/tasks/Task
 3. [MEDIUM] Chip dự án đóng hộp khi blur — `TaskQuickAdd.closeOnBlur=false` cho hộp (Dialog tự lo Esc/click ngoài). Test: blur relatedTarget=chip ⇒ hộp còn, chip bấm được.
 4. [MEDIUM] Mất việc im lặng khi đóng hộp lúc request bay — `onCreateError` ⇒ host `toast.error` kèm tiêu đề. Test: đóng rồi server 500 ⇒ toast chứa tiêu đề.
 5. [LOW] «Thêm chi tiết» khi pending — nút disabled khi `createMutation.isPending`; host tách `handleQuickCreated` (không đụng form đầy đủ) khỏi `handleFullCreated`. Test: pending ⇒ nút khoá, không mở form.
+
+## Sổ vết vòng 2 (vá review hẹp + đo trình duyệt thật 07/11/2026)
+
+1. [MEDIUM] Esc từ vùng không phải ô nhập đóng cả hộp lẫn drawer chat — hộp portal ra ngoài panel Sheet nên Sheet không thấy modal con. Vá: vùng nội dung hộp mang `data-floating-layer="open"` (hợp đồng sẵn có của Sheet/Popover) ⇒ Sheet nhường Esc; KHÔNG sửa packages/ui. Test: Host.spec «hộp mở trên Sheet».
+2. [LOW] Đóng hộp ⇒ focus rơi về body (Dialog chung chụp phần tử trước-khi-mở SAU khi autoFocus đã chạy ⇒ chụp trúng ô nhập của chính hộp). Vá: store chụp `returnFocusTo` lúc `open()`; Host trả focus khi đóng (không khi sang form đầy đủ), phần tử gốc đã mất ⇒ nút topbar. Test: 2 ca focus.
+3. [LOW] Lỗi hiện hai lần — `handleCreateError` chỉ toast khi hộp ĐÃ đóng. Test: «hộp CÒN mở ⇒ không toast»; ca hộp đã đóng giữ nguyên.
+4. [LOW] 422 hiện chuỗi chung nhắc hạn/cột — TaskQuickAdd thêm `showServerReason` + `badRequestMessage` (opt-in, chỉ hộp gọn bật): 400/422 hiện message server (bỏ tiền tố slug), rỗng ⇒ chuỗi dự phòng `quickCreate.badRequest` (không nhắc hạn/cột); 403/5xx/mạng vẫn chuỗi i18n, không lộ chi tiết server. Test: 422 có lý do · 422 rỗng · 500.
+5. [GHI CHÉP] Khi drawer chat mở, nút topbar bị lớp phủ Sheet che (modal, cố ý) ⇒ KPI #20 đạt qua phím tắt Alt+Shift+N; không sửa.
+
+Số đo KPI #20 (Chromium Playwright MCP 1440x900, vite từ worktree @ b3392dce, API giả lập):
+- Ca A (/goals + drawer chat mở, Alt+Shift+N → gõ tiêu đề → Enter): 3 thao tác, 0 đổi pathname; POST /tasks {title, assigneeEmployeeId: tôi}, không projectId; toast «Đã tạo việc» + «Mở»; «Mở» ⇒ /goals?task=<id>, drawer việc mở, chat vẫn mở.
+- Ca B (/goals, không chat, nút topbar «+ Tạo việc» → gõ → Enter): 3 thao tác, 0 đổi path.
+- Ca thiếu create:task: không nút, phím tắt vô tác dụng (Host.spec).

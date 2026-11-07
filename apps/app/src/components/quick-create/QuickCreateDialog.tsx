@@ -65,7 +65,9 @@ export function QuickCreateDialog({
 
   return (
     <Dialog open onClose={onClose} title={t("quickCreate.dialogTitle")}>
-      <div className="space-y-3" data-testid="quick-create-dialog">
+      {/* data-floating-layer: hợp đồng với Sheet (chat drawer) — hộp portal ra ngoài panel nên Sheet không
+          thấy là modal con; có dấu này thì Esc chỉ đóng hộp, không đóng cả drawer bên dưới. */}
+      <div className="space-y-3" data-testid="quick-create-dialog" data-floating-layer="open">
         <TaskQuickAdd
           id="quick-create"
           fixedAssigneeEmployeeId={me.status === "linked" ? me.employeeId : undefined}
@@ -76,6 +78,8 @@ export function QuickCreateDialog({
           hint={t("quickCreate.hint")}
           titleRequiredMessage={t("quickCreate.titleRequired")}
           withDeadlineChip={false}
+          showServerReason
+          badRequestMessage={t("quickCreate.badRequest")}
           autoFocus
           onClose={onClose}
           closeOnBlur={false}

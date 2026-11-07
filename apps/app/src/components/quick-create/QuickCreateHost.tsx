@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@mediaos/ui";
 import { useCan } from "@mediaos/web-core";
@@ -12,6 +12,7 @@ import { useQuickCreateStore } from "./quick-create.store";
 import { writeRecentProjectId } from "./recent-project";
 
 const TOAST_KEY = "quick-create:created";
+const TOPBAR_BUTTON_SELECTOR = '[data-testid="topbar-quick-create"]';
 
 interface FullFormDraft {
   title: string;
@@ -60,13 +61,30 @@ export function QuickCreateHost() {
     },
     [announceCreated, close],
   );
-  // Hộp có thể đã đóng khi server lỗi ⇒ toast để người dùng biết việc CHƯA được tạo (kèm tiêu đề).
+  // Hộp CÒN mở ⇒ dòng lỗi tại ô đã đủ (không toast trùng). Hộp ĐÃ đóng khi server lỗi ⇒ toast để người
+  // dùng biết việc CHƯA được tạo (kèm tiêu đề).
   const handleCreateError = useCallback(
     (message: string, title: string) => {
+      if (useQuickCreateStore.getState().isOpen) return;
       toast.error(t("quickCreate.createFailed", { title, reason: message }));
     },
     [t],
   );
+
+  // Đóng hộp (Esc / lưu xong) ⇒ trả focus về phần tử đã focus lúc mở (còn trong DOM), không thì nút topbar.
+  // Bỏ qua khi chuyển sang form đầy đủ (form tự giữ focus).
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (isOpen) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current || fullDraft !== null) return;
+    wasOpen.current = false;
+    const target = useQuickCreateStore.getState().returnFocusTo;
+    const fallback = document.querySelector<HTMLElement>(TOPBAR_BUTTON_SELECTOR);
+    (target?.isConnected ? target : fallback)?.focus();
+  }, [isOpen, fullDraft]);
 
   if (!canCreate) return null;
   if (fullDraft) {
