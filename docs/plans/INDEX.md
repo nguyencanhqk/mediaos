@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**736 WO** · có micro-plan: **374/736** · ⬜ 108 chờ · 🔵 2 đang làm · ✅ 625 xong · 🔴 1 chặn
+**736 WO** · có micro-plan: **377/736** · ⬜ 105 chờ · 🔵 2 đang làm · ✅ 628 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -787,8 +787,8 @@
 | `S20-TASK-QUICKADD-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S20-TASK-QUICKEDIT-1 | Tạo việc một dòng: gõ tiêu đề rồi Enter ngay đầu «Việc của tôi» (mặc đ |
 | `S20-GOAL-LISTURL-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-FE-COMPANYTZ-1 ✅S20-FE-TOAST-1 | /goals mở ra là mục tiêu quý hiện tại của phòng mình, bộ lọc · chế độ  |
 | `S20-GOAL-QUICKSTART-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-FE-COMPANYTZ-1 ✅S20-FE-TOAST-1 ✅S20-GOAL-LISTURL-1 | Nhân viên bắt đầu mục tiêu quý trong vài chạm: form tự điền cấp · ngườ |
-| `S20-X-QUICKCREATE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKADD-1 ✅S20-FE-TOAST-1 | Ghi lại một việc từ bất kỳ trang nào: nút «+ Tạo việc» trên topbar và  |
-| `S20-DASH-TODAY-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-TASK-MYTASKS-1 ✅S20-FE-COMPANYTZ-1 ✅S20-GOAL-QUICKSTART-1 | Dashboard Employee thành màn «Hôm nay» làm được việc ngay: hàng việc v |
+| `S20-X-QUICKCREATE-1` | 🟢 | ✅ xong | [📄](S20-X-QUICKCREATE-1.md) | ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKADD-1 ✅S20-FE-TOAST-1 | Ghi lại một việc từ bất kỳ trang nào: nút «+ Tạo việc» trên topbar và  |
+| `S20-DASH-TODAY-1` | 🟡 | ✅ xong | [📄](S20-DASH-TODAY-1.md) | ✅S20-TASK-DRAWER-1 ✅S20-TASK-MYTASKS-1 ✅S20-FE-COMPANYTZ-1 ✅S20-GOAL-QUICKSTART-1 | Dashboard Employee thành màn «Hôm nay» làm được việc ngay: hàng việc v |
 | `S20-CHAT-DRAFT-1` | 🟢 | ✅ xong | — *(chưa)* | — | Tin nhắn: nháp đang gõ dở (kể cả @nhắc và tin đang trả lời) được giữ t |
 | `S20-CHAT-UNREADNAV-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-CHAT-DRAFT-1 ✅S20-CHAT-UNREAD-1 ✅S20-FE-TOAST-1 | Tin nhắn: bắt kịp tin chưa đọc nhanh — «Đánh dấu đã đọc» trên dòng phò |
 | `S20-CHAT-MSGTOTASK-1` | 🟡 | ✅ xong | [📄](S20-CHAT-MSGTOTASK-1.md) | ✅S20-CHAT-DEEPLINK-1 ✅S20-FE-TOAST-1 | Tạo việc từ một tin nhắn ngay trong phòng chat: tiêu đề, mô tả, dự án  |
@@ -808,12 +808,12 @@
 | `S20-TASK-LEAVEHANDOFF-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-FE-COMPANYTZ-1 | Trên đơn nghỉ của tôi thấy ngay các việc đến hạn trong kỳ nghỉ và bàn  |
 | `S20-TASK-LEAVEPICKER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ⏳S20-TASK-BULKACTIONS-1 ✅S20-TASK-OVERDUEDESK-1 ⏳S20-TASK-LEAVEHANDOFF-1 ✅S20-TASK-DRAWER-1 ✅S20-FE-COMPANYTZ-1 | Quản lý bàn giao quanh kỳ nghỉ: từ đơn đang duyệt một chạm tới danh sá |
 | `S20-GOAL-QUICKCHECKIN-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-FE-TOAST-1 | Mục tiêu: check-in nhanh (điền sẵn số cũ, độ tự tin một chạm, Ctrl+Ent |
-| `S20-GOAL-LINKEDTASKS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-CHAT-MSGTOTASK-1 ✅S20-TASK-DRAWER-1 | Tab «Công việc gắn» của mục tiêu: bấm dòng mở drawer việc, nhóm theo n |
+| `S20-GOAL-LINKEDTASKS-1` | 🟡 | ✅ xong | [📄](S20-GOAL-LINKEDTASKS-1.md) | ✅S20-CHAT-MSGTOTASK-1 ✅S20-TASK-DRAWER-1 | Tab «Công việc gắn» của mục tiêu: bấm dòng mở drawer việc, nhóm theo n |
 | `S20-GOAL-PARENTPICKER-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-GOAL-QUICKSTART-1 | Form mục tiêu: chọn mục tiêu cha bằng ô tìm kiếm, kỳ tự lấy theo cha,  |
 | `S20-GOAL-DECOMPOSE-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-FE-COMPANYTZ-1 ✅S20-TASK-DRAWER-1 | Wizard phân rã mục tiêu: áp người/hạn cho mọi dòng một lần, hạn cuối n |
 | `S20-GOAL-BULKACTIVATE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S20-GOAL-LISTURL-1 ✅S20-GOAL-QUICKSTART-1 | Quản lý chọn nhiều mục tiêu Nháp của đội và kích hoạt cùng lúc ngay tr |
-| `S20-DASH-WIDGETS-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-WIDGETCARD-VARIANT-1 ⏳S20-DASH-TODAY-1 | Dashboard hiện đủ widget đã seed (Số dư phép, Lịch nghỉ, Cảnh báo chấm |
-| `S20-FE-MOBILEDAILY-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-BULKACTIONS-1 ✅S20-TASK-OVERDUEDESK-1 ✅S20-GOAL-QUICKCHECKIN-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-TASK-DRAWER-1 ✅S20-FE-TOAST-1 ⏳S20-X-QUICKCREATE-1 | Công việc và Mục tiêu dùng được trên điện thoại 375px: danh sách thành |
+| `S20-DASH-WIDGETS-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-WIDGETCARD-VARIANT-1 ✅S20-DASH-TODAY-1 | Dashboard hiện đủ widget đã seed (Số dư phép, Lịch nghỉ, Cảnh báo chấm |
+| `S20-FE-MOBILEDAILY-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-BULKACTIONS-1 ✅S20-TASK-OVERDUEDESK-1 ✅S20-GOAL-QUICKCHECKIN-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-TASK-DRAWER-1 ✅S20-FE-TOAST-1 ✅S20-X-QUICKCREATE-1 | Công việc và Mục tiêu dùng được trên điện thoại 375px: danh sách thành |
 | `S20-TASK-ASSIGNNOTI-1` | 🟡 | ✅ xong | [📄](S20-TASK-ASSIGNNOTI-1.md) | — | Giao việc qua form Tạo, hoặc đổi người/hạn/ưu tiên qua form Sửa, cũng  |
 | `S20-TASK-DUEREMIND-1` | 🟡 | ✅ xong | [📄](S20-TASK-DUEREMIND-1.md) | — | Nhắc sắp đến hạn/quá hạn chạy đúng cho việc SPEC-06 (quá hạn báo cả ng |
 | `S20-TASK-MYTASKSLOAD-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-MYTASKS-1 | «Việc của tôi» vẫn mở nhanh dù đã xong hàng trăm việc, và mỗi việc hiệ |
@@ -829,16 +829,16 @@
 | `S20-DASH-QUICKACTION-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S20-TASK-MYTASKS-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKADD-1 | Nút nhanh và con số trên dashboard và /me dẫn đúng chỗ (hết link chết) |
 | `S20-FE-CMDKSEARCH-1` | amber | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 | Ctrl+K tìm được cả việc, dự án và đồng nghiệp theo đúng quyền của ngườ |
 | `S20-TASK-DMBUTTON-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-ALLOWEDACTIONS-1 ✅S20-CHAT-DEEPLINK-1 | Nút «Nhắn tin» cạnh người phụ trách việc và thành viên dự án mở ngay c |
-| `S20-DASH-PENDINGBOX-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-REVIEWQUEUE-1 ✅S20-TASK-DRAWER-1 ⏳S20-DASH-TODAY-1 | Hộp «Chờ tôi xử lý» trên dashboard quản lý: đơn nghỉ chờ duyệt và việc |
+| `S20-DASH-PENDINGBOX-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-REVIEWQUEUE-1 ✅S20-TASK-DRAWER-1 ✅S20-DASH-TODAY-1 | Hộp «Chờ tôi xử lý» trên dashboard quản lý: đơn nghỉ chờ duyệt và việc |
 | `S20-CHAT-DIRECTORY-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-CHAT-NEWROOM-1 | Danh bạ nhẹ cho chat: endpoint riêng của CHAT trả đúng 4 trường (userI |
 | `S20-CHAT-MENTIONALL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-CHAT-DEEPLINK-1 ✅S20-CHAT-MENTIONPIN-1 | CHAT-DEC mới về tư cách theo loại phòng (group: admin phòng · departme |
 | `S20-TASK-PROJREPORTROLE-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Owner/Manager còn hiệu lực của dự án xem được tab Báo cáo của chính dự |
 | `S20-GOAL-BATCHCREATE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-LISTURL-1 | Giao một mục tiêu con cho nhiều nhân viên trong một lần — `POST /goals |
 | `S20-GOAL-BATCHFINALIZE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-LISTURL-1 ⏳S20-TASK-BULKACTIONS-1 ✅S20-FE-COMPANYTZ-1 | Chốt kỳ hàng loạt cho mục tiêu của phòng — `POST /goals/finalize-batch |
 | `S20-GOAL-CHECKINREMIND-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S20-GOAL-OWNERCHECKIN-1 ⏳S20-GOAL-RISKFLAG-1 | Nhắc check-in hằng tuần (một thông báo gộp mỗi người mỗi tuần) và báo  |
-| `S20-NOTI-TARGETURL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 ⏳S20-DASH-TODAY-1 ✅S20-TASK-DUEREMIND-1 | Template `target_url` mở đúng bản ghi: nhắc hạn việc → `/tasks/{taskId |
-| `S20-GOAL-SUGGEST-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 ✅S20-TASK-QUICKADD-1 | Tạo việc tự điền sẵn mục tiêu cá nhân của chính mình, các trường hợp k |
-| `S20-GOAL-BULKLINK-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 | Tab «Công việc gắn» gợi ý hàng loạt «N việc trong kỳ chưa gắn mục tiêu |
+| `S20-NOTI-TARGETURL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-DASH-TODAY-1 ✅S20-TASK-DUEREMIND-1 | Template `target_url` mở đúng bản ghi: nhắc hạn việc → `/tasks/{taskId |
+| `S20-GOAL-SUGGEST-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 ✅S20-TASK-QUICKADD-1 | Tạo việc tự điền sẵn mục tiêu cá nhân của chính mình, các trường hợp k |
+| `S20-GOAL-BULKLINK-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 | Tab «Công việc gắn» gợi ý hàng loạt «N việc trong kỳ chưa gắn mục tiêu |
 | `S20-SEC-TASKLEGACYREAD-1` | 🔴 | ✅ xong | [📄](S20-SEC-TASKLEGACYREAD-1.md) | — | Ba route đọc việc đời cũ (board · theo dự án · theo nhóm) — gỡ nếu khô |
 | `S20-SEC-TASKPATCHGATE-1` | 🔴 | ✅ xong | [📄](S20-SEC-TASKPATCHGATE-1.md) | — | Đối chiếu cổng quyền của form Sửa việc với các thao tác chuyên trách ( |
 | `S20-SEC-GOALLINKGATE-1` | 🔴 | ✅ xong | [📄](S20-SEC-GOALLINKGATE-1.md) | — | Gắn việc vào mục tiêu kiểm cả mục tiêu đang giữ việc đó (quyền ghi · c |
