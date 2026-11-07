@@ -9,7 +9,7 @@
  * (`enabled` tắt). Mục Nháp: nút Check-in khoá kèm lý do (`goalCheckinLockReason`, cùng nguồn với
  * MeGoalsCard). Lỗi riêng khối ⇒ báo lỗi + Thử lại, các widget khác vẫn sống.
  */
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -72,15 +72,14 @@ export function GoalCheckinDueBlock({ othersClear = false }: GoalCheckinDueBlock
   const enabled = canAccess && canCheckin;
 
   // Kỳ hiện tại = quý chứa «hôm nay» theo giờ CÔNG TY (máy đặt UTC cho cùng kết quả).
-  const paramsByStatus = useMemo(() => {
-    const quarter = quarterRange(new Date(), companyTimeZone());
-    return OPEN_STATUSES.map((status) => ({
-      periodFrom: quarter.start,
-      periodTo: quarter.end,
-      limit: ME_GOALS_FETCH_LIMIT,
-      status,
-    }));
-  }, []);
+  // Tính MỖI lần render (rẻ) ⇒ qua mốc đổi quý, queryKey đổi theo, tab mở lâu không kẹt quý cũ.
+  const quarter = quarterRange(new Date(), companyTimeZone());
+  const paramsByStatus = OPEN_STATUSES.map((status) => ({
+    periodFrom: quarter.start,
+    periodTo: quarter.end,
+    limit: ME_GOALS_FETCH_LIMIT,
+    status,
+  }));
   const results = useQueries({
     queries: paramsByStatus.map((params) => ({
       queryKey: meKeys.goals(params),

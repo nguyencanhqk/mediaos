@@ -44,3 +44,11 @@ Nguồn: `docs/plans/S20-WORKUX-STORIES.md` §5.4 US-X-03 + US-X-08 (biến th�
 - Áp `defaultLanding` chỉ ở `/` — người mở thẳng `/home` giữ `/home`; chưa có ca e2e đăng nhập thật.
 
 ## Sổ vết KPI: (điền sau)
+
+### Sổ vết — vá review (07/11/2026)
+
+1. LOW default-landing redirect mỗi lần mount `/` ⇒ vòng lặp «Về trang chủ»: ĐÃ VÁ — 3 link «Về trang chủ» (forbidden.tsx, RouteStates.tsx x2) trỏ `/home`; `/` chỉ còn là cổng vào app.
+2. LOW cast `as "/"` + Home nháy: ĐÃ VÁ một phần — `DEFAULT_LANDING_GO` gõ kiểu cho `/home`, `/tasks/my-tasks`; `/dashboard`, `/me` sinh động từ ROUTE_REGISTRY nên không có trong kiểu router ⇒ chỉ ép đúng 2 literal (ghi chú trong mã). Hook trả `true` khi đang tải/sắp chuyển ⇒ IndexEntry không vẽ Home.
+3. LOW allClear đếm widget không thấy: ĐÃ VÁ — nguồn lọc theo useCan (read:task; view:leave + approve:leave), rỗng ⇒ false; 2 ca test.
+4. LOW quý đóng băng useMemo([]): ĐÃ VÁ — tính mỗi render; ca test đổi quý.
+5. LOW radiogroup thiếu bàn phím: ĐÃ VÁ — roving tabindex, mũi tên chọn mục kế, aria-disabled thay disabled; 2 ca test.

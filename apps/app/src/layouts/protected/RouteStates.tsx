@@ -35,7 +35,7 @@ export function RouteDisabledState({ reason }: { reason?: string }) {
       </span>
       <p className="max-w-sm text-sm text-muted-foreground">{reasonText}</p>
       <Link
-        to="/"
+        to="/home"
         className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
       >
         {t("forbidden.goHome")}
@@ -52,7 +52,7 @@ export function RouteNotFoundState() {
       <span className="text-6xl font-bold text-muted-foreground/30">404</span>
       <p className="max-w-sm text-sm text-muted-foreground">{t("routeTitle.notFound")}</p>
       <Link
-        to="/"
+        to="/home"
         className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
       >
         {t("forbidden.goHome")}

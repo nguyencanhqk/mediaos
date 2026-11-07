@@ -3,7 +3,7 @@
  * S20-DASH-TODAY-1 — khối «Mục tiêu cần check-in» của dashboard Employee. Deny-path trước: thiếu MỘT trong
  * `access:goal` / `checkin:goal` ⇒ không render + 0 lời gọi `GET /me/goals`.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
@@ -95,6 +95,33 @@ describe("GoalCheckinDueBlock — gate", () => {
     const { container } = renderBlock();
     expect(container).toBeEmptyDOMElement();
     expect(mockGetGoals).not.toHaveBeenCalled();
+  });
+});
+
+describe("GoalCheckinDueBlock — mốc đổi quý", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("render lại sau mốc đổi quý ⇒ hỏi lại theo quý MỚI (khoá query đổi)", async () => {
+    setCaps(BOTH);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-12-31T05:00:00.000Z"));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (
+      <QueryClientProvider client={client}>
+        <I18nextProvider i18n={i18n}>
+          <GoalCheckinDueBlock />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui);
+    await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(2));
+    const from = (i: number) =>
+      (mockGetGoals.mock.calls[i][0] as { periodFrom: string }).periodFrom;
+    const firstFrom = from(0);
+    vi.setSystemTime(new Date("2027-01-02T05:00:00.000Z"));
+    rerender(ui);
+    await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(4));
+    expect(from(2)).not.toBe(firstFrom);
   });
 });
 

@@ -93,6 +93,18 @@ describe("useApplyDefaultLanding", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it("trả true (giữ Home chưa vẽ) khi đang tải hoặc sắp chuyển; false khi ở lại /home", async () => {
+    getPrefs.mockResolvedValue({ defaultLanding: "/dashboard" });
+    const a = setup();
+    expect(a.result.current).toBe(true);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    expect(a.result.current).toBe(true);
+    getPrefs.mockResolvedValue({ defaultLanding: null });
+    const b = setup();
+    expect(b.result.current).toBe(true);
+    await waitFor(() => expect(b.result.current).toBe(false));
+  });
+
   it("lỗi tải preferences ⇒ ở nguyên (fail-soft)", async () => {
     getPrefs.mockRejectedValue(new Error("boom"));
     setup();

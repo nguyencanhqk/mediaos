@@ -20,7 +20,8 @@ import type { DashboardTypeValue, DashboardWidgetSummaryDto } from "@mediaos/con
 import { DashboardWidgetGrid } from "@/components/dashboard/DashboardWidgetGrid";
 import { DashboardTypeSwitcher } from "@/components/dashboard/DashboardTypeSwitcher";
 import { GoalCheckinDueBlock } from "@/components/dashboard/GoalCheckinDueBlock";
-import { DASH_READ_PAIR, DASH_WIDGET_CODE } from "./constants";
+import { LEAVE_ENGINE_PAIRS } from "@/routes/leave/constants";
+import { DASH_READ_PAIR, DASH_WIDGET_CODE, DASH_WIDGET_GATE_PAIR } from "./constants";
 
 /** Các nguồn của màn «Hôm nay» mà khối mục tiêu cần biết đã rỗng hết chưa (cùng khoá cache với widget). */
 const TODAY_SOURCE_CODES: readonly string[] = [
@@ -40,7 +41,20 @@ function EmployeeTodayBlocks({
   widgets: readonly DashboardWidgetSummaryDto[];
   dashboardType: DashboardTypeValue;
 }) {
-  const present = widgets.filter((w) => TODAY_SOURCE_CODES.includes(w.widget_code));
+  // Chỉ đếm nguồn THỰC SỰ hiển thị: cùng cổng với widget (PENDING_LEAVE cần cả view:leave và approve:leave).
+  const taskPair = DASH_WIDGET_GATE_PAIR.MY_TASKS;
+  const leavePair = DASH_WIDGET_GATE_PAIR.PENDING_LEAVE;
+  const canTasks = useCan(taskPair.action, taskPair.resourceType);
+  const canLeaveView = useCan(leavePair.action, leavePair.resourceType);
+  const canLeaveApprove = useCan(
+    LEAVE_ENGINE_PAIRS.APPROVE_REQUEST.action,
+    LEAVE_ENGINE_PAIRS.APPROVE_REQUEST.resourceType,
+  );
+  const sourceVisible = (code: string): boolean =>
+    code === DASH_WIDGET_CODE.PENDING_LEAVE ? canLeaveView && canLeaveApprove : canTasks;
+  const present = widgets.filter(
+    (w) => TODAY_SOURCE_CODES.includes(w.widget_code) && sourceVisible(w.widget_code),
+  );
   const results = useQueries({
     queries: present.map((w) => ({
       queryKey: dashboardKeys.widgets.data(w.widget_code, {
@@ -55,7 +69,8 @@ function EmployeeTodayBlocks({
       staleTime: 15_000,
     })),
   });
-  const othersClear = results.every((r) => r.isSuccess && r.data?.status === "Empty");
+  const othersClear =
+    results.length > 0 && results.every((r) => r.isSuccess && r.data?.status === "Empty");
   return <GoalCheckinDueBlock othersClear={othersClear} />;
 }
 

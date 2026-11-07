@@ -66,6 +66,27 @@ function MeAppearancePageInner() {
     onSuccess: (result) => queryClient.setQueryData(meKeys.preferences(), result),
   });
   const landing = resolveDefaultLanding(prefsQuery.data?.defaultLanding);
+  const landingBusy = landingMutation.isPending || prefsQuery.isLoading;
+  const landingTabStop = landing; // roving tabindex: chỉ mục đang chọn nằm trong thứ tự Tab
+
+  /** Mũi tên di chuyển + chọn theo mẫu ARIA radiogroup (cuộn vòng). Giữ focus vì dùng aria-disabled. */
+  const handleLandingKey = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    if (landingBusy) return;
+    const count = DEFAULT_LANDING_OPTIONS.length;
+    const next = (index + step + count) % count;
+    const radios =
+      e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=radio]");
+    radios?.[next]?.focus();
+    landingMutation.mutate(DEFAULT_LANDING_OPTIONS[next]);
+  };
 
   const handleSelectTheme = (value: ThemePreference) => {
     setTheme(value);
@@ -138,16 +159,20 @@ function MeAppearancePageInner() {
             role="radiogroup"
             aria-label={t("appearancePage.landing.title")}
           >
-            {DEFAULT_LANDING_OPTIONS.map((path) => (
+            {DEFAULT_LANDING_OPTIONS.map((path, index) => (
               <button
                 key={path}
                 type="button"
                 role="radio"
                 aria-checked={landing === path}
-                disabled={landingMutation.isPending || prefsQuery.isLoading}
-                onClick={() => landingMutation.mutate(path)}
+                aria-disabled={landingBusy}
+                tabIndex={path === landingTabStop ? 0 : -1}
+                onKeyDown={(e) => handleLandingKey(e, index)}
+                onClick={() => {
+                  if (!landingBusy) landingMutation.mutate(path);
+                }}
                 className={cn(
-                  "rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-60",
+                  "rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand aria-disabled:opacity-60",
                   landing === path
                     ? "border-brand bg-brand-muted text-brand"
                     : "border-border text-foreground hover:bg-accent",

@@ -307,7 +307,10 @@ describe("MeAppearancePage — «Trang mở đầu» (S20-DASH-TODAY-1)", () => 
     mockPatchPreferences.mockResolvedValue({ ...PREFS_BASE, defaultLanding: "/dashboard" });
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole("radio", { name: "Hôm nay (Dashboard)" })).toBeEnabled(),
+      expect(screen.getByRole("radio", { name: "Hôm nay (Dashboard)" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      ),
     );
     fireEvent.click(screen.getByRole("radio", { name: "Hôm nay (Dashboard)" }));
     await waitFor(() =>
@@ -324,11 +327,43 @@ describe("MeAppearancePage — «Trang mở đầu» (S20-DASH-TODAY-1)", () => 
   it("server lỗi ⇒ báo lỗi, lựa chọn KHÔNG đổi", async () => {
     mockPatchPreferences.mockRejectedValue(new Error("boom"));
     renderPage();
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Cá nhân" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Cá nhân" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      ),
+    );
     fireEvent.click(screen.getByRole("radio", { name: "Cá nhân" }));
     expect(
       await screen.findByText("Không lưu được trang mở đầu. Vui lòng thử lại."),
     ).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Cá nhân" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("radiogroup chuẩn ARIA: chỉ mục đang chọn nằm trong thứ tự Tab, mũi tên chọn mục kế", async () => {
+    mockPatchPreferences.mockResolvedValue({ ...PREFS_BASE, defaultLanding: "/dashboard" });
+    renderPage();
+    const home = screen.getByRole("radio", { name: "Trang chủ" });
+    await waitFor(() => expect(home).toHaveAttribute("aria-disabled", "false"));
+    expect(home).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "Cá nhân" })).toHaveAttribute("tabindex", "-1");
+    fireEvent.keyDown(home, { key: "ArrowRight" });
+    await waitFor(() =>
+      expect(mockPatchPreferences).toHaveBeenCalledWith({ defaultLanding: "/dashboard" }),
+    );
+  });
+
+  it("đang lưu ⇒ aria-disabled (KHÔNG disabled) để giữ focus, và bấm tiếp không gửi lần hai", async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mockPatchPreferences.mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    const me = screen.getByRole("radio", { name: "Cá nhân" });
+    await waitFor(() => expect(me).toHaveAttribute("aria-disabled", "false"));
+    fireEvent.click(me);
+    await waitFor(() => expect(me).toHaveAttribute("aria-disabled", "true"));
+    expect(me).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: "Việc của tôi" }));
+    expect(mockPatchPreferences).toHaveBeenCalledTimes(1);
+    release({ ...PREFS_BASE, defaultLanding: "/me" });
   });
 });

@@ -69,12 +69,8 @@ const homeRoute = createRoute({
 // Index redirect → /home
 // S20-DASH-TODAY-1 — cổng vào app (đích đăng nhập): tôn trọng «Trang mở đầu» (allowlist, default-landing.ts).
 function IndexEntry() {
-  useApplyDefaultLanding();
-  return (
-    <ProtectedShell>
-      <HomePortalLayout />
-    </ProtectedShell>
-  );
+  const holdHome = useApplyDefaultLanding();
+  return <ProtectedShell>{holdHome ? null : <HomePortalLayout />}</ProtectedShell>;
 }
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,

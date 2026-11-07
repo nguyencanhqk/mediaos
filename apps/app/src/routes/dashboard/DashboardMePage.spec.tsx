@@ -182,8 +182,45 @@ function widgetMeta(code: string) {
   };
 }
 
+const TODAY_CAPS = {
+  "read:dashboard": true,
+  "read:task": true,
+  "view:leave": true,
+  "approve:leave": true,
+};
+
 describe("DashboardMePage — khối Mục tiêu cần check-in (Employee)", () => {
-  beforeEach(() => setCaps({ "read:dashboard": true }));
+  beforeEach(() => setCaps(TODAY_CAPS));
+
+  it("thiếu approve:leave ⇒ KHÔNG gọi widget pending-leave, nguồn ẩn không chặn «xong hết»", async () => {
+    setCaps({ ...TODAY_CAPS, "approve:leave": false });
+    mockGetWidgetData.mockImplementation((code: string) =>
+      code === "PENDING_LEAVE"
+        ? Promise.reject(new Error("must not fetch"))
+        : Promise.resolve({ status: "Empty", data: null }),
+    );
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Employee",
+      widgets: [widgetMeta("MY_TASKS"), widgetMeta("PENDING_LEAVE")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("goal-block")).toHaveTextContent("block:true"));
+    expect(mockGetWidgetData.mock.calls.map((c) => c[0])).not.toContain("PENDING_LEAVE");
+  });
+
+  it("không có nguồn nào hiển thị ⇒ othersClear=false (không khẳng định khi chưa kiểm gì)", async () => {
+    setCaps({ ...TODAY_CAPS, "read:task": false, "approve:leave": false });
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Employee",
+      widgets: [widgetMeta("MY_TASKS"), widgetMeta("PENDING_LEAVE")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    const block = await screen.findByTestId("goal-block");
+    expect(block).toHaveTextContent("block:false");
+    expect(mockGetWidgetData).not.toHaveBeenCalled();
+  });
 
   it("dashboard Employee ⇒ khối hiện dưới lưới", async () => {
     mockGetWidgetData.mockResolvedValue({ status: "Active", data: { items: [] } });
