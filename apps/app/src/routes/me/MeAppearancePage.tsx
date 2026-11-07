@@ -16,6 +16,12 @@ import { Palette, Monitor, Sun, Moon } from "lucide-react";
 import { meApi, meKeys, useCan } from "@mediaos/web-core";
 import { EmptyState, PageHeader, Card, CardHeader, CardTitle, CardContent, cn } from "@mediaos/ui";
 import { useTheme, type ThemePreference } from "@mediaos/ui";
+import {
+  DEFAULT_LANDING_LABEL_KEY,
+  DEFAULT_LANDING_OPTIONS,
+  resolveDefaultLanding,
+  type DefaultLandingPath,
+} from "@/lib/default-landing";
 import { ME_ACCESS_PAIR } from "./constants";
 
 const THEME_OPTIONS: readonly { value: ThemePreference; labelKey: string; icon: typeof Monitor }[] =
@@ -53,6 +59,34 @@ function MeAppearancePageInner() {
     onSuccess: (result) => queryClient.setQueryData(meKeys.preferences(), result),
     // onError: KHÔNG revert theme local — fail-soft tuyệt đối, xem docstring đầu file.
   });
+
+  // S20-DASH-TODAY-1 — «Trang mở đầu»: chỉ ghi giá trị trong allowlist; chờ server xác nhận rồi mới đổi lựa chọn.
+  const landingMutation = useMutation({
+    mutationFn: (value: DefaultLandingPath) => meApi.patchPreferences({ defaultLanding: value }),
+    onSuccess: (result) => queryClient.setQueryData(meKeys.preferences(), result),
+  });
+  const landing = resolveDefaultLanding(prefsQuery.data?.defaultLanding);
+  const landingBusy = landingMutation.isPending || prefsQuery.isLoading;
+  const landingTabStop = landing; // roving tabindex: chỉ mục đang chọn nằm trong thứ tự Tab
+
+  /** Mũi tên di chuyển + chọn theo mẫu ARIA radiogroup (cuộn vòng). Giữ focus vì dùng aria-disabled. */
+  const handleLandingKey = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    if (landingBusy) return;
+    const count = DEFAULT_LANDING_OPTIONS.length;
+    const next = (index + step + count) % count;
+    const radios =
+      e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=radio]");
+    radios?.[next]?.focus();
+    landingMutation.mutate(DEFAULT_LANDING_OPTIONS[next]);
+  };
 
   const handleSelectTheme = (value: ThemePreference) => {
     setTheme(value);
@@ -108,6 +142,50 @@ function MeAppearancePageInner() {
           </div>
           {patchMutation.isError && (
             <p className="mt-3 text-xs text-warning">{t("appearancePage.syncError")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">
+            {t("appearancePage.landing.title")}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">{t("appearancePage.landing.description")}</p>
+        </CardHeader>
+        <CardContent>
+          <div
+            className="flex flex-wrap gap-2"
+            role="radiogroup"
+            aria-label={t("appearancePage.landing.title")}
+          >
+            {DEFAULT_LANDING_OPTIONS.map((path, index) => (
+              <button
+                key={path}
+                type="button"
+                role="radio"
+                aria-checked={landing === path}
+                aria-disabled={landingBusy}
+                tabIndex={path === landingTabStop ? 0 : -1}
+                onKeyDown={(e) => handleLandingKey(e, index)}
+                onClick={() => {
+                  if (!landingBusy) landingMutation.mutate(path);
+                }}
+                className={cn(
+                  "rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand aria-disabled:opacity-60",
+                  landing === path
+                    ? "border-brand bg-brand-muted text-brand"
+                    : "border-border text-foreground hover:bg-accent",
+                )}
+              >
+                {t(DEFAULT_LANDING_LABEL_KEY[path])}
+              </button>
+            ))}
+          </div>
+          {landingMutation.isError && (
+            <p role="alert" className="mt-3 text-xs text-warning">
+              {t("appearancePage.landing.saveError")}
+            </p>
           )}
         </CardContent>
       </Card>

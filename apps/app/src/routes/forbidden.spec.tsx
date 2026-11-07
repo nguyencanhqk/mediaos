@@ -61,9 +61,9 @@ describe("ForbiddenPage — message theo reason enum", () => {
 });
 
 describe("ForbiddenPage — action link accessible name", () => {
-  it("'Về trang chủ' có accessible name qua role=link và trỏ về '/'", () => {
+  it("'Về trang chủ' có accessible name qua role=link và trỏ về '/home' (không qua '/' — S20-DASH-TODAY-1: «Trang mở đầu» chỉ áp ở cổng vào)", () => {
     render(<ForbiddenPage reason="NO_PERMISSION" />);
     const link = screen.getByRole("link", { name: "Về trang chủ" });
-    expect(link).toHaveAttribute("href", "/");
+    expect(link).toHaveAttribute("href", "/home");
   });
 });

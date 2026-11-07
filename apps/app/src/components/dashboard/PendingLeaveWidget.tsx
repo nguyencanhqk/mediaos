@@ -8,7 +8,9 @@
  */
 import { useTranslation } from "react-i18next";
 import { CalendarClock } from "lucide-react";
-import { PermissionGate, formatDate } from "@mediaos/web-core";
+import { useNavigate } from "@tanstack/react-router";
+import { PermissionGate, formatDate, useCan } from "@mediaos/web-core";
+import { LEAVE_ENGINE_PAIRS } from "@/routes/leave/constants";
 import { useDashboardWidgetData } from "./useDashboardWidget";
 import { WidgetCard } from "./WidgetCard";
 import { DASH_WIDGET_CODE, DASH_WIDGET_GATE_PAIR } from "@/routes/dashboard/constants";
@@ -21,6 +23,7 @@ interface PendingLeaveWidgetProps {
 
 function PendingLeaveWidgetInner({ dashboardType }: PendingLeaveWidgetProps) {
   const { t } = useTranslation("dashboard");
+  const navigate = useNavigate();
   const { data, isLoading, isError, refresh, isRefreshing } = useDashboardWidgetData(
     DASH_WIDGET_CODE.PENDING_LEAVE,
     { dashboardType },
@@ -51,19 +54,32 @@ function PendingLeaveWidgetInner({ dashboardType }: PendingLeaveWidgetProps) {
       {parsed?.success && (
         <ul className="space-y-2">
           {parsed.data.items.map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-foreground">
-                  {item.requester.fullName ?? t("pendingLeave.unknownRequester")}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {item.leaveTypeName ?? "—"} · {formatDate(item.startDate)} –{" "}
-                  {formatDate(item.endDate)}
-                </p>
-              </div>
-              <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                {t("pendingLeave.totalDays", { count: item.totalDays })}
-              </span>
+            <li key={item.id}>
+              {/* S20-DASH-TODAY-1 — hàng = nút tới `/leave/approvals?request=<id>`: dialog đơn mở sẵn;
+                  duyệt/từ chối vẫn phải bấm + xác nhận trong dialog. */}
+              <button
+                type="button"
+                aria-label={t("openLeaveRequest", {
+                  name: item.requester.fullName ?? t("pendingLeave.unknownRequester"),
+                })}
+                onClick={() =>
+                  void navigate({ to: "/leave/approvals", search: { request: item.id } })
+                }
+                className="flex w-full items-center justify-between gap-2 rounded-md p-1 text-left text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-foreground">
+                    {item.requester.fullName ?? t("pendingLeave.unknownRequester")}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {item.leaveTypeName ?? "—"} · {formatDate(item.startDate)} –{" "}
+                    {formatDate(item.endDate)}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                  {t("pendingLeave.totalDays", { count: item.totalDays })}
+                </span>
+              </button>
             </li>
           ))}
         </ul>
@@ -72,9 +88,17 @@ function PendingLeaveWidgetInner({ dashboardType }: PendingLeaveWidgetProps) {
   );
 }
 
-/** Gate ngoài (PermissionGate) — user thiếu view:leave ⇒ KHÔNG render (KHÔNG fetch). */
+/**
+ * Gate ngoài — user thiếu view:leave (mirror BE) HOẶC approve:leave (widget dẫn tới dialog duyệt) ⇒ KHÔNG
+ * render (KHÔNG fetch).
+ */
 export function PendingLeaveWidget(props: PendingLeaveWidgetProps) {
   const pair = DASH_WIDGET_GATE_PAIR.PENDING_LEAVE;
+  const canApprove = useCan(
+    LEAVE_ENGINE_PAIRS.APPROVE_REQUEST.action,
+    LEAVE_ENGINE_PAIRS.APPROVE_REQUEST.resourceType,
+  );
+  if (!canApprove) return null;
   return (
     <PermissionGate action={pair.action} resourceType={pair.resourceType}>
       <PendingLeaveWidgetInner {...props} />

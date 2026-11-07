@@ -35,6 +35,17 @@ export default {
       description: "Đã xảy ra lỗi khi tải widget. Vui lòng thử lại.",
     },
   },
+  // S20-DASH-TODAY-1 — hàng bấm được + khối «Mục tiêu cần check-in».
+  openTask: "Mở việc: {{title}}",
+  openLeaveRequest: "Xem đơn nghỉ của {{name}}",
+  goalCheckin: {
+    title: "Mục tiêu cần check-in",
+    empty: "Chưa có mục tiêu nào cần check-in trong kỳ này.",
+    allClear: "Hôm nay bạn đã xong hết",
+    error: "Không tải được mục tiêu cần check-in",
+    viewAll: "Xem tất cả",
+    checkinFor: "Check-in: {{name}}",
+  },
   myTasks: {
     title: "Việc của tôi hôm nay",
     empty: { title: "Hôm nay bạn chưa có task cần xử lý" },

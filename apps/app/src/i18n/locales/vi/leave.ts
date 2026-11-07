@@ -312,6 +312,8 @@ export default {
 
   // ── Duyệt / từ chối đơn nghỉ (LEAVE-SCREEN-APPROVALS · S3-FE-LEAVE-2) ─────────
   approval: {
+    // S20-DASH-TODAY-1 — `?request=<id>` không dẫn tới đơn nào trong phạm vi duyệt (không phân biệt lý do).
+    requestNotFound: "Không tìm thấy đơn hoặc đơn đã được xử lý",
     title: "Đơn nghỉ cần duyệt",
     description: "Danh sách đơn nghỉ chờ phê duyệt",
     columns: {

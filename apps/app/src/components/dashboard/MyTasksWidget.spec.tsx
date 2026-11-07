@@ -14,7 +14,8 @@ import { useAuthStore } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { MyTasksWidget } from "./MyTasksWidget";
 
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mockNavigate }));
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -181,5 +182,44 @@ describe("MyTasksWidget — data states (có read:task)", () => {
         expect.objectContaining({ refresh: true }),
       );
     });
+  });
+});
+
+describe("MyTasksWidget — hàng bấm được (S20-DASH-TODAY-1)", () => {
+  beforeEach(() => setCaps({ "read:task": true }));
+
+  it("hàng là NÚT có aria-label, focus được; bấm ⇒ push `?task=<id>` trên URL hiện tại", async () => {
+    mockGetWidgetData.mockResolvedValue(ACTIVE_DTO);
+    renderWidget();
+    const row = await screen.findByRole("button", {
+      name: new RegExp("Mở việc: Viết báo cáo tuần"),
+    });
+    expect(row.tagName).toBe("BUTTON");
+    expect(row).toHaveAttribute("type", "button");
+    expect(row.tabIndex).toBeGreaterThanOrEqual(0);
+    row.focus();
+    expect(row).toHaveFocus();
+    fireEvent.click(row);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    const arg = mockNavigate.mock.calls[0]![0] as {
+      to: string;
+      replace: boolean;
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+    };
+    expect(arg.to).toBe(".");
+    expect(arg.replace).toBe(false);
+    expect(arg.search({ keep: 1 })).toEqual({ keep: 1, task: "t-1" });
+  });
+
+  it("widget rỗng ⇒ trạng thái rỗng, KHÔNG có hàng giả", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      ...ACTIVE_DTO,
+      status: "Empty",
+      data: null,
+      empty_state: { message: "Trống rỗng" },
+    });
+    renderWidget();
+    await screen.findByText("Trống rỗng");
+    expect(screen.queryByRole("button", { name: /Mở việc/ })).not.toBeInTheDocument();
   });
 });

@@ -320,3 +320,95 @@ describe("LeaveApprovalPage — QA-05 approval flow smoke", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });
+
+// ── S20-DASH-TODAY-1 — `?request=<uuid>` mở sẵn dialog ─────────────────────────────
+
+const REQ_UUID = "3f2b8a10-5c1d-4e6a-9b7f-0a1b2c3d4e5f";
+const OTHER_UUID = "9a8b7c6d-1111-4222-8333-444455556666";
+const DEEP_ITEM = { ...PENDING_ITEM, id: REQ_UUID };
+const NOT_FOUND = "Không tìm thấy đơn hoặc đơn đã được xử lý";
+
+function renderDeepLink(requestId: string | null, onClearRequest = vi.fn()) {
+  render(
+    <QueryClientProvider client={buildQC()}>
+      <I18nextProvider i18n={i18n}>
+        <LeaveApprovalPage requestId={requestId} onClearRequest={onClearRequest} />
+      </I18nextProvider>
+    </QueryClientProvider>,
+  );
+  return onClearRequest;
+}
+
+describe("LeaveApprovalPage — ?request= (deny-path trước)", () => {
+  it("đơn NGOÀI phạm vi duyệt / đã xử lý ⇒ báo không tìm thấy, danh sách vẫn hiện, KHÔNG lộ thông tin đơn", async () => {
+    mockListRequests.mockResolvedValue(LIST_ONE); // phạm vi duyệt không chứa OTHER_UUID
+    renderDeepLink(OTHER_UUID);
+    expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByText("Nguyễn Văn A")).toBeInTheDocument(); // danh sách vẫn hiện
+  });
+
+  it("lỗi khi tra đơn ⇒ cùng thông điệp, không dialog, không lộ lỗi/đơn", async () => {
+    // Danh sách của trang (pageSize 20) vẫn OK; chỉ lời gọi tra đơn (pageSize 100) lỗi.
+    mockListRequests.mockImplementation((q: { pageSize: number }) =>
+      q.pageSize === 100 ? Promise.reject(new Error("boom")) : Promise.resolve(LIST_ONE),
+    );
+    renderDeepLink(REQ_UUID);
+    expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it.each(["abc", "123", "../../etc/passwd", `${REQ_UUID}x`, "1"])(
+    "không phải UUID (%j) ⇒ 0 lời gọi tra đơn, báo không tìm thấy",
+    async (raw) => {
+      mockListRequests.mockResolvedValue(LIST_ONE);
+      renderDeepLink(raw);
+      expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument();
+      // Chỉ MỘT lời gọi: danh sách của chính trang (page 20) — không có lời gọi tra đơn (pageSize 100).
+      const calls = mockListRequests.mock.calls.map((c) => (c[0] as { pageSize: number }).pageSize);
+      expect(calls).not.toContain(100);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+  );
+
+  it("thiếu view:leave ⇒ forbidden, 0 lời gọi dù có ?request=", () => {
+    mockUseCan.mockReturnValue(false);
+    renderDeepLink(REQ_UUID);
+    expect(mockListRequests).not.toHaveBeenCalled();
+    expect(screen.queryByText(NOT_FOUND)).not.toBeInTheDocument();
+  });
+});
+
+describe("LeaveApprovalPage — ?request= (đường đi đúng)", () => {
+  it("đơn trong phạm vi ⇒ dialog chi tiết mở sẵn; CHƯA duyệt/từ chối cho tới khi bấm + xác nhận", async () => {
+    mockListRequests.mockResolvedValue({ ...LIST_ONE, items: [DEEP_ITEM] });
+    renderDeepLink(REQ_UUID);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByText(NOT_FOUND)).not.toBeInTheDocument();
+    expect(mockApprove).not.toHaveBeenCalled();
+    expect(mockReject).not.toHaveBeenCalled();
+    // Phải bấm «Duyệt» rồi xác nhận mới gọi API.
+    fireEvent.click(screen.getByTestId("btn-open-approve"));
+    expect(mockApprove).not.toHaveBeenCalled();
+    mockApprove.mockResolvedValue({});
+    fireEvent.click(screen.getByTestId("btn-confirm-approve"));
+    await waitFor(() => expect(mockApprove).toHaveBeenCalledWith(REQ_UUID, undefined));
+  });
+
+  it("đóng dialog ⇒ gỡ ?request= khỏi URL và không mở lại", async () => {
+    mockListRequests.mockResolvedValue({ ...LIST_ONE, items: [DEEP_ITEM] });
+    const onClear = renderDeepLink(REQ_UUID);
+    await screen.findByRole("dialog");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it("không có ?request= ⇒ không tra đơn, không thông báo", async () => {
+    mockListRequests.mockResolvedValue(LIST_ONE);
+    renderDeepLink(null);
+    await screen.findByText("Nguyễn Văn A");
+    expect(screen.queryByText(NOT_FOUND)).not.toBeInTheDocument();
+    expect(mockListRequests).toHaveBeenCalledTimes(1);
+  });
+});

@@ -38,7 +38,7 @@ export function ForbiddenPage({ reason }: ForbiddenPageProps) {
       <h1 className="text-xl font-semibold text-foreground">{t("forbidden.title")}</h1>
       <p className="max-w-sm text-sm text-muted-foreground">{reasonText}</p>
       <Link
-        to="/"
+        to="/home"
         className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
       >
         {t("forbidden.goHome")}

@@ -11,7 +11,8 @@ import { useAuthStore } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { PendingLeaveWidget } from "./PendingLeaveWidget";
 
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mockNavigate }));
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -84,7 +85,7 @@ describe("PendingLeaveWidget — gate (DASH_WIDGET_GATE_PAIR.PENDING_LEAVE = vie
 });
 
 describe("PendingLeaveWidget — data states (có view:leave)", () => {
-  beforeEach(() => setCaps({ "view:leave": true }));
+  beforeEach(() => setCaps({ "view:leave": true, "approve:leave": true }));
 
   it("status Empty → hiện empty title", async () => {
     mockGetWidgetData.mockResolvedValue({
@@ -133,5 +134,28 @@ describe("PendingLeaveWidget — data states (có view:leave)", () => {
         expect.objectContaining({ refresh: true }),
       );
     });
+  });
+});
+
+describe("PendingLeaveWidget — hàng đơn (S20-DASH-TODAY-1)", () => {
+  it("thiếu approve:leave (dù có view:leave) ⇒ KHÔNG render widget, KHÔNG fetch", () => {
+    setCaps({ "view:leave": true });
+    renderWidget();
+    expect(screen.queryByText(/đơn nghỉ chờ duyệt/i)).not.toBeInTheDocument();
+    expect(mockGetWidgetData).not.toHaveBeenCalled();
+  });
+
+  it("hàng L là nút ⇒ /leave/approvals?request=L (không tự duyệt, không gọi API duyệt)", async () => {
+    setCaps({ "view:leave": true, "approve:leave": true });
+    mockGetWidgetData.mockResolvedValue(ACTIVE_DTO);
+    renderWidget();
+    const row = await screen.findByRole("button", { name: /Xem đơn nghỉ của Trần Thị B/ });
+    expect(row.tabIndex).toBeGreaterThanOrEqual(0);
+    fireEvent.click(row);
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/leave/approvals",
+      search: { request: "l-1" },
+    });
+    expect(mockGetWidgetData).toHaveBeenCalledTimes(1);
   });
 });

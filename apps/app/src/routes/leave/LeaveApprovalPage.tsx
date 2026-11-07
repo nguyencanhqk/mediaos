@@ -6,8 +6,33 @@ import { CheckCircle2, RefreshCw } from "lucide-react";
 import type { LeaveManagementListItemView, LeaveTypeView } from "@mediaos/contracts";
 import { rejectLeaveRequestSchema } from "@mediaos/contracts";
 import { leaveApi, leaveKeys, leaveInvalidation, useCan, ApiError } from "@mediaos/web-core";
-import { Badge, Button, DataTable, Dialog, EmptyState, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
+import {
+  Badge,
+  Button,
+  DataTable,
+  Dialog,
+  EmptyState,
+  PageHeader,
+  PaginationFooter,
+  Select,
+} from "@mediaos/ui";
 import { LEAVE_ENGINE_PAIRS, LEAVE_STATUS } from "./constants";
+import { isLeaveRequestUuid } from "./leave-approval-search";
+
+/**
+ * S20-DASH-TODAY-1 — tra đơn cho `?request=` bằng danh sách TRONG PHẠM VI DUYỆT (GET /leave/requests,
+ * server áp scope Team/Company) — repo chưa có endpoint chi tiết theo phạm vi duyệt (`getMyRequest` chỉ
+ * cho đơn CỦA MÌNH). Một trang tối đa, chỉ đơn Pending ⇒ đơn đã xử lý / ngoài phạm vi / quá trang đều
+ * rơi vào «không tìm thấy», không lộ gì. Nợ BE: endpoint chi tiết theo phạm vi duyệt.
+ */
+const REQUEST_LOOKUP_PARAMS = { page: 1, pageSize: 100, status: LEAVE_STATUS.PENDING } as const;
+
+export interface LeaveApprovalPageProps {
+  /** `?request=` thô từ URL (đã chuỗi hoá); `null` = không có. */
+  requestId?: string | null;
+  /** Bỏ `?request=` khỏi URL (replace) khi đóng dialog / xử lý xong. */
+  onClearRequest?: () => void;
+}
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -336,7 +361,10 @@ const STATUS_OPTIONS = Object.values(LEAVE_STATUS);
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function LeaveApprovalPage() {
+export function LeaveApprovalPage({
+  requestId = null,
+  onClearRequest,
+}: LeaveApprovalPageProps = {}) {
   const { t } = useTranslation("leave");
   const queryClient = useQueryClient();
 
@@ -355,7 +383,34 @@ export function LeaveApprovalPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<string>(LEAVE_STATUS.PENDING);
   const [leaveTypeId, setLeaveTypeId] = useState("");
-  const [selected, setSelected] = useState<LeaveManagementListItemView | null>(null);
+  const [manualSelected, setSelected] = useState<LeaveManagementListItemView | null>(null);
+  const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
+
+  // Deep-link `?request=`: UUID hợp lệ MỚI tra (rác ⇒ 0 lời gọi).
+  const requestIsUuid = isLeaveRequestUuid(requestId);
+  const lookup = useQuery({
+    queryKey: leaveKeys.requests.list(REQUEST_LOOKUP_PARAMS),
+    queryFn: () => leaveApi.listRequests(REQUEST_LOOKUP_PARAMS),
+    enabled: canView && requestIsUuid,
+    staleTime: 30_000,
+  });
+  const deepLinked =
+    requestIsUuid && requestId !== dismissedRequestId
+      ? (lookup.data?.items.find((item) => item.id === requestId) ?? null)
+      : null;
+  const selected = manualSelected ?? deepLinked;
+  const requestNotFound =
+    requestId !== null &&
+    requestId !== "" &&
+    requestId !== dismissedRequestId &&
+    !deepLinked &&
+    (!requestIsUuid || lookup.isSuccess || lookup.isError);
+
+  const closeDialog = () => {
+    setSelected(null);
+    if (requestId) setDismissedRequestId(requestId);
+    onClearRequest?.();
+  };
 
   const queryParams = useMemo(
     () => ({
@@ -389,7 +444,7 @@ export function LeaveApprovalPage() {
       for (const queryKey of leaveInvalidation.approve(id)) {
         void queryClient.invalidateQueries({ queryKey });
       }
-      setSelected(null);
+      closeDialog();
     },
   });
 
@@ -400,7 +455,7 @@ export function LeaveApprovalPage() {
       for (const queryKey of leaveInvalidation.reject(id)) {
         void queryClient.invalidateQueries({ queryKey });
       }
-      setSelected(null);
+      closeDialog();
     },
   });
 
@@ -488,6 +543,16 @@ export function LeaveApprovalPage() {
         </div>
       </PageHeader>
 
+      {requestNotFound && (
+        <p
+          role="status"
+          data-testid="approval-request-not-found"
+          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+        >
+          {t("approval.requestNotFound")}
+        </p>
+      )}
+
       <DataTable
         columns={columns}
         data={items}
@@ -524,7 +589,7 @@ export function LeaveApprovalPage() {
         <ApprovalDetailDialog
           request={selected}
           canApprove={canApprove}
-          onClose={() => setSelected(null)}
+          onClose={closeDialog}
           onApprove={(note) => approveMutation.mutate({ id: selected.id, note })}
           onReject={(reason) => rejectMutation.mutate({ id: selected.id, reason })}
           isApproving={approveMutation.isPending}

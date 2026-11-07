@@ -28,6 +28,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       // S4-FE-DASH-2 — DashboardTypeSwitcher (mount THẬT, không mock) tự gọi getDashboardTypes.
       getDashboardTypes: vi.fn(),
       getDashboardByType: vi.fn(),
+      getWidgetData: vi.fn(),
     },
   };
 });
@@ -46,7 +47,15 @@ vi.mock("@/components/dashboard/DashboardWidgetGrid", () => ({
   ),
 }));
 
+// S20-DASH-TODAY-1 — khối mục tiêu test riêng ở GoalCheckinDueBlock.spec.tsx; ở đây chỉ kiểm vị trí + cờ.
+vi.mock("@/components/dashboard/GoalCheckinDueBlock", () => ({
+  GoalCheckinDueBlock: ({ othersClear }: { othersClear?: boolean }) => (
+    <div data-testid="goal-block">block:{String(othersClear)}</div>
+  ),
+}));
+
 import { dashboardApi } from "@mediaos/web-core";
+const mockGetWidgetData = dashboardApi.getWidgetData as ReturnType<typeof vi.fn>;
 const mockGetMyDashboard = dashboardApi.getMyDashboard as ReturnType<typeof vi.fn>;
 const mockGetDashboardTypes = dashboardApi.getDashboardTypes as ReturnType<typeof vi.fn>;
 
@@ -155,5 +164,115 @@ describe("DashboardMePage — data states (có read:dashboard)", () => {
       expect(screen.getByText("Bảng điều khiển")).toBeInTheDocument();
     });
     expect(screen.getByTestId("widget-grid")).toHaveTextContent("grid:Manager:1");
+  });
+});
+
+// ── S20-DASH-TODAY-1 — khối «Mục tiêu cần check-in» chỉ ở dashboard Employee ──────────
+
+function widgetMeta(code: string) {
+  return {
+    widget_code: code,
+    widget_name: code,
+    widget_type: "List",
+    source_modules: ["TASK"],
+    data_scope: "Own",
+    layout: { order: 10 },
+    data: null,
+    last_updated_at: null,
+  };
+}
+
+const TODAY_CAPS = {
+  "read:dashboard": true,
+  "read:task": true,
+  "view:leave": true,
+  "approve:leave": true,
+};
+
+describe("DashboardMePage — khối Mục tiêu cần check-in (Employee)", () => {
+  beforeEach(() => setCaps(TODAY_CAPS));
+
+  it("thiếu approve:leave ⇒ KHÔNG gọi widget pending-leave, nguồn ẩn không chặn «xong hết»", async () => {
+    setCaps({ ...TODAY_CAPS, "approve:leave": false });
+    mockGetWidgetData.mockImplementation((code: string) =>
+      code === "PENDING_LEAVE"
+        ? Promise.reject(new Error("must not fetch"))
+        : Promise.resolve({ status: "Empty", data: null }),
+    );
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Employee",
+      widgets: [widgetMeta("MY_TASKS"), widgetMeta("PENDING_LEAVE")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("goal-block")).toHaveTextContent("block:true"));
+    expect(mockGetWidgetData.mock.calls.map((c) => c[0])).not.toContain("PENDING_LEAVE");
+  });
+
+  it("không có nguồn nào hiển thị ⇒ othersClear=false (không khẳng định khi chưa kiểm gì)", async () => {
+    setCaps({ ...TODAY_CAPS, "read:task": false, "approve:leave": false });
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Employee",
+      widgets: [widgetMeta("MY_TASKS"), widgetMeta("PENDING_LEAVE")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    const block = await screen.findByTestId("goal-block");
+    expect(block).toHaveTextContent("block:false");
+    expect(mockGetWidgetData).not.toHaveBeenCalled();
+  });
+
+  it("dashboard Employee ⇒ khối hiện dưới lưới", async () => {
+    mockGetWidgetData.mockResolvedValue({ status: "Active", data: { items: [] } });
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Employee",
+      widgets: [widgetMeta("MY_TASKS")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    const block = await screen.findByTestId("goal-block");
+    const grid = await screen.findByTestId("widget-grid");
+    expect(grid.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Việc/đơn còn dữ liệu ⇒ chưa «xong hết».
+    await waitFor(() => expect(mockGetWidgetData).toHaveBeenCalled());
+    expect(block).toHaveTextContent("block:false");
+  });
+
+  it("mọi nguồn việc/đơn đều rỗng ⇒ othersClear=true (dùng chung khoá cache widget)", async () => {
+    mockGetWidgetData.mockResolvedValue({ status: "Empty", data: null });
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Employee",
+      widgets: [widgetMeta("MY_TASKS"), widgetMeta("PENDING_LEAVE")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("goal-block")).toHaveTextContent("block:true"));
+  });
+
+  it("một nguồn lỗi ⇒ KHÔNG coi là xong hết", async () => {
+    mockGetWidgetData.mockImplementation((code: string) =>
+      code === "MY_TASKS"
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve({ status: "Empty", data: null }),
+    );
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Employee",
+      widgets: [widgetMeta("MY_TASKS"), widgetMeta("PENDING_LEAVE")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    await waitFor(() => expect(mockGetWidgetData).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId("goal-block")).toHaveTextContent("block:false");
+  });
+
+  it("dashboard Manager ⇒ KHÔNG có khối mục tiêu", async () => {
+    mockGetMyDashboard.mockResolvedValue({
+      dashboard_type: "Manager",
+      widgets: [widgetMeta("TASK_ALERTS")],
+      generated_at: "2026-11-07T08:00:00.000Z",
+    });
+    renderPage();
+    await screen.findByTestId("widget-grid");
+    expect(screen.queryByTestId("goal-block")).not.toBeInTheDocument();
   });
 });

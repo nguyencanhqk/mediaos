@@ -194,6 +194,16 @@ export default {
       dark: "Tối",
     },
     syncError: "Không lưu được trên máy chủ — giao diện vẫn được áp dụng trên máy này.",
+    // S20-DASH-TODAY-1 — «Trang mở đầu» (defaultLanding, allowlist ở lib/default-landing.ts).
+    landing: {
+      title: "Trang mở đầu",
+      description: "Trang hiện ra ngay sau khi bạn đăng nhập.",
+      home: "Trang chủ",
+      dashboard: "Hôm nay (Dashboard)",
+      me: "Cá nhân",
+      myTasks: "Việc của tôi",
+      saveError: "Không lưu được trang mở đầu. Vui lòng thử lại.",
+    },
     readOnlySectionTitle: "Ngôn ngữ & múi giờ",
     language: "Ngôn ngữ",
     timezone: "Múi giờ",

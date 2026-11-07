@@ -4,14 +4,15 @@
  * success (summary overdue/dueSoon + danh sách task).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import { useAuthStore } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { TaskAlertsWidget } from "./TaskAlertsWidget";
 
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mockNavigate }));
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -42,6 +43,31 @@ function renderWidget() {
     </QueryClientProvider>,
   );
 }
+
+const ACTIVE_DTO = {
+  widget_code: "TASK_ALERTS",
+  widget_type: "Alert",
+  status: "Active" as const,
+  data: {
+    items: [
+      {
+        id: "t-2",
+        title: "Task quá hạn",
+        status: "In Progress",
+        priority: "Urgent",
+        dueAt: "2026-07-01T00:00:00.000Z",
+        isOverdue: true,
+        projectName: null,
+      },
+    ],
+    summary: { total: 1, overdue: 1, dueSoon: 0 },
+  },
+  empty_state: null,
+  error_state: null,
+  last_updated_at: "2026-07-12T02:00:00.000Z",
+  cache: { hit: false, ttl_seconds: 60, expires_at: "2026-07-12T02:01:00.000Z" },
+  quick_actions: [],
+};
 
 beforeEach(() => {
   useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
@@ -158,5 +184,42 @@ describe("TaskAlertsWidget — data states (có read:task)", () => {
       expect(screen.getByText("Không thể tải dữ liệu từ module Task")).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
+  });
+});
+
+describe("TaskAlertsWidget — hàng bấm được (S20-DASH-TODAY-1)", () => {
+  beforeEach(() => setCaps({ "read:task": true }));
+
+  it("hàng là NÚT có aria-label, focus được; bấm ⇒ push `?task=<id>` trên URL hiện tại", async () => {
+    mockGetWidgetData.mockResolvedValue(ACTIVE_DTO);
+    renderWidget();
+    const row = await screen.findByRole("button", { name: new RegExp("Mở việc: Task quá hạn") });
+    expect(row.tagName).toBe("BUTTON");
+    expect(row).toHaveAttribute("type", "button");
+    expect(row.tabIndex).toBeGreaterThanOrEqual(0);
+    row.focus();
+    expect(row).toHaveFocus();
+    fireEvent.click(row);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    const arg = mockNavigate.mock.calls[0]![0] as {
+      to: string;
+      replace: boolean;
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+    };
+    expect(arg.to).toBe(".");
+    expect(arg.replace).toBe(false);
+    expect(arg.search({ keep: 1 })).toEqual({ keep: 1, task: "t-2" });
+  });
+
+  it("widget rỗng ⇒ trạng thái rỗng, KHÔNG có hàng giả", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      ...ACTIVE_DTO,
+      status: "Empty",
+      data: null,
+      empty_state: { message: "Trống rỗng" },
+    });
+    renderWidget();
+    await screen.findByText("Trống rỗng");
+    expect(screen.queryByRole("button", { name: /Mở việc/ })).not.toBeInTheDocument();
   });
 });

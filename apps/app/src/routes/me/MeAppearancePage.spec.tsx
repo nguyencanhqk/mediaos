@@ -256,3 +256,114 @@ describe("MeAppearancePage — cờ ẩn sinh nhật: hai nhánh hỏng phải N
     expect((toggle as HTMLInputElement).checked).toBe(true);
   });
 });
+
+describe("MeAppearancePage — «Trang mở đầu» (S20-DASH-TODAY-1)", () => {
+  beforeEach(() => setCaps({ "access:me": true }));
+
+  const PREFS_BASE = {
+    locale: "vi",
+    timezone: null,
+    theme: null,
+    dateFormat: null,
+    timeFormat: null,
+    defaultLanding: null,
+    density: null,
+    favoriteModules: null,
+    meLayoutConfig: null,
+    showBirthday: null,
+    updatedAt: null,
+  };
+
+  it("hiện đúng 4 lựa chọn allowlist, mặc định chọn Trang chủ khi chưa đặt", async () => {
+    renderPage();
+    const group = await screen.findByRole("radiogroup", { name: "Trang mở đầu" });
+    const radios = Array.from(group.querySelectorAll('[role="radio"]'));
+    expect(radios.map((r) => r.textContent)).toEqual([
+      "Trang chủ",
+      "Hôm nay (Dashboard)",
+      "Cá nhân",
+      "Việc của tôi",
+    ]);
+    expect(screen.getByRole("radio", { name: "Trang chủ" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("giá trị lưu NGOÀI allowlist (URL tuyệt đối) ⇒ hiển thị như Trang chủ, không chọn gì lạ", async () => {
+    mockGetPreferences.mockResolvedValue({
+      ...PREFS_BASE,
+      defaultLanding: "https://evil.example",
+    });
+    renderPage();
+    await waitFor(() => expect(mockGetPreferences).toHaveBeenCalled());
+    expect(screen.getByRole("radio", { name: "Trang chủ" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("chọn «Hôm nay» ⇒ patchPreferences với /dashboard, đổi lựa chọn sau khi server xác nhận", async () => {
+    mockPatchPreferences.mockResolvedValue({ ...PREFS_BASE, defaultLanding: "/dashboard" });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Hôm nay (Dashboard)" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      ),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Hôm nay (Dashboard)" }));
+    await waitFor(() =>
+      expect(mockPatchPreferences).toHaveBeenCalledWith({ defaultLanding: "/dashboard" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Hôm nay (Dashboard)" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+  });
+
+  it("server lỗi ⇒ báo lỗi, lựa chọn KHÔNG đổi", async () => {
+    mockPatchPreferences.mockRejectedValue(new Error("boom"));
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Cá nhân" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      ),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Cá nhân" }));
+    expect(
+      await screen.findByText("Không lưu được trang mở đầu. Vui lòng thử lại."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Cá nhân" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("radiogroup chuẩn ARIA: chỉ mục đang chọn nằm trong thứ tự Tab, mũi tên chọn mục kế", async () => {
+    mockPatchPreferences.mockResolvedValue({ ...PREFS_BASE, defaultLanding: "/dashboard" });
+    renderPage();
+    const home = screen.getByRole("radio", { name: "Trang chủ" });
+    await waitFor(() => expect(home).toHaveAttribute("aria-disabled", "false"));
+    expect(home).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "Cá nhân" })).toHaveAttribute("tabindex", "-1");
+    fireEvent.keyDown(home, { key: "ArrowRight" });
+    await waitFor(() =>
+      expect(mockPatchPreferences).toHaveBeenCalledWith({ defaultLanding: "/dashboard" }),
+    );
+  });
+
+  it("đang lưu ⇒ aria-disabled (KHÔNG disabled) để giữ focus, và bấm tiếp không gửi lần hai", async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mockPatchPreferences.mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    const me = screen.getByRole("radio", { name: "Cá nhân" });
+    await waitFor(() => expect(me).toHaveAttribute("aria-disabled", "false"));
+    fireEvent.click(me);
+    await waitFor(() => expect(me).toHaveAttribute("aria-disabled", "true"));
+    expect(me).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: "Việc của tôi" }));
+    expect(mockPatchPreferences).toHaveBeenCalledTimes(1);
+    release({ ...PREFS_BASE, defaultLanding: "/me" });
+  });
+});
