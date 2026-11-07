@@ -194,6 +194,30 @@ describe("S16-SOCIAL-MENTIONLINK-1 — B3: tin tức truyền `mentions` xuống
   });
 });
 
+describe("S16-SOCIAL-FE-2D — R4: tin tức VẼ đính kèm (trước đây chỉ `PostBody` trần)", () => {
+  it("tin có ảnh ⇒ ảnh hiện trong hàng tin", async () => {
+    listNews.mockResolvedValue(
+      page([
+        makeNews({
+          attachments: [
+            {
+              fileId: "i1",
+              kind: "image",
+              fileName: "a.png",
+              sizeBytes: 9,
+              url: "https://cdn.invalid/a.png",
+            },
+          ],
+        }),
+      ]),
+    );
+    renderWithProviders(<NewsPage />);
+
+    const row = await screen.findByTestId("news-row");
+    expect(row.querySelector("img")).not.toBeNull();
+  });
+});
+
 describe("C9 — «Danh sách đã đọc» gác bằng `manage:feed-news`", () => {
   it("DENY: chỉ `view:feed` ⇒ nút/tab «Danh sách đã đọc» VẮNG và 022 KHÔNG bị gọi lần nào", async () => {
     listNews.mockResolvedValue(page([makeNews({ requiresAck: true })]));

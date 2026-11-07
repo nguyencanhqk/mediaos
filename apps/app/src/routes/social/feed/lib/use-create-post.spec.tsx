@@ -94,6 +94,23 @@ describe("useCreatePost — bảng tin (không groupId) giữ hành vi cũ", () 
     expect(result.current.postError).toBeNull();
   });
 
+  it("S16-SOCIAL-FE-2D E1: 422 `SOCIAL-ERR-007` ở BẢNG TIN ⇒ reason `attachmentRejected`", async () => {
+    createPost.mockRejectedValue(
+      new ApiError(
+        422,
+        SOCIAL_ERROR_CODES.ATTACHMENT_LIMIT,
+        "SOCIAL-ERR-007: vượt giới hạn đính kèm.",
+      ),
+    );
+    const { result } = setup();
+    await act(async () => {
+      await result.current.submit(DTO).catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.postError).not.toBeNull());
+    expect(result.current.postError?.reason ?? null).toBe("attachmentRejected");
+    expect(result.current.postError?.forbidden).toBe(false);
+  });
+
   it("bài poll mới ⇒ invalidate màn bình chọn; idea ⇒ màn sáng kiến", async () => {
     createPost.mockResolvedValueOnce({ id: "p1", type: "poll", droppedMentions: [] });
     const { result, keys } = setup();

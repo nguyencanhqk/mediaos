@@ -19,6 +19,7 @@
 import admin from "./social-admin";
 import groups from "./social-groups";
 import kudos from "./social-kudos";
+import attachment from "./social-attachments";
 
 export default {
   // ── Khung portal ────────────────────────────────────────────────────────────
@@ -409,6 +410,8 @@ export default {
   groups,
   // ── S16-SOCIAL-FE-2C — Vinh danh (SOC-SCREEN-009), file riêng `social-kudos.ts` ──
   kudos,
+  // ── S16-SOCIAL-FE-2D — Đính kèm (054/055 + vẽ tệp), file riêng `social-attachments.ts` ──
+  attachment,
 
   actionError: {
     forbidden: {
@@ -484,6 +487,12 @@ export default {
       // chống-oracle của `detail.notFoundBody`.
       postGone:
         "Bài viết này không còn: có thể đã bị xoá hoặc bạn không còn quyền xem. Dữ liệu đã được tải lại.",
+      // S16-SOCIAL-FE-2D — đính kèm (`feed/lib/attachment-draft.ts`). `SOCIAL-ERR-007` gộp «vượt trần»
+      // và «tệp không hợp lệ» (owner ký D6 (a)) ⇒ MỘT câu nói cả hai. Con số trần NỘI SUY từ hằng contracts
+      // (`feed/lib/attachment-limits.ts`, FULL gate lượt 1 G6) — `ActionErrorBanner` truyền tham số.
+      attachmentRejected:
+        "Tệp đính kèm không được chấp nhận: vượt giới hạn ({{images}} ảnh · {{videos}} video · {{maxSize}} mỗi tệp) hoặc tệp đã được dùng / không còn hợp lệ. Gỡ tệp đó, đính kèm lại rồi gửi.",
+      attachDenied: "Bạn không có quyền đính kèm tệp ở đây.",
     },
     dismiss: "Đóng thông báo",
   },

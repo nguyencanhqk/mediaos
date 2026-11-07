@@ -34,6 +34,9 @@ describe("ActionErrorBanner — không kind/reason nào ra khoá thô", () => {
     const el = screen.getByTestId("feed-action-error");
     expect(el.getAttribute("data-reason")).toBe(reason);
     expect(textOf()).not.toContain("actionError.");
+    // S16-SOCIAL-FE-2D (FULL gate lượt 1, G6): câu có `{{biến}}` mà dải quên truyền tham số ⇒ i18next để
+    // NGUYÊN `{{biến}}` (skipOnVariables) — người dùng đọc thấy dấu ngoặc nhọn.
+    expect(textOf()).not.toContain("{{");
     unmount();
     // Cùng kind KHÔNG reason ⇒ câu khác (reason thật sự thay câu, không nối thêm).
     renderWithProviders(<ActionErrorBanner kind="groupLeave" forbidden />);
