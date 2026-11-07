@@ -16,7 +16,7 @@
  * Mỗi ca ẨN đi kèm ca HIỆN đối chứng cùng cấu hình (`deny-cases-vacuous-without-allow-case`).
  */
 import { describe, expect, it, vi, beforeEach, afterEach, type MockInstance } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError, useAuthStore } from "@mediaos/web-core";
@@ -387,4 +387,185 @@ describe("CandidateCvTab — nút Tải xuống mở URL ký ở tab mới (S19-
       expect(screen.queryByRole("button", { name: i18n.t("recruit:cv.download") })).toBeNull();
     },
   );
+});
+
+/**
+ * S16-SOCIAL-FILEOPENUX-1 — nợ F1 + F2/SF-4 của S19-FE-SIGNEDTAB-1 trên nút Tải xuống CV, và lọc sớm ở form tải.
+ *
+ * C-9/C-10: lượt bấm TRÙNG cùng tệp khi lượt trước còn chờ ⇒ không mở tab, không gọi API, không xoá lỗi đang
+ * hiện. C-12/C-13 là đối chứng: guard theo TỆP (không khoá cả bảng) và được giải phóng khi lượt kết thúc.
+ * C-11: popup bị chặn + URL `inline` + rời màn khi API chậm ⇒ KHÔNG điều hướng tab app.
+ */
+describe("CandidateCvTab — bấm trùng · rời màn · lọc sớm (S16-SOCIAL-FILEOPENUX-1)", () => {
+  const X = {
+    linkId: "22222222-2222-4222-8222-222222222222",
+    fileId: "33333333-3333-4333-8333-333333333333",
+    originalName: "cv-x.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 1024,
+    scanStatus: "Clean",
+    uploadStatus: "Uploaded",
+    uploadedAt: "2026-09-04T00:00:00.000Z",
+    purpose: "CV",
+  };
+  const Y = {
+    ...X,
+    linkId: "44444444-4444-4444-8444-444444444444",
+    fileId: "55555555-5555-4555-8555-555555555555",
+    originalName: "cv-y.pdf",
+  };
+  const SIGNED = "https://storage.example.test/cv-x.pdf?sig=t";
+  const INLINE = `${SIGNED}&${new URLSearchParams({ "response-content-disposition": "inline" }).toString()}`;
+  const EXPIRES_AT = "2026-10-23T12:00:00.000Z";
+  const NOT_FOUND = () =>
+    new ApiError({
+      status: 404,
+      code: "NOT_FOUND",
+      message: "not found",
+      details: [{ field: "kind", message: "not-found", rule: "recruit" }],
+    });
+
+  let tab: { opener: unknown; location: { href: string }; close: ReturnType<typeof vi.fn> };
+  let open: MockInstance<typeof window.open>;
+
+  beforeEach(() => {
+    tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
+    open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    listCandidateFiles.mockReset();
+    listCandidateFiles.mockResolvedValue([X, Y]);
+    getDownloadUrl.mockReset();
+    uploadCandidateFile.mockReset();
+    setCaps({ [VIEW_PAIR]: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Nút tải của MỘT dòng — tìm theo tên tệp (nhãn nút đổi khi đang chờ). */
+  function rowButton(name: string): HTMLButtonElement {
+    const row = screen.getByText(name).closest("li");
+    if (!row) throw new Error(`không thấy dòng ${name}`);
+    return within(row).getByRole("button") as HTMLButtonElement;
+  }
+
+  async function renderRows(): Promise<ReturnType<typeof renderTab>> {
+    const view = renderTab();
+    await screen.findByText(X.originalName);
+    return view;
+  }
+
+  it("C-9 [RED] bấm đúp cùng tệp khi API còn treo ⇒ 1 tab · 1 lượt API", async () => {
+    getDownloadUrl.mockReturnValue(new Promise(() => {}));
+    await renderRows();
+    const button = rowButton(X.originalName);
+
+    // Hai lượt bấm trong CÙNG một nhịp (chưa render lại) ⇒ đo guard đồng bộ, không nhờ `disabled`.
+    act(() => {
+      button.click();
+      button.click();
+    });
+
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(getDownloadUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("C-10 [RED] X treo → Y lỗi ⇒ lỗi Y hiện → bấm X lần 2 (trùng) ⇒ lỗi Y VẪN hiện · API X 1 · tab X 1", async () => {
+    getDownloadUrl.mockImplementation((_candidate: string, fileId: string) =>
+      fileId === X.fileId ? new Promise(() => {}) : Promise.reject(NOT_FOUND()),
+    );
+    await renderRows();
+
+    fireEvent.click(rowButton(X.originalName));
+    fireEvent.click(rowButton(Y.originalName));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(i18n.t("recruit:errors.notFound"));
+
+    fireEvent.click(rowButton(X.originalName));
+
+    expect(screen.getByRole("alert").textContent).toBe(i18n.t("recruit:errors.notFound"));
+    expect(getDownloadUrl.mock.calls.filter(([, id]) => id === X.fileId)).toHaveLength(1);
+    // Tab: 1 cho X + 1 cho Y — lượt trùng của X không mở thêm tab nào.
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("C-11 [RED] popup bị chặn + URL `inline` + rời màn khi API chậm ⇒ KHÔNG điều hướng tab app", async () => {
+    open.mockReturnValue(null);
+    let release!: (v: { url: string; expiresAt: string }) => void;
+    getDownloadUrl.mockReturnValue(
+      new Promise((r) => {
+        release = r;
+      }),
+    );
+    const view = await renderRows();
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+
+    fireEvent.click(rowButton(X.originalName));
+    view.unmount();
+    await act(async () => {
+      release({ url: INLINE, expiresAt: EXPIRES_AT });
+      await Promise.resolve();
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(getDownloadUrl).toHaveBeenCalledTimes(1);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("C-12 [allow] hai tệp KHÁC nhau bấm liền ⇒ 2 tab · 2 lượt API (guard theo tệp, không khoá cả bảng)", async () => {
+    getDownloadUrl.mockReturnValue(new Promise(() => {}));
+    await renderRows();
+    const bx = rowButton(X.originalName);
+    const by = rowButton(Y.originalName);
+
+    act(() => {
+      bx.click();
+      by.click();
+    });
+
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(getDownloadUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each<[string, () => Promise<unknown>]>([
+    ["resolver ném", () => Promise.reject(NOT_FOUND())],
+    ["resolver null", () => Promise.resolve({ url: null, expiresAt: EXPIRES_AT })],
+    ["thành công", () => Promise.resolve({ url: SIGNED, expiresAt: EXPIRES_AT })],
+  ])(
+    "C-13 [allow] lượt 1 kết thúc (%s) ⇒ nút bật lại, bấm lại cùng tệp ⇒ 2 tab · 2 lượt API",
+    async (_label, first) => {
+      getDownloadUrl
+        .mockImplementationOnce(first)
+        .mockImplementationOnce(() => Promise.resolve({ url: SIGNED, expiresAt: EXPIRES_AT }));
+      await renderRows();
+
+      fireEvent.click(rowButton(X.originalName));
+      await waitFor(() => expect(rowButton(X.originalName)).not.toBeDisabled());
+      await waitFor(() => expect(getDownloadUrl).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(rowButton(X.originalName));
+
+      await waitFor(() => expect(getDownloadUrl).toHaveBeenCalledTimes(2));
+      expect(open).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("F-1 [RED] chọn `a.svg` để tải lên ⇒ lỗi tại chỗ + KHÔNG gọi API tải lên (F-2 đối chứng: ca «tải lên THÀNH CÔNG» ở trên)", async () => {
+    setCaps({ [VIEW_PAIR]: true, [UPLOAD_PAIR]: true });
+    await renderRows();
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["<svg/>"], "a.svg", { type: "image/svg+xml" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    fireEvent.change(input);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(i18n.t("common:uploadPrecheck.activeMime", { name: "a.svg" }));
+    expect(alert.textContent).toContain("a.svg");
+    expect(uploadCandidateFile).not.toHaveBeenCalled();
+  });
 });

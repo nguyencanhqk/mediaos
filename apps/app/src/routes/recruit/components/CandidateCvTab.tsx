@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCanExact } from "@mediaos/web-core";
 import { Button, EmptyState, Skeleton } from "@mediaos/ui";
 import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
+import { uploadPrecheckMessage } from "@/lib/upload-precheck";
+import { useIsMounted } from "@/lib/use-is-mounted";
 import { candidateFileApi } from "../candidate-file-api";
 import { parseRecruitError, recruitErrorI18nKey } from "../recruit-errors";
 
@@ -37,6 +39,18 @@ export function CandidateCvTab({ candidateId }: { candidateId: string }) {
 
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const isMounted = useIsMounted();
+  // Tệp đang chờ URL ký. Ref = nguồn guard (đọc ĐỒNG BỘ trong onClick, kể cả hai lượt bấm trước khi render lại);
+  // state = bản để vẽ nút khoá + nhãn chờ. Luôn thay bằng Set MỚI, không sửa tại chỗ.
+  const pendingRef = useRef<ReadonlySet<string>>(new Set());
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markPending = (fileId: string, isPending: boolean) => {
+    const next = new Set(pendingRef.current);
+    if (isPending) next.add(fileId);
+    else next.delete(fileId);
+    pendingRef.current = next;
+    setPendingIds(next);
+  };
 
   /**
    * ⚠️ `onError` KHÔNG phải chi tiết UX — nó là điều kiện để luồng này quan sát được.
@@ -72,18 +86,40 @@ export function CandidateCvTab({ candidateId }: { candidateId: string }) {
    *
    * ⚠️ S19-FE-SIGNEDTAB-1: đừng tự gọi `window.open(..., "noopener")` — có cờ đó hàm trả `null`, tab trắng
    * mở ra mà không bao giờ được điều hướng (đo 14/10: nút này hỏng ở mọi tốc độ, PDF lẫn PNG).
+   *
+   * S16-SOCIAL-FILEOPENUX-1 (D6): lượt bấm TRÙNG cùng tệp khi lượt trước còn chờ ⇒ dừng ngay (kiểm TRƯỚC helper,
+   * vẫn đồng bộ): không mở tab, không gọi API, không xoá lỗi đang hiện. Giải phóng trong `finally` (thành công ·
+   * resolver ném · resolver `null`) — thiếu thì nút khoá vĩnh viễn mà không báo gì. Guard theo TỆP, không khoá
+   * cả bảng. `isCurrent`: rời màn khi popup bị chặn ⇒ không điều hướng tab app (F1).
    */
   const download = async (fileId: string) => {
+    if (pendingRef.current.has(fileId)) return;
+    markPending(fileId, true);
     setDownloadError(null);
     setUploadError(null);
     try {
       await openSignedUrlInNewTab(
         async () => (await candidateFileApi.getDownloadUrl(candidateId, fileId)).url,
+        { isCurrent: isMounted },
       );
     } catch (err) {
       const info = parseRecruitError(err);
       setDownloadError(t(recruitErrorI18nKey(info), { ...Object.fromEntries(info.fields) }));
+    } finally {
+      markPending(fileId, false);
     }
+  };
+
+  /** S16-SOCIAL-FILEOPENUX-1 — nhóm tệp server LUÔN từ chối ⇒ báo tại chỗ, không gọi API (server vẫn là lưới). */
+  const pickCv = (file: File | undefined) => {
+    if (!file) return;
+    const rejected = uploadPrecheckMessage(file);
+    if (rejected) {
+      setDownloadError(null);
+      setUploadError(t(rejected.key, rejected.values));
+      return;
+    }
+    uploadMutation.mutate(file);
   };
 
   if (!canView) {
@@ -107,8 +143,7 @@ export function CandidateCvTab({ candidateId }: { candidateId: string }) {
             type="file"
             className="hidden"
             onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) uploadMutation.mutate(file);
+              pickCv(e.target.files?.[0]);
               e.target.value = "";
             }}
           />
@@ -133,8 +168,13 @@ export function CandidateCvTab({ candidateId }: { candidateId: string }) {
               <span className="truncate">{f.originalName}</span>
               {/* Tải = CÙNG cặp `view:candidate` với danh sách (`read-path-gate-pair-must-match-
                   download-pair`) — đã kiểm ở `canView` phía trên, không có cờ thứ hai để lệch. */}
-              <Button variant="outline" size="sm" onClick={() => void download(f.fileId)}>
-                {t("cv.download")}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pendingIds.has(f.fileId)}
+                onClick={() => void download(f.fileId)}
+              >
+                {pendingIds.has(f.fileId) ? t("cv.downloading") : t("cv.download")}
               </Button>
             </li>
           ))}

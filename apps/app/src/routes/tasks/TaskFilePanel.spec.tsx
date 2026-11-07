@@ -12,6 +12,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskFileApi, ApiError, mapApiErrorToUi } from "@mediaos/web-core";
 import type { TaskFileDto } from "@mediaos/contracts";
+import i18n from "@/i18n";
 import { TaskFilePanel } from "./TaskFilePanel";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -142,6 +143,23 @@ describe("TaskFilePanel (gate = read/file-upload/file-delete:task)", () => {
     expect(calledFile).toBe(file);
   });
 
+  // ── S16-SOCIAL-FILEOPENUX-1 F-1: loại tệp server LUÔN từ chối ⇒ báo tại chỗ, KHÔNG gọi API tải ──
+  // (F-2 đối chứng = ca «uploads a selected file…» ở trên: `.pdf` vẫn đi tới API.)
+  it("[F-1 FILEOPENUX] chọn `a.svg` ⇒ lỗi tại chỗ (role=alert) + KHÔNG gọi uploadTaskFile", async () => {
+    setCaps({ "read:task": true, "file-upload:task": true });
+    renderWithQuery(<TaskFilePanel taskId="task-1" />);
+    await waitFor(() => expect(screen.getByText("spec.pdf")).toBeInTheDocument());
+
+    const input = screen.getByTestId("task-file-upload-input") as HTMLInputElement;
+    const file = new File(["<svg/>"], "a.svg", { type: "image/svg+xml" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(i18n.t("common:uploadPrecheck.activeMime", { name: "a.svg" }));
+    expect(alert.textContent).toContain("a.svg");
+    expect(taskFileApi.uploadTaskFile).not.toHaveBeenCalled();
+  });
+
   it("hides Upload control without file-upload:task", async () => {
     setCaps({ "read:task": true });
     renderWithQuery(<TaskFilePanel taskId="task-1" />);
@@ -247,6 +265,32 @@ describe("TaskFilePanel — tải tệp qua URL ký (S19-OPS-TASKFILEURL-1)", ()
     vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
     fireEvent.click(downloadBtn());
     await waitFor(() => expect(assign).toHaveBeenCalledWith(SIGNED));
+  });
+
+  // S16-SOCIAL-FILEOPENUX-1 T-1 (N9): server ký `attachment` ⇒ tab trắng đóng lại, tải trên tab app — không
+  // để lại tab `about:blank`. F-2 ở trên (URL không tham số) là đối chứng: vẫn mở ở tab mới.
+  it("[T-1 FILEOPENUX] URL ký `attachment` ⇒ đóng tab trắng + tải trên tab app ⇄ F-2", async () => {
+    setCaps({ "read:task": true });
+    const attachmentUrl = `${SIGNED}&${new URLSearchParams({
+      "response-content-disposition": 'attachment; filename="spec.pdf"',
+    }).toString()}`;
+    vi.mocked(taskFileApi.downloadTaskFile).mockResolvedValue({
+      url: attachmentUrl,
+      expiresAt: EXPIRES,
+    });
+    const { tab } = fakeTab();
+    renderWithQuery(<TaskFilePanel taskId="task-1" />);
+    await screen.findByText("spec.pdf");
+
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    fireEvent.click(downloadBtn());
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(new URL(attachmentUrl).href));
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.href).toBe("");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("[F-5] đang chờ URL ⇒ nút disabled + «Đang tải…»; xong ⇒ bật lại", async () => {

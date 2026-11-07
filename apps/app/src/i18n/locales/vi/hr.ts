@@ -288,7 +288,7 @@ export default {
       Failed: "Quét lỗi",
     },
     download: "Tải xuống",
-    downloading: "Đang mở…",
+    downloading: "Đang tải…",
     downloadError: "Không thể tạo liên kết tải. Vui lòng thử lại.",
     delete: {
       button: "Xóa",

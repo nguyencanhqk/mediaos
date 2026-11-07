@@ -1,8 +1,8 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, contractsApi, hrApi } from "@mediaos/web-core";
+import { useAuthStore, contractsApi, hrApi, filesApi } from "@mediaos/web-core";
 import type {
   EmployeeContractDto,
   HrEmployeeDetail,
@@ -20,6 +20,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       updateContract: vi.fn(),
       deleteContract: vi.fn(),
       linkContractFile: vi.fn(),
+    },
+    filesApi: {
+      getDownloadUrl: vi.fn(),
     },
     hrApi: {
       ...actual.hrApi,
@@ -115,5 +118,38 @@ describe("EmployeeContractsPage (gate = view/manage:contract)", () => {
     await waitFor(() => expect(screen.getByText("HD-001")).toBeInTheDocument());
     expect(screen.getByText(/thêm hợp đồng/i)).toBeInTheDocument();
     expect(screen.getByText(/gắn file/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * S16-SOCIAL-FILEOPENUX-1 L-1 — tệp hợp đồng (PDF) được server phục vụ dạng TẢI XUỐNG ⇒ nhãn chờ không được
+ * hứa «mở». Đo bằng `textContent` so với chuỗi literal (so với chính khoá i18n thì ca không bao giờ đỏ).
+ */
+describe("EmployeeContractsPage — nhãn nút tải hợp đồng (S16-SOCIAL-FILEOPENUX-1)", () => {
+  beforeEach(() => {
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+    vi.clearAllMocks();
+    vi.mocked(contractsApi.listEmployeeContracts).mockResolvedValue([
+      { ...CONTRACT, fileId: "file-9" },
+    ]);
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(EMPLOYEE);
+    vi.mocked(hrApi.listContractTypes).mockResolvedValue([CONTRACT_TYPE]);
+  });
+
+  it("[L-1 FILEOPENUX] đang chờ URL ⇒ nhãn «Đang tải…», không «Đang mở…»", async () => {
+    setCaps({ "view:contract": true, "download:foundation-file": true });
+    vi.mocked(filesApi.getDownloadUrl).mockReturnValue(new Promise(() => {}));
+    renderWithQuery(<EmployeeContractsPage employeeId="emp-1" />);
+    // Bảng dựng lại ô hành động khi dữ liệu khác về ⇒ đọc lại nút SAU click, không giữ tham chiếu cũ.
+    const downloadButton = () => screen.getByRole("button", { name: /tải hợp đồng/i });
+    await screen.findByRole("button", { name: /tải hợp đồng/i });
+
+    fireEvent.click(downloadButton());
+
+    await waitFor(() => expect(downloadButton()).toBeDisabled());
+    expect(filesApi.getDownloadUrl).toHaveBeenCalledWith("file-9");
+    const button = downloadButton();
+    expect(button.textContent?.trim()).toBe("Đang tải…");
+    expect(button.textContent).not.toContain("Đang mở");
   });
 });

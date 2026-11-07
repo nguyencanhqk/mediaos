@@ -135,6 +135,43 @@ describe("MessageComposer · KÉO-THẢ", () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
+  // S16-SOCIAL-FILEOPENUX-1 F-1/F-2 — lọc sớm nằm ở `handlePickFiles` (đường DUY NHẤT của 📎 · dán · kéo-thả),
+  // nên đo qua cả nút 📎 lẫn kéo-thả. Một tệp bị chặn ⇒ cả lượt dừng, chưa tệp nào lên (như luật trần tệp).
+  it("[F-1 FILEOPENUX] chọn `a.svg` qua nút 📎 ⇒ lỗi tại chỗ + KHÔNG upload", async () => {
+    renderComposer();
+    const input = screen.getByTestId("chat-attach-input") as HTMLInputElement;
+    const svg = new File(["<svg/>"], "a.svg", { type: "image/svg+xml" });
+    fireEvent.change(input, { target: { files: [svg] } });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(
+      i18n.t("common:uploadPrecheck.activeMime", { name: "a.svg" }),
+    );
+    expect(alert.textContent).toContain("a.svg");
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("[F-1 FILEOPENUX] thả `a.pdf` + `trang.html` ⇒ lỗi cho tệp bị chặn + KHÔNG upload tệp nào", async () => {
+    renderComposer();
+    fireEvent.drop(composer(), {
+      dataTransfer: { files: [textFile("a.pdf"), textFile("trang.html")], types: ["Files"] },
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("trang.html");
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("[F-2 FILEOPENUX allow] chọn `a.pdf` qua nút 📎 ⇒ upload 1 lần, không lỗi", async () => {
+    renderComposer();
+    const input = screen.getByTestId("chat-attach-input") as HTMLInputElement;
+    const pdf = new File(["%PDF"], "a.pdf", { type: "application/pdf" });
+    fireEvent.change(input, { target: { files: [pdf] } });
+
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("phòng đã LƯU TRỮ ⇒ thả tệp không làm gì (cổng giống nút đính kèm)", () => {
     renderComposer({ isArchived: true });
     fireEvent.drop(composer(), {

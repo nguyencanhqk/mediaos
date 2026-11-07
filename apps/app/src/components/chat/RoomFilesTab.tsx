@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { Download, FileText, ImageOff } from "lucide-react";
 import { Button, Skeleton } from "@mediaos/ui";
 import type { ChatRoomFileDto, ChatRoomFileKind } from "@mediaos/contracts";
+import { hrefDisposition } from "@/lib/signed-url-disposition";
 import { formatDateTimeShort, formatFileSize } from "./chat-format";
 import { useRoomFiles } from "./room-info/use-room-files";
 
@@ -147,6 +148,14 @@ function FilePreview({ file }: { file: ChatRoomFileDto }): React.ReactElement {
       target="_blank"
       rel="noreferrer noopener"
       download={file.name}
+      // S16-SOCIAL-FILEOPENUX-1 — tên trợ năng theo cách phục vụ SERVER đã ký vào URL: `attachment` ⇒ «Tải xuống»;
+      // `inline` (video mp4/webm) hoặc không rõ ⇒ «Mở».
+      aria-label={t(
+        hrefDisposition(file.url) === "attachment"
+          ? "attachment.downloadName"
+          : "attachment.openName",
+        { name: file.name },
+      )}
       className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent"
     >
       <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />

@@ -78,7 +78,7 @@ const hrVi = {
       endBeforeStart: "Ngày kết thúc không được trước ngày bắt đầu.",
     },
     download: "Tải hợp đồng",
-    downloading: "Đang mở…",
+    downloading: "Đang tải…",
     downloadError: "Không thể tạo liên kết tải. Vui lòng thử lại.",
     linkFile: {
       button: "Gắn file",

@@ -6,6 +6,7 @@ import { formatDateTime, payrollApi } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
 import { parsePayrollError, payrollErrorText } from "../payroll-errors";
 import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
+import { useIsMounted } from "@/lib/use-is-mounted";
 
 /** Nhịp hỏi lại lô đang sinh: 3 s rồi giãn dần tới 15 s (server tự báo `stale` sau 15′). */
 export const PDF_BATCH_POLL_START_MS = 3_000;
@@ -32,6 +33,7 @@ export function PayslipPdfBatchControl({ periodId }: { periodId: string }) {
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMounted = useIsMounted();
 
   const status = batch?.status ?? null;
 
@@ -78,11 +80,14 @@ export function PayslipPdfBatchControl({ periodId }: { periodId: string }) {
     try {
       // Hộp chứa: biến gán trong closure bị TS thu hẹp về `null` ở ngoài.
       const seen: { batch: PayslipPdfBatchDto | null } = { batch: null };
-      await openSignedUrlInNewTab(async () => {
-        const next = await payrollApi.requestPayslipPdfBatch(periodId);
-        seen.batch = next;
-        return next.status === "Uploaded" && next.url ? next.url : null;
-      });
+      await openSignedUrlInNewTab(
+        async () => {
+          const next = await payrollApi.requestPayslipPdfBatch(periodId);
+          seen.batch = next;
+          return next.status === "Uploaded" && next.url ? next.url : null;
+        },
+        { isCurrent: isMounted },
+      );
       if (seen.batch) {
         setAttempt(0);
         setBatch(seen.batch);
