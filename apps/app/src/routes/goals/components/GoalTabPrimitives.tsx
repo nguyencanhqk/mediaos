@@ -19,7 +19,8 @@ export function SimpleTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className={columnWidths ? "w-full table-fixed" : "w-full"}>
+      {/* Cột cố định ⇒ thêm bề rộng sàn để màn hẹp cuộn ngang thay vì bóp cột không đặt độ rộng về 0. */}
+      <table className={columnWidths ? "w-full min-w-[60rem] table-fixed" : "w-full"}>
         <thead className="bg-muted/50">
           <tr>
             {head.map((h, i) => (

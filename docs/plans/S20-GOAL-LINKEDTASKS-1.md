@@ -48,3 +48,9 @@ Sổ vết KPI: (điền sau)
 3. [LOW] Tablist tràn 1px: KHÔNG vá — `TabsList` là primitive dùng chung ở `packages/ui`, không nằm trong GoalDetailPage; ghi nợ (vá một dòng CSS ở primitive, đo lại mọi trang dùng Tabs).
 
 Số đo KPI smoke vòng 1 (07/11/2026, Chromium Playwright MCP 1440x1000 @ 2f7653d7): bấm dòng ⇒ /goals/G?tab=linked&task=<id>, drawer mở, tab vẫn «Công việc gắn», 0 đổi path; Esc/Back ⇒ về ?tab=linked, 0 dialog, làm mới đúng GET /goals/:id + GET /goals/:id/tasks; dòng quá hạn nền destructive/10, ô hạn rgb(209,43,31) weight 500, đứng đầu.
+
+## Sổ vết — vòng 3 (luồng điều phối, 07/11)
+
+1. [LOW] Cột cố định bóp cột «Công việc» ở màn hẹp (review hẹp vòng 2): vá — bảng cột cố định có sàn `min-w-[60rem]` ⇒ khung `overflow-x-auto` cuộn ngang thay vì bóp cột không đặt độ rộng; ca test lớp.
+2. Đo lại trình duyệt thật vòng 2 (@ 11711e14, 1440x1000): banner «chưa gắn» y=266–320 trong khung nhìn khi danh sách 20 việc, «Thử gắn lại» bấm được ⇒ gắn lại thành công, 20→21 hàng; «Nhóm theo người» x tiêu đề cột trùng tuyệt đối giữa 3 nhóm [265, 611, 755, 915, 1075, 1283] (lệch 0px).
+3. Tablist tràn 1px (thanh cuộn dọc 10px, `-mb-px` của tab + `overflow-x-auto` ⇒ `overflow-y:auto`): có SẴN trước WO — diff của WO không chạm `packages/ui` hay `TabsList` của GoalDetailPage ⇒ nợ ở primitive `TabsList`.

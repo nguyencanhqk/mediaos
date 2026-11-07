@@ -243,6 +243,9 @@ describe("GoalLinkedTasksTab — vá vòng 2", () => {
       Array.from(tb.querySelectorAll("th")).map((th) => th.className.match(/w-[0-9]+/)?.[0] ?? ""),
     );
     for (const tb of tables) expect(tb).toHaveClass("table-fixed");
+    // Cột cố định cộng lại ~784px ⇒ bảng phải có bề rộng sàn, không thì màn hẹp bóp cột «Công việc» về 0
+    // thay vì cuộn ngang trong khung overflow-x-auto.
+    for (const tb of tables) expect(tb).toHaveClass("min-w-[60rem]");
     expect(widths[0]).toEqual(widths[1]);
     expect(widths[0]?.filter(Boolean).length).toBeGreaterThanOrEqual(4);
   });
