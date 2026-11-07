@@ -120,46 +120,50 @@ export function GoalLinkedTasksTab({
   if (query.isError) return <TabError message={t("detail.linkedTasks.error")} />;
   const tasks = query.data ?? [];
 
+  // Banner «chưa gắn» đứng NGAY dưới thanh công cụ (cạnh «Thêm việc»), trên bảng — hiện trong khung nhìn
+  // sau lỗi dù danh sách dài; vẫn role="alert" để trình đọc màn hình đọc ngay.
   const toolbar = (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      {finalized && canEditLinks ? (
-        <p className="text-xs text-warning">{t("linkedTasksActions.lockedFinalized")}</p>
-      ) : (
-        <span />
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        {tasks.length > 0 && (
-          <Button
-            size="sm"
-            variant={grouped ? "default" : "outline"}
-            data-testid="goal-linked-group-toggle"
-            aria-pressed={grouped}
-            onClick={() => setGrouped((v) => !v)}
-          >
-            <Users className="mr-2 h-4 w-4" />
-            {t("linkedTasksActions.groupByAssignee")}
-          </Button>
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {finalized && canEditLinks ? (
+          <p className="text-xs text-warning">{t("linkedTasksActions.lockedFinalized")}</p>
+        ) : (
+          <span />
         )}
-        {canAddTask && <GoalAddTaskButton state={addTask} disabled={finalized} />}
-        {canEditLinks && (
-          <Button
-            size="sm"
-            variant="outline"
-            data-testid="goal-link-tasks-open"
-            disabled={finalized}
-            onClick={() => setPickerOpen(true)}
-          >
-            <Link2 className="mr-2 h-4 w-4" />
-            {t("linkedTasksActions.add")}
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {tasks.length > 0 && (
+            <Button
+              size="sm"
+              variant={grouped ? "default" : "outline"}
+              data-testid="goal-linked-group-toggle"
+              aria-pressed={grouped}
+              onClick={() => setGrouped((v) => !v)}
+            >
+              <Users className="mr-2 h-4 w-4" />
+              {t("linkedTasksActions.groupByAssignee")}
+            </Button>
+          )}
+          {canAddTask && <GoalAddTaskButton state={addTask} disabled={finalized} />}
+          {canEditLinks && (
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid="goal-link-tasks-open"
+              disabled={finalized}
+              onClick={() => setPickerOpen(true)}
+            >
+              <Link2 className="mr-2 h-4 w-4" />
+              {t("linkedTasksActions.add")}
+            </Button>
+          )}
+        </div>
       </div>
-    </div>
+      <GoalAddTaskFailure state={addTask} />
+    </>
   );
 
   const overlays = (
     <>
-      <GoalAddTaskFailure state={addTask} />
       {pickerOpen && <GoalTaskPickerDialog goal={goal} onClose={() => setPickerOpen(false)} />}
       <GoalAddTaskDrawer goal={goal} state={addTask} />
     </>

@@ -7,14 +7,26 @@ import type { ReactNode } from "react";
  */
 
 /** Bảng đơn giản dùng chung cho các tab (không phân trang phía client — server đã cắt trang). */
-export function SimpleTable({ head, children }: { head: ReactNode[]; children: ReactNode }) {
+export function SimpleTable({
+  head,
+  children,
+  columnWidths,
+}: {
+  head: ReactNode[];
+  children: ReactNode;
+  /** Lớp độ rộng theo cột (vd "w-32") ⇒ bảng table-fixed, nhiều bảng cạnh nhau thẳng cột. */
+  columnWidths?: readonly string[];
+}) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full">
+      <table className={columnWidths ? "w-full table-fixed" : "w-full"}>
         <thead className="bg-muted/50">
           <tr>
             {head.map((h, i) => (
-              <th key={i} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+              <th
+                key={i}
+                className={`px-3 py-2 text-left text-xs font-medium text-muted-foreground ${columnWidths?.[i] ?? ""}`}
+              >
                 {h}
               </th>
             ))}

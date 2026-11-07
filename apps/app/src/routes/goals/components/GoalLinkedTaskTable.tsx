@@ -6,6 +6,10 @@ import { TaskOverdueBadge, TaskStatusBadge } from "@/routes/tasks/TaskStatusBadg
 import { formatLinkedTaskDue } from "../goal-linked-tasks-view";
 import { SimpleTable } from "./GoalTabPrimitives";
 
+/** Độ rộng cột cố định, dùng chung mọi nhóm ⇒ các bảng «Nhóm theo người» thẳng hàng (cột Tiêu đề co giãn). */
+const LINKED_COLUMN_WIDTHS = ["", "w-36", "w-40", "w-40", "w-52"] as const;
+const LINKED_ACTIONS_WIDTH = "w-28";
+
 export interface GoalLinkedTaskTableProps {
   tasks: readonly TaskCoreResponseDto[];
   canOpenTask: boolean;
@@ -28,6 +32,9 @@ export function GoalLinkedTaskTable({
   const { t } = useTranslation("goals");
   return (
     <SimpleTable
+      columnWidths={
+        canEditLinks ? [...LINKED_COLUMN_WIDTHS, LINKED_ACTIONS_WIDTH] : LINKED_COLUMN_WIDTHS
+      }
       head={[
         t("detail.linkedTasks.columns.title"),
         t("detail.linkedTasks.columns.status"),

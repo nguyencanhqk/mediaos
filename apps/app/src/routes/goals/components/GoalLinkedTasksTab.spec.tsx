@@ -221,6 +221,33 @@ describe("GoalLinkedTasksTab — «Thêm việc»: nhiều lần lỗi gắn", (
   });
 });
 
+describe("GoalLinkedTasksTab — vá vòng 2", () => {
+  it("banner chưa-gắn nằm TRƯỚC bảng trong DOM (gần nút «Thêm việc»)", async () => {
+    linkTasks.mockRejectedValue(new ApiError({ message: "Kỳ đã chốt", status: 403 }));
+    renderTab();
+    fireEvent.click(await screen.findByTestId("goal-add-task-open"));
+    await createdTask(task("a"));
+    const banner = await screen.findByTestId("goal-add-task-failure");
+    const table = screen.getByRole("table");
+    expect(banner.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(banner).toHaveAttribute("role", "alert");
+  });
+
+  it("nhóm theo người: mọi bảng dùng cùng độ rộng cột cố định (table-fixed)", async () => {
+    renderTab();
+    await screen.findByText("Việc 1");
+    fireEvent.click(screen.getByTestId("goal-linked-group-toggle"));
+    const tables = screen.getAllByRole("table");
+    expect(tables).toHaveLength(2);
+    const widths = tables.map((tb) =>
+      Array.from(tb.querySelectorAll("th")).map((th) => th.className.match(/w-[0-9]+/)?.[0] ?? ""),
+    );
+    for (const tb of tables) expect(tb).toHaveClass("table-fixed");
+    expect(widths[0]).toEqual(widths[1]);
+    expect(widths[0]?.filter(Boolean).length).toBeGreaterThanOrEqual(4);
+  });
+});
+
 describe("GoalLinkedTasksTab — trợ năng nút «Tháo»", () => {
   it("mỗi nút Tháo mang tên việc; cột thao tác có nhãn sr-only", async () => {
     renderTab();

@@ -40,3 +40,11 @@ Sổ vết KPI: (điền sau)
 3. [LOW] Nút «Tháo» trùng tên + th rỗng: vá — aria-label kèm tên việc, th sr-only «Thao tác»; test trợ năng.
 4. [LOW] (trùng 1) Tạo việc thứ hai xoá im lặng banner: vá cùng mục 1.
 5. [LOW] Lỗi gắn bị nuốt khi unmount: vá — onError gọi toast.error có nút «Mở việc»; test toast.error.
+
+## Sổ vết — vá vòng 2 (07/11)
+
+1. [LOW] Banner «chưa gắn» nằm dưới bảng: vá — `GoalAddTaskFailure` chuyển lên ngay dưới thanh công cụ (trên bảng), vẫn `role="alert"`; ca test thứ tự DOM (đỏ trên mã cũ).
+2. [LOW] «Nhóm theo người» lệch cột: vá — `SimpleTable` nhận `columnWidths` ⇒ `table-fixed` + độ rộng cột dùng chung; ca test mọi nhóm cùng bộ lớp độ rộng (đỏ trên mã cũ).
+3. [LOW] Tablist tràn 1px: KHÔNG vá — `TabsList` là primitive dùng chung ở `packages/ui`, không nằm trong GoalDetailPage; ghi nợ (vá một dòng CSS ở primitive, đo lại mọi trang dùng Tabs).
+
+Số đo KPI smoke vòng 1 (07/11/2026, Chromium Playwright MCP 1440x1000 @ 2f7653d7): bấm dòng ⇒ /goals/G?tab=linked&task=<id>, drawer mở, tab vẫn «Công việc gắn», 0 đổi path; Esc/Back ⇒ về ?tab=linked, 0 dialog, làm mới đúng GET /goals/:id + GET /goals/:id/tasks; dòng quá hạn nền destructive/10, ô hạn rgb(209,43,31) weight 500, đứng đầu.
