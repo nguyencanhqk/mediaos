@@ -387,6 +387,8 @@ export default {
   linkedTasksActions: {
     add: "Gắn thêm việc",
     unlink: "Tháo",
+    unlinkTask: "Tháo việc «{{name}}» khỏi mục tiêu",
+    actionsColumn: "Thao tác",
     unlinkError: "Không tháo được công việc khỏi mục tiêu.",
     lockedFinalized: "Mục tiêu đã chốt kỳ — không sửa được danh sách công việc.",
     groupByAssignee: "Nhóm theo người",

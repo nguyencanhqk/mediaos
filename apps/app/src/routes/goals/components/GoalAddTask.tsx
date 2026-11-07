@@ -26,12 +26,13 @@ export function useGoalAddTask(goal: GoalDetailResponseDto) {
   const queryClient = useQueryClient();
   const { openTask } = useTaskDrawer();
   const [open, setOpen] = useState(false);
-  const [failure, setFailure] = useState<LinkFailure | null>(null);
+  // Mảng theo task.id: việc tạo lần hai KHÔNG được xoá banner «chưa gắn» của việc lần một.
+  const [failures, setFailures] = useState<readonly LinkFailure[]>([]);
 
   const link = useMutation({
     mutationFn: (task: TaskCoreResponseDto) => goalApi.linkTasks(goal.id, { taskIds: [task.id] }),
     onSuccess: async (_result, task) => {
-      setFailure(null);
+      setFailures((prev) => prev.filter((f) => f.task.id !== task.id));
       await Promise.all(
         goalInvalidation
           .linkTasks({ goalIds: [goal.id], taskId: task.id, projectId: task.projectId })
@@ -43,7 +44,13 @@ export function useGoalAddTask(goal: GoalDetailResponseDto) {
       });
     },
     onError: (err, task) => {
-      setFailure({ task, message: err instanceof ApiError && err.message ? err.message : null });
+      const message = err instanceof ApiError && err.message ? err.message : null;
+      setFailures((prev) => [...prev.filter((f) => f.task.id !== task.id), { task, message }]);
+      // Toast độc lập với việc tab còn mounted hay không (state có thể đã mất) — đối xứng nhánh thành công.
+      toast.error(t("addTask.notLinked", { name: task.title }), {
+        action: { label: t("addTask.open"), onClick: () => openTask(task.id) },
+        key: `goal-add-task-fail:${task.id}`,
+      });
     },
   });
 
@@ -51,20 +58,15 @@ export function useGoalAddTask(goal: GoalDetailResponseDto) {
     open,
     openForm: () => setOpen(true),
     closeForm: () => setOpen(false),
-    failure,
-    retrying: link.isPending,
+    failures,
+    retryingId: link.isPending ? (link.variables?.id ?? null) : null,
     /** Gọi khi bước 1 (tạo việc) đã xong: đóng drawer rồi gắn. */
     onCreated: (task: TaskCoreResponseDto) => {
       setOpen(false);
-      setFailure(null);
       link.mutate(task);
     },
-    retry: () => {
-      if (failure) link.mutate(failure.task);
-    },
-    openFailedTask: () => {
-      if (failure) openTask(failure.task.id);
-    },
+    retry: (task: TaskCoreResponseDto) => link.mutate(task),
+    openFailedTask: (taskId: string) => openTask(taskId),
   };
 }
 
@@ -112,35 +114,39 @@ export function GoalAddTaskDrawer({
 
 export function GoalAddTaskFailure({ state }: { state: GoalAddTaskState }) {
   const { t } = useTranslation("goals");
-  const { failure } = state;
-  if (!failure) return null;
+  if (state.failures.length === 0) return null;
   return (
-    <div
-      role="alert"
-      data-testid="goal-add-task-failure"
-      className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-foreground"
-    >
-      <span>
-        {t("addTask.notLinked", { name: failure.task.title })}
-        {failure.message ? ` ${failure.message}` : ""}
-      </span>
-      <Button
-        size="sm"
-        variant="outline"
-        data-testid="goal-add-task-retry"
-        disabled={state.retrying}
-        onClick={state.retry}
-      >
-        {t("addTask.retry")}
-      </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        data-testid="goal-add-task-open-created"
-        onClick={state.openFailedTask}
-      >
-        {t("addTask.open")}
-      </Button>
-    </div>
+    <>
+      {state.failures.map(({ task, message }) => (
+        <div
+          key={task.id}
+          role="alert"
+          data-testid="goal-add-task-failure"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-foreground"
+        >
+          <span>
+            {t("addTask.notLinked", { name: task.title })}
+            {message ? ` ${message}` : ""}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            data-testid={`goal-add-task-retry-${task.id}`}
+            disabled={state.retryingId === task.id}
+            onClick={() => state.retry(task)}
+          >
+            {t("addTask.retry")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid={`goal-add-task-open-created-${task.id}`}
+            onClick={() => state.openFailedTask(task.id)}
+          >
+            {t("addTask.open")}
+          </Button>
+        </div>
+      ))}
+    </>
   );
 }

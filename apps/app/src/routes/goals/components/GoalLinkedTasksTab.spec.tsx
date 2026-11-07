@@ -34,7 +34,7 @@ vi.mock("@mediaos/web-core", () => {
   };
 });
 
-const toastMock = vi.hoisted(() => ({ success: vi.fn() }));
+const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@mediaos/ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@mediaos/ui")>()),
   toast: toastMock,
@@ -179,15 +179,55 @@ describe("GoalLinkedTasksTab — «Thêm việc»: hai bước", () => {
     expect(banner).toHaveTextContent("Đã tạo việc «Việc new» nhưng chưa gắn vào mục tiêu");
     expect(toastMock.success).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByTestId("goal-add-task-open-created"));
+    fireEvent.click(screen.getByTestId("goal-add-task-open-created-new"));
     expect(nav.navigate).toHaveBeenCalledTimes(1);
+    const arg = nav.navigate.mock.calls[0]?.[0] as {
+      search: (p: object) => Record<string, unknown>;
+    };
+    expect(arg.search({})).toMatchObject({ task: "new" });
 
-    fireEvent.click(screen.getByTestId("goal-add-task-retry"));
+    fireEvent.click(screen.getByTestId("goal-add-task-retry-new"));
     await waitFor(() => expect(linkTasks).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(screen.queryByTestId("goal-add-task-failure")).not.toBeInTheDocument(),
     );
     expect(toastMock.success).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GoalLinkedTasksTab — «Thêm việc»: nhiều lần lỗi gắn", () => {
+  it("việc B tạo sau khi việc A gắn lỗi ⇒ banner của A vẫn còn, mỗi việc một banner", async () => {
+    linkTasks.mockRejectedValue(new ApiError({ message: "Kỳ đã chốt", status: 403 }));
+    renderTab();
+    fireEvent.click(await screen.findByTestId("goal-add-task-open"));
+    await createdTask(task("a"));
+    await screen.findByTestId("goal-add-task-retry-a");
+    drawer.props = null;
+    fireEvent.click(screen.getByTestId("goal-add-task-open"));
+    await createdTask(task("b"));
+    await screen.findByTestId("goal-add-task-retry-b");
+    expect(screen.getByTestId("goal-add-task-retry-a")).toBeInTheDocument();
+    expect(screen.getAllByTestId("goal-add-task-failure")).toHaveLength(2);
+  });
+
+  it("gắn lỗi ⇒ toast.error có nút «Mở việc» (không phụ thuộc state của tab)", async () => {
+    linkTasks.mockRejectedValue(new ApiError({ message: "Kỳ đã chốt", status: 403 }));
+    renderTab();
+    fireEvent.click(await screen.findByTestId("goal-add-task-open"));
+    await createdTask(task("a"));
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledTimes(1));
+    const opts = toastMock.error.mock.calls[0]?.[1] as { action: { label: string } };
+    expect(opts.action.label).toBe("Mở việc");
+  });
+});
+
+describe("GoalLinkedTasksTab — trợ năng nút «Tháo»", () => {
+  it("mỗi nút Tháo mang tên việc; cột thao tác có nhãn sr-only", async () => {
+    renderTab();
+    await screen.findByText("Việc 1");
+    expect(screen.getByRole("button", { name: /Tháo việc «Việc 1»/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tháo việc «Việc 2»/ })).toBeInTheDocument();
+    expect(screen.getAllByText("Thao tác")[0]).toHaveClass("sr-only");
   });
 });
 

@@ -34,7 +34,13 @@ export function GoalLinkedTaskTable({
         t("detail.linkedTasks.columns.assignee"),
         t("detail.linkedTasks.columns.project"),
         t("detail.linkedTasks.columns.due"),
-        ...(canEditLinks ? [""] : []),
+        ...(canEditLinks
+          ? [
+              <span key="actions" className="sr-only">
+                {t("linkedTasksActions.actionsColumn")}
+              </span>,
+            ]
+          : []),
       ]}
     >
       {tasks.map((task) => (
@@ -77,6 +83,7 @@ export function GoalLinkedTaskTable({
                 variant="ghost"
                 data-testid={`goal-unlink-task-${task.id}`}
                 disabled={locked}
+                aria-label={t("linkedTasksActions.unlinkTask", { name: task.title })}
                 onClick={() => onUnlink(task)}
               >
                 <Unlink className="mr-1.5 h-3.5 w-3.5" />
