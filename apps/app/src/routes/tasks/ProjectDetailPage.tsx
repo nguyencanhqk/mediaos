@@ -406,7 +406,16 @@ export function ProjectDetailPage({
     TASK_CORE_ENGINE_PAIRS.VIEW_ACTIVITY_LOG.resourceType,
   );
   // S7-GOAL-PROJTAB-1 — tab «Mục tiêu» ẨN khi thiếu view:goal (story QL-10); useCan đủ (cặp non-sensitive).
-  const canViewGoal = useCan(GOAL_ENGINE_PAIRS.VIEW.action, GOAL_ENGINE_PAIRS.VIEW.resourceType);
+  // Tab Mục tiêu dẫn tới /goals/:id · /goals/new (route đòi access:goal) ⇒ cần ĐỦ cặp view + access.
+  const canViewGoalData = useCan(
+    GOAL_ENGINE_PAIRS.VIEW.action,
+    GOAL_ENGINE_PAIRS.VIEW.resourceType,
+  );
+  const canAccessGoal = useCan(
+    GOAL_ENGINE_PAIRS.ACCESS.action,
+    GOAL_ENGINE_PAIRS.ACCESS.resourceType,
+  );
+  const canViewGoal = canViewGoalData && canAccessGoal;
   // S5-TASK-PROJROLE-1 (đợt C, D-24) — affordance Sửa/Đóng/Xóa dự án: pair hệ thống HOẶC vai trò
   // per-project đủ bậc (server `assertGovern`/tầng role service-layer là người quyết cuối, ở đây
   // CHỈ ẩn/hiện). Gọi ĐỦ 3 hook vô điều kiện trước khi OR với myProjectRole (rules-of-hooks).
@@ -553,7 +562,7 @@ export function ProjectDetailPage({
             ? canViewGoal
             : true,
   );
-  // `?tab=goals` khi thiếu view:goal ⇒ rơi về tab mặc định (Tổng quan), không mount tab ⇒ 0 lời gọi /goals.
+  // `?tab=goals` khi thiếu view:goal/access:goal ⇒ rơi về tab mặc định (Tổng quan), không mount tab ⇒ 0 lời gọi /goals.
   const tab: ProjectWorkspaceTab =
     urlTab === "goals" && !canViewGoal
       ? "overview"

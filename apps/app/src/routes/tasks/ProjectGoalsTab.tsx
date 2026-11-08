@@ -17,7 +17,7 @@ const OWNER_LOOKUP_MAX = 20;
 /**
  * S7-GOAL-PROJTAB-1 (lát A, US-GOAL-QL-10) — tab «Mục tiêu» của workspace dự án: mục tiêu CẤP DỰ ÁN gắn
  * dự án này, lấy từ `GET /goals?projectId=` SẴN CÓ (không endpoint mới). Gate hiện tab ở
- * ProjectDetailPage (`view:goal`); ở đây gate lại cho chắc — thiếu quyền ⇒ KHÔNG gọi /goals.
+ * ProjectDetailPage (`view:goal` + `access:goal`); ở đây gate lại cho chắc (view:goal + access:goal — cặp route đích đòi) — thiếu quyền ⇒ KHÔNG gọi /goals.
  * Tên người phụ trách: DTO chỉ có UUID ⇒ tra danh bạ nhân viên khi có `read:employee`, không thì «—»
  * (KHÔNG lộ UUID trơ — mẫu GoalDetailPage).
  */
@@ -25,23 +25,32 @@ export function ProjectGoalsTab({ projectId }: { projectId: string }) {
   const { t } = useTranslation("goals");
   const { t: tc } = useTranslation("common");
   const navigate = useNavigate();
-  const canView = useCan(GOAL_ENGINE_PAIRS.VIEW.action, GOAL_ENGINE_PAIRS.VIEW.resourceType);
+  // Cổng của màn KHỚP cổng đường đích: /goals/:id và /goals/new đòi access:goal ⇒ thiếu một trong hai
+  // thì không hiện tab (khỏi dẫn vào trang «không có quyền»).
+  const canViewGoal = useCan(GOAL_ENGINE_PAIRS.VIEW.action, GOAL_ENGINE_PAIRS.VIEW.resourceType);
+  const canAccessGoal = useCan(
+    GOAL_ENGINE_PAIRS.ACCESS.action,
+    GOAL_ENGINE_PAIRS.ACCESS.resourceType,
+  );
+  const canView = canViewGoal && canAccessGoal;
   const canReadEmployees = useCan("read", "employee");
 
   const params = { projectId, limit: GOAL_PAGE_LIMIT_MAX };
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, isSuccess, refetch } = useQuery({
     queryKey: goalKeys.list(params),
     queryFn: () => goalApi.listGoals(params),
     enabled: canView,
     staleTime: 30_000,
   });
+  const goals: GoalCoreResponseDto[] = data ?? [];
+  // Danh bạ chỉ cần khi đã có mục tiêu để tra tên — /goals rỗng hoặc lỗi ⇒ không bắn request thừa.
+  const needsOwnerNames = isSuccess && goals.length > 0;
   const { data: employeesPage } = useQuery({
     queryKey: hrKeys.employees.list({ pageSize: 100 }),
     queryFn: () => hrApi.listEmployees({ pageSize: 100 }),
-    enabled: canView && canReadEmployees,
+    enabled: canView && canReadEmployees && needsOwnerNames,
     staleTime: 60_000,
   });
-  const goals: GoalCoreResponseDto[] = data ?? [];
   const pageNames = useMemo(
     () => new Map((employeesPage?.items ?? []).map((e) => [e.id, e.fullName] as const)),
     [employeesPage],

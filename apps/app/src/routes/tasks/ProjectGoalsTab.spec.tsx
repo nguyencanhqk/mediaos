@@ -97,7 +97,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("hiện 2 mục tiêu kèm tiến độ, trạng thái, người phụ trách; gọi /goals với projectId", async () => {
-    setCaps({ "view:goal": true, "read:employee": true });
+    setCaps({ "view:goal": true, "access:goal": true, "read:employee": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue([
       makeGoal(),
       makeGoal({
@@ -121,7 +121,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("bấm mục tiêu ⇒ mở /goals/:id", async () => {
-    setCaps({ "view:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue([makeGoal()]);
     renderTab();
     fireEvent.click(await screen.findByTestId("project-goal-open-g-1"));
@@ -129,7 +129,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("rỗng + có create:goal ⇒ «Tạo mục tiêu dự án» mở /goals/new prefill level+projectId", async () => {
-    setCaps({ "view:goal": true, "create:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true, "create:goal": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue([]);
     renderTab();
     fireEvent.click(await screen.findByTestId("project-goals-create"));
@@ -140,15 +140,53 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("DENY: rỗng + thiếu create:goal ⇒ trạng thái rỗng, KHÔNG có nút tạo", async () => {
-    setCaps({ "view:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue([]);
     renderTab();
     await waitFor(() => expect(screen.getByText("Dự án chưa có mục tiêu")).toBeInTheDocument());
     expect(screen.queryByTestId("project-goals-create")).not.toBeInTheDocument();
   });
 
+  it("DENY: có view:goal + create:goal nhưng thiếu access:goal ⇒ không render, 0 gọi /goals", () => {
+    setCaps({ "view:goal": true, "create:goal": true, "read:employee": true });
+    renderTab();
+    expect(screen.queryByTestId("project-goals-tab")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("project-goals-create")).not.toBeInTheDocument();
+    expect(goalApi.listGoals).not.toHaveBeenCalled();
+  });
+
+  it("DENY: có access:goal nhưng thiếu view:goal ⇒ không render, 0 gọi /goals", () => {
+    setCaps({ "access:goal": true });
+    renderTab();
+    expect(goalApi.listGoals).not.toHaveBeenCalled();
+  });
+
+  it("/goals rỗng ⇒ KHÔNG gọi danh bạ nhân viên", async () => {
+    setCaps({ "view:goal": true, "access:goal": true, "read:employee": true });
+    vi.mocked(goalApi.listGoals).mockResolvedValue([]);
+    renderTab();
+    await waitFor(() => expect(screen.getByText("Dự án chưa có mục tiêu")).toBeInTheDocument());
+    expect(hrApi.listEmployees).not.toHaveBeenCalled();
+  });
+
+  it("/goals lỗi ⇒ KHÔNG gọi danh bạ nhân viên", async () => {
+    setCaps({ "view:goal": true, "access:goal": true, "read:employee": true });
+    vi.mocked(goalApi.listGoals).mockRejectedValue(new Error("boom"));
+    renderTab();
+    await screen.findByText("Thử lại");
+    expect(hrApi.listEmployees).not.toHaveBeenCalled();
+  });
+
+  it("có mục tiêu ⇒ gọi danh bạ đúng 1 lần", async () => {
+    setCaps({ "view:goal": true, "access:goal": true, "read:employee": true });
+    vi.mocked(goalApi.listGoals).mockResolvedValue([makeGoal()]);
+    renderTab();
+    await screen.findByText("Trần Thị Bình", { exact: false });
+    expect(hrApi.listEmployees).toHaveBeenCalledTimes(1);
+  });
+
   it("API lỗi ⇒ thông báo lỗi + «Thử lại» gọi lại", async () => {
-    setCaps({ "view:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true });
     vi.mocked(goalApi.listGoals).mockRejectedValueOnce(new Error("boom"));
     renderTab();
     await waitFor(() =>
@@ -160,7 +198,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("loading ⇒ role=status + aria-busy + chữ sr-only cho trình đọc màn hình", () => {
-    setCaps({ "view:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true });
     vi.mocked(goalApi.listGoals).mockReturnValue(new Promise(() => {}));
     renderTab();
     const box = screen.getByTestId("project-goals-loading");
@@ -170,7 +208,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("owner ngoài trang danh bạ (đã nghỉ / >100 người) ⇒ tra theo id, không hiện «—»", async () => {
-    setCaps({ "view:goal": true, "read:employee": true });
+    setCaps({ "view:goal": true, "access:goal": true, "read:employee": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue([makeGoal({ ownerEmployeeId: "emp-9" })]);
     vi.mocked(hrApi.getEmployee).mockResolvedValue({ id: "emp-9", fullName: "Lê Văn Cũ" } as never);
     renderTab();
@@ -180,7 +218,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("thiếu read:employee ⇒ không tra danh bạ, hiện «—»", async () => {
-    setCaps({ "view:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue([makeGoal({ ownerEmployeeId: "emp-9" })]);
     renderTab();
     await screen.findByText("Tăng lượt xem kênh Q3");
@@ -189,7 +227,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("đủ trần 200 mục tiêu ⇒ báo danh sách bị cắt, không im lặng", async () => {
-    setCaps({ "view:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue(
       Array.from({ length: 200 }, (_, i) => makeGoal({ id: "g-" + i })),
     );
@@ -198,7 +236,7 @@ describe("ProjectGoalsTab", () => {
   });
 
   it("dưới trần ⇒ không có cảnh báo cắt", async () => {
-    setCaps({ "view:goal": true });
+    setCaps({ "view:goal": true, "access:goal": true });
     vi.mocked(goalApi.listGoals).mockResolvedValue([makeGoal()]);
     renderTab();
     await screen.findByTestId("project-goals-tab");

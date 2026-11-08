@@ -790,8 +790,21 @@ describe("ProjectDetailPage — tab Mục tiêu (S7-GOAL-PROJTAB-1)", () => {
     expect(goalApi.listGoals).not.toHaveBeenCalled();
   });
 
+  it("DENY: view:goal + create:goal nhưng thiếu access:goal ⇒ không tab, ?tab=goals về Tổng quan, 0 gọi /goals", async () => {
+    setCapabilities({ "read:project": true, "view:goal": true, "create:goal": true });
+    searchRef.current = { tab: "goals" };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.queryByTestId("workspace-tab-goals")).not.toBeInTheDocument();
+    const active = screen
+      .getAllByTestId(/^workspace-tab-/)
+      .find((el) => el.getAttribute("aria-current") === "page");
+    expect(active?.getAttribute("data-testid")).toBe("workspace-tab-overview");
+    expect(goalApi.listGoals).not.toHaveBeenCalled();
+  });
+
   it("ALLOW: có view:goal ⇒ tab hiện CUỐI thanh tab; ?tab=goals gọi /goals?projectId=", async () => {
-    setCapabilities({ "read:project": true, "view:goal": true });
+    setCapabilities({ "read:project": true, "view:goal": true, "access:goal": true });
     searchRef.current = { tab: "goals" };
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
     await waitFor(() =>
@@ -808,7 +821,7 @@ describe("ProjectDetailPage — tab Mục tiêu (S7-GOAL-PROJTAB-1)", () => {
       "mediaos.tasks.workspaceTabOrder",
       JSON.stringify(["members", "overview", "board", "list", "report", "activity", "settings"]),
     );
-    setCapabilities({ "read:project": true, "view:goal": true });
+    setCapabilities({ "read:project": true, "view:goal": true, "access:goal": true });
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId("workspace-tab-goals")).toBeInTheDocument());
     const ids = Array.from(document.querySelectorAll('[data-testid^="workspace-tab-"]')).map((el) =>

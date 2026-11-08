@@ -227,3 +227,7 @@ Sổ vết KPI: (điền sau)
 - [LOW] Cắt im lặng ở 200 mục tiêu: listGoals trả mảng trần, không tổng ⇒ giữ trần, nay hiện dòng «Chỉ hiển thị 200 mục tiêu đầu tiên» khi đủ trần (testid project-goals-truncated); phân trang thật để lát B (project-coverage).
 - [LOW] Tên owner ngoài trang 100 nhân viên: bỏ lọc status=active (owner đã nghỉ có tên) + tra thêm theo id (getEmployee, trần 20) cho owner không có trong trang; vẫn chỉ khi read:employee.
 - [LOW] Loading skeleton: role=status + aria-busy + span sr-only (i18n projectTab.loading).
+
+**Sổ vết vá vòng 2 (08/11)**
+- [LOW] Request thừa danh bạ: `GET /hr/employees` chỉ bật khi `/goals` thành công VÀ có ≥1 mục tiêu (`isSuccess && goals.length>0`); ca test đếm lời gọi (rỗng · lỗi · có mục tiêu = 1 lần).
+- [cặp quyền] Chọn phương án MỘT: tab hiện khi có ĐỦ `view:goal` + `access:goal` (router.tsx: `goal.new` · `goal.detail` đều `requiredAnyPermissions:["access:goal"]`). Lý do: cổng của màn phải khớp cổng đường đích; ẩn cả tab gọn hơn để lại tab xem được mà mọi liên kết rơi vào «không có quyền». Nút tạo vẫn gate thêm `create:goal`. Ca test: view+create thiếu access ⇒ ẩn tab + `?tab=goals` về Tổng quan + 0 gọi; access thiếu view ⇒ ẩn.
