@@ -91,7 +91,12 @@ export function PollBlock({ postId, isMine, seed, className }: PollBlockProps): 
   const [draft, setDraft] = React.useState<string[] | null>(null);
   const [error, setError] = React.useState<PollActionError | null>(null);
 
-  const applyResult = (result: FeedPollResultsDto): void => {
+  /**
+   * Huỷ lần nữa NGAY TRƯỚC khi ghi: một `043` bắt đầu SAU `onMutate` (focus, remount, invalidate nơi khác)
+   * đọc trước lượt ghi, về sau sẽ đè kết quả mới bằng ảnh cũ.
+   */
+  const applyResult = async (result: FeedPollResultsDto): Promise<void> => {
+    await queryClient.cancelQueries({ queryKey: resultsKey });
     queryClient.setQueryData(resultsKey, result);
     setDraft(null);
     setError(null);
@@ -124,8 +129,8 @@ export function PollBlock({ postId, isMine, seed, className }: PollBlockProps): 
   const closeMutation = useMutation({
     mutationFn: () => socialApi.closePoll(postId),
     onMutate: cancelInFlightResults,
-    onSuccess: (result) => {
-      applyResult(result);
+    onSuccess: async (result) => {
+      await applyResult(result);
       // Poll vừa đóng phải rời tab «Đang mở» + widget rail (plan §8 H5). Chỉ nhánh `list`: nhánh
       // `results` vừa được ghi ở trên, invalidate nó là một request thừa.
       void queryClient.invalidateQueries({ queryKey: [...socialKeys.polls.allOf(), "list"] });

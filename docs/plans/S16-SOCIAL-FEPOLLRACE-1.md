@@ -14,3 +14,8 @@
 
 ## Nợ
 - Không có. `cancelQueries` huỷ mọi 043 đang bay của post này kể cả của chính khối — chấp nhận, kết quả mutation mới hơn.
+
+## Sổ vết (vá review 08/11)
+- [LOW] cửa sổ sau `onMutate`, trước khi 041/042/044 về (3 báo cáo trùng gốc): VÁ — `applyResult` giờ `await cancelQueries` NGAY TRƯỚC `setQueryData` (cả 3 mutation). Ca mới «043 BẮT ĐẦU trong lúc mutation đang bay»: đỏ trên mã cũ → xanh.
+- [LOW] cửa sổ hẹp còn lại: một `043` bắt đầu sau `cancelQueries` của `applyResult` nhưng trước `setQueryData` — không còn điểm `await` giữa hai lệnh (đồng bộ) nên không có khoảng hở; không vá thêm.
+- [LOW] không dùng `enabled: !isPending` — sẽ làm khối ngừng tự tải/đồng bộ khi mutation chậm; huỷ-rồi-ghi đủ.

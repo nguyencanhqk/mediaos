@@ -432,4 +432,42 @@ describe("FEPOLLRACE — 043 đang bay bị huỷ trước khi ghi kết quả m
     });
     expect(screen.getByTestId("poll-status-label")).toHaveTextContent(t("poll.closed"));
   });
+
+  it("043 BẮT ĐẦU trong lúc mutation đang bay (sau onMutate) rồi về muộn ⇒ vẫn hiện số MỚI", async () => {
+    api.getPollResults.mockReset();
+    const client = makeTestQueryClient();
+    api.getPollResults.mockResolvedValueOnce(makeResults());
+    renderWithProviders(<PollBlock postId={POST_ID} isMine={true} />, client);
+    await screen.findByTestId("poll-block");
+
+    let releaseVote: (v: FeedPollResultsDto) => void = () => {};
+    api.votePoll.mockReturnValueOnce(
+      new Promise<FeedPollResultsDto>((resolve) => {
+        releaseVote = resolve;
+      }),
+    );
+    fireEvent.click(optionInput(A));
+    fireEvent.click(screen.getByTestId("poll-vote"));
+    await waitFor(() => expect(api.votePoll).toHaveBeenCalledTimes(1));
+
+    // 043 mới bắt đầu SAU onMutate, trước khi 041 trả về (focus refetch / invalidate từ nơi khác).
+    let releaseStale: (v: FeedPollResultsDto) => void = () => {};
+    api.getPollResults.mockReturnValueOnce(
+      new Promise<FeedPollResultsDto>((resolve) => {
+        releaseStale = resolve;
+      }),
+    );
+    void client.invalidateQueries({ queryKey: socialKeys.polls.results(POST_ID) });
+    await waitFor(() => expect(api.getPollResults).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      releaseVote(tally(1, 0, 1, [A]));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await act(async () => {
+      releaseStale(makeResults());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(totalText(1));
+  });
 });
