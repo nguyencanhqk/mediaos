@@ -320,9 +320,19 @@ export function TaskDetailContent({
   // Drawer đang mở mà link «Mở checklist» của dòng khác đổi `?taskTab=` ⇒ chuyển tab theo.
   useEffect(() => {
     if (initialBreakdownTab === "checklist") setBreakdownTab("checklist");
-    if (initialBreakdownTab === "comment") setCollabTab("comments");
+    if (initialBreakdownTab === "comment") {
+      setCollabTab("comments");
+      setFocusComposer(true);
+    }
   }, [initialBreakdownTab, taskId]);
   const [collabTab, setCollabTab] = useState("comments");
+  // Autofocus ô soạn MỘT lần cho mỗi lần điều hướng `?taskTab=comment`; người dùng đổi tab ⇒ tắt,
+  // quay lại «Bình luận» không cướp focus nữa.
+  const [focusComposer, setFocusComposer] = useState(initialBreakdownTab === "comment");
+  const onCollabTabChange = (value: string) => {
+    setFocusComposer(false);
+    setCollabTab(value);
+  };
   const isDrawer = variant === "drawer";
 
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -417,7 +427,7 @@ export function TaskDetailContent({
 
       {/* Nhóm tab 2 — trao đổi & dấu vết */}
       <Card className="p-0">
-        <Tabs value={collabTab} onValueChange={setCollabTab}>
+        <Tabs value={collabTab} onValueChange={onCollabTabChange}>
           <TabsList className="px-2 pt-1">
             <TabsTrigger value="comments">{t("tasks.detail.tabs.comments")}</TabsTrigger>
             <TabsTrigger value="files">{t("tasks.detail.tabs.files")}</TabsTrigger>
@@ -427,7 +437,7 @@ export function TaskDetailContent({
             <TaskCommentThread
               taskId={task.id}
               embedded
-              autoFocusComposer={initialBreakdownTab === "comment"}
+              autoFocusComposer={focusComposer}
             />
           </TabsContent>
           <TabsContent value="files" className="p-4">

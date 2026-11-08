@@ -239,6 +239,7 @@ export default {
     error: "Không tải được danh sách việc của bạn.",
     retry: "Thử lại",
     notifyReporter: "Báo người giao",
+    count: "Còn {{count}} việc đến hạn trong kỳ nghỉ",
   },
   detail: {
     title: "Chi tiết đơn nghỉ",

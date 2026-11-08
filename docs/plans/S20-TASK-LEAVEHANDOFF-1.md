@@ -26,3 +26,8 @@
 - Sổ vết KPI: (điền sau) — KPI #24 đo trong trình duyệt thật bởi agent khác.
 - Ngày lễ không tính vào «ngày làm việc kế tiếp» (đúng yêu cầu WO).
 - Hết quyền `update-deadline:task` thì hạn hiện chữ tĩnh; chưa có lối «xin dời hạn» (ngoài phạm vi).
+
+## Sổ vết (vá review độc lập, 08/11)
+- [LOW] #1 tệp ngoài `paths` (`task-drawer-nav.ts`, `TaskDetailContent.tsx`, `TaskCommentThread.tsx`+spec, nay thêm `TaskDetailDrawer.tsx`+spec, `i18n/locales/vi/leave.ts` đã trong paths): builder KHÔNG được sửa `harness/backlog.mjs` ⇒ ghi ở đây + mô tả PR; mở rộng `paths` khi đóng sổ (người đóng sổ làm).
+- [LOW] #2 focus mất khi dòng rời danh sách: `LeaveTaskHandoff` trả focus về tiêu đề khối (`tabIndex=-1`) khi số dòng giảm và focus rơi về body; thêm `role="status"` + khoá i18n `leave.handoff.count`. Test: `LeaveTaskHandoff.spec.tsx` (2 ca: trả focus / không cướp focus).
+- [LOW] #3 autofocus lặp / không chạy lại: `TaskDetailContent` dùng state `focusComposer` một-lần (tắt khi đổi tab trao đổi); `GlobalTaskDrawer` bỏ `?taskTab=` khỏi URL (replace) sau khi áp ⇒ bấm «Báo người giao» lần nữa đổi URL và áp lại. Test: `TaskDetailContent.autofocus.spec.tsx`, `TaskDetailDrawer.spec.tsx`.

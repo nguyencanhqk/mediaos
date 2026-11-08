@@ -309,6 +309,20 @@ describe("GlobalTaskDrawer — ?task= toàn ứng dụng", () => {
     expectClosedKeeping({ status: "InProgress", page: 2 });
   });
 
+  it("?taskTab= là lệnh một lần: áp xong thì bỏ khỏi URL (replace), giữ task + tham số khác", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue({ ...TASK, id: TASK_UUID } as never);
+    renderGlobal({ status: "Todo", task: TASK_UUID, taskTab: "comment" });
+
+    await waitFor(() => expect(screen.getByText("Dựng trang Tuyển dụng")).toBeInTheDocument());
+    const call = lastNavigate();
+    expect(call).toMatchObject({ to: ".", replace: true });
+    expect(call.search?.({ status: "Todo", task: TASK_UUID, taskTab: "comment" })).toEqual({
+      status: "Todo",
+      task: TASK_UUID,
+    });
+  });
+
   it("«Mở toàn trang» ⇒ push sang /tasks/:id", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue({ ...TASK, id: TASK_UUID } as never);

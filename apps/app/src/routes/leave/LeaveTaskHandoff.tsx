@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -128,14 +128,35 @@ export function LeaveTaskHandoff({ request }: { request: LeavePeriod }) {
     () => (data ? tasksDueDuringLeave(data, request, timeZone) : []),
     [data, request, timeZone],
   );
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const prevCount = useRef<number | null>(null);
+  const settled = eligible && !isLoading && !isError && data !== undefined;
+  // Dòng rời danh sách (dời hạn «Sau kỳ nghỉ» / đổi người) ⇒ popover + nút bị gỡ, focus rơi về body:
+  // trả focus về tiêu đề khối để bàn phím / trình đọc màn hình không mất vị trí.
+  useEffect(() => {
+    if (!settled) return;
+    const before = prevCount.current;
+    prevCount.current = due.length;
+    if (before === null || due.length >= before) return;
+    const active = document.activeElement;
+    if (active === null || active === document.body) headingRef.current?.focus();
+  }, [settled, due.length]);
   if (!eligible) return null;
   return (
     <Card data-testid="leave-task-handoff">
       <CardContent className="space-y-3 pt-5">
-        <h3 className="text-sm font-semibold">
+        <h3
+          ref={headingRef}
+          tabIndex={-1}
+          data-testid="leave-handoff-title"
+          className="text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           {t("handoff.title")}
           {!isError && !isLoading && " (" + String(due.length) + ")"}
         </h3>
+        <p role="status" aria-live="polite" className="sr-only" data-testid="leave-handoff-status">
+          {settled ? t("handoff.count", { count: due.length }) : ""}
+        </p>
         <HandoffBody
           tasks={due}
           endDate={request.endDate}

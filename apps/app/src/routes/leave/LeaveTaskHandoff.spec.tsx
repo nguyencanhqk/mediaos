@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   addDaysToLocalDate,
@@ -8,6 +8,7 @@ import {
   deadlineAt,
   hrApi,
   taskCoreApi,
+  taskKeys,
   todayLocal,
   useAuthStore,
 } from "@mediaos/web-core";
@@ -78,11 +79,12 @@ function renderBlock(request = REQUEST) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <LeaveTaskHandoff request={request} />
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 describe("LeaveTaskHandoff", () => {
@@ -106,6 +108,40 @@ describe("LeaveTaskHandoff", () => {
     expect(screen.getByTestId("leave-handoff-row-b")).toBeInTheDocument();
     expect(screen.queryByTestId("leave-handoff-row-far")).not.toBeInTheDocument();
     expect(screen.queryByTestId("leave-handoff-row-done")).not.toBeInTheDocument();
+  });
+
+  it("dòng rời danh sách khi đang giữ focus ⇒ focus về tiêu đề khối, vùng status báo số mới", async () => {
+    caps({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([item("a", 1), item("b", 3)]);
+    const { client } = renderBlock();
+    const open = await screen.findByTestId("leave-handoff-open-a");
+    open.focus();
+    expect(open).toHaveFocus();
+    expect(screen.getByTestId("leave-handoff-status")).toHaveTextContent(
+      "Còn 2 việc đến hạn trong kỳ nghỉ",
+    );
+    // Dời hạn «Sau kỳ nghỉ» ⇒ optimistic patch đưa việc a ra khỏi kỳ ⇒ dòng a unmount.
+    act(() => {
+      client.setQueryData(taskKeys.my(), [item("b", 3)]);
+    });
+    await waitFor(() => expect(screen.queryByTestId("leave-handoff-row-a")).not.toBeInTheDocument());
+    expect(screen.getByTestId("leave-handoff-title")).toHaveFocus();
+    expect(screen.getByTestId("leave-handoff-status")).toHaveTextContent(
+      "Còn 1 việc đến hạn trong kỳ nghỉ",
+    );
+  });
+
+  it("dòng rời danh sách khi focus đang ở chỗ khác thì KHÔNG cướp focus", async () => {
+    caps({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([item("a", 1), item("b", 3)]);
+    const { client } = renderBlock();
+    const other = await screen.findByTestId("leave-handoff-open-b");
+    other.focus();
+    act(() => {
+      client.setQueryData(taskKeys.my(), [item("b", 3)]);
+    });
+    await waitFor(() => expect(screen.queryByTestId("leave-handoff-row-a")).not.toBeInTheDocument());
+    expect(other).toHaveFocus();
   });
 
   it("deny: thiếu read:task thì không có khối và KHÔNG gọi /tasks/my", () => {

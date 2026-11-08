@@ -12,6 +12,7 @@ import {
   isTaskUuid,
   readTaskDrawerParam,
   readTaskDrawerTab,
+  TASK_DRAWER_TAB_PARAM,
   useTaskDrawer,
   type TaskDrawerTab,
 } from "./task-drawer-nav";
@@ -163,6 +164,22 @@ export function GlobalTaskDrawer() {
     if (!taskId || typeof window.matchMedia !== "function") return;
     if (window.matchMedia(NARROW_SCREEN_QUERY).matches) useChatDockStore.getState().closeDrawer();
   }, [taskId]);
+
+  // `?taskTab=` chỉ là lệnh MỘT LẦN: nội dung đã áp xong ⇒ bỏ khỏi URL (replace) để lần bấm sau
+  // (cùng việc, cùng tab) lại đổi URL và được áp lại thay vì thành no-op.
+  const hasTab = taskId !== null && tab !== null;
+  useEffect(() => {
+    if (!hasTab) return;
+    void navigate({
+      to: ".",
+      search: ((prev: Record<string, unknown>) =>
+        Object.fromEntries(
+          Object.entries(prev ?? {}).filter(([key]) => key !== TASK_DRAWER_TAB_PARAM),
+        )) as never,
+      replace: true,
+      resetScroll: false,
+    });
+  }, [hasTab, taskId, tab, navigate]);
 
   if (!taskId) return null;
 
