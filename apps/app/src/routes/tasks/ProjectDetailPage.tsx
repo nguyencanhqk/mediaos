@@ -30,6 +30,8 @@ import { ProjectTaskListTab } from "./ProjectTaskListTab";
 import { ProjectActivityTimeline } from "./ProjectActivityTimeline";
 import { ProjectReportContent } from "./ProjectReportPage";
 import { ProjectProgressCard } from "./ProjectProgressCard";
+import { ProjectGoalsTab } from "./ProjectGoalsTab";
+import { GOAL_ENGINE_PAIRS } from "../goals/constants";
 import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWidget";
 import {
   isAddMembersFlag,
@@ -403,6 +405,8 @@ export function ProjectDetailPage({
     TASK_CORE_ENGINE_PAIRS.VIEW_ACTIVITY_LOG.action,
     TASK_CORE_ENGINE_PAIRS.VIEW_ACTIVITY_LOG.resourceType,
   );
+  // S7-GOAL-PROJTAB-1 — tab «Mục tiêu» ẨN khi thiếu view:goal (story QL-10); useCan đủ (cặp non-sensitive).
+  const canViewGoal = useCan(GOAL_ENGINE_PAIRS.VIEW.action, GOAL_ENGINE_PAIRS.VIEW.resourceType);
   // S5-TASK-PROJROLE-1 (đợt C, D-24) — affordance Sửa/Đóng/Xóa dự án: pair hệ thống HOẶC vai trò
   // per-project đủ bậc (server `assertGovern`/tầng role service-layer là người quyết cuối, ở đây
   // CHỈ ẩn/hiện). Gọi ĐỦ 3 hook vô điều kiện trước khi OR với myProjectRole (rules-of-hooks).
@@ -545,9 +549,15 @@ export function ProjectDetailPage({
         ? canViewActivity
         : key === "settings"
           ? showSettings
-          : true,
+          : key === "goals"
+            ? canViewGoal
+            : true,
   );
-  const tab = resolveWorkspaceTab(urlTab, entryTab, visibleTabs);
+  // `?tab=goals` khi thiếu view:goal ⇒ rơi về tab mặc định (Tổng quan), không mount tab ⇒ 0 lời gọi /goals.
+  const tab: ProjectWorkspaceTab =
+    urlTab === "goals" && !canViewGoal
+      ? "overview"
+      : resolveWorkspaceTab(urlTab, entryTab, visibleTabs);
 
   // Đổi tab thì BỎ `task` — chuyển sang tab khác mà panel còn treo là vô lý. Tab đang hiện đến từ
   // tab nhớ (URL trống) ⇒ ghi rõ ?tab vào mục lịch sử hiện tại trước khi đẩy tab mới, để Back quay
@@ -669,6 +679,8 @@ export function ProjectDetailPage({
           />
           <ProjectRoleLegend />
         </div>
+      ) : tab === "goals" ? (
+        <ProjectGoalsTab projectId={project.id} />
       ) : !showSettings ? (
         // Deep-link ?tab=settings khi tab bị ẨN → gate tại chỗ, không lộ control (mirror report).
         <EmptyState

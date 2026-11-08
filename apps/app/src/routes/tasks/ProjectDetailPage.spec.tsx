@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, ApiError } from "@mediaos/web-core";
-import { taskProjectApi, taskCoreApi } from "@mediaos/web-core";
+import { taskProjectApi, taskCoreApi, goalApi } from "@mediaos/web-core";
 import { ProjectDetailPage } from "./ProjectDetailPage";
 import type { TaskProjectResponseDto } from "@mediaos/contracts";
 
@@ -66,6 +66,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       // S5-TASK-BOARD-UX-1 — panel chi tiết (?task=) đọc task qua getTask.
       getTask: vi.fn(),
     },
+    // S7-GOAL-PROJTAB-1 — tab Mục tiêu đọc GET /goals?projectId=.
+    goalApi: { listGoals: vi.fn().mockResolvedValue([]) },
     hrApi: {
       listDepartments: vi.fn().mockResolvedValue([]),
       listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),
@@ -757,5 +759,67 @@ describe("ProjectDetailPage — vào dự án (tab nhớ + addMembers)", () => {
     await waitFor(() => expect(taskProjectApi.listMembers).toHaveBeenCalledWith("proj-001"));
     expect(activeTab()).toBe("workspace-tab-members");
     expect(screen.queryByTestId("member-picker-confirm")).not.toBeInTheDocument();
+  });
+});
+
+describe("ProjectDetailPage — tab Mục tiêu (S7-GOAL-PROJTAB-1)", () => {
+  beforeEach(() => {
+    clearCapabilities();
+    searchRef.current = {};
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+  });
+
+  it("DENY: thiếu view:goal ⇒ không có tab Mục tiêu", async () => {
+    setCapabilities({ "read:project": true });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.queryByTestId("workspace-tab-goals")).not.toBeInTheDocument();
+  });
+
+  it("DENY: ?tab=goals thiếu view:goal ⇒ rơi về Tổng quan, 0 lời gọi /goals", async () => {
+    setCapabilities({ "read:project": true });
+    searchRef.current = { tab: "goals" };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    const active = screen
+      .getAllByTestId(/^workspace-tab-/)
+      .find((el) => el.getAttribute("aria-current") === "page");
+    expect(active?.getAttribute("data-testid")).toBe("workspace-tab-overview");
+    expect(goalApi.listGoals).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW: có view:goal ⇒ tab hiện CUỐI thanh tab; ?tab=goals gọi /goals?projectId=", async () => {
+    setCapabilities({ "read:project": true, "view:goal": true });
+    searchRef.current = { tab: "goals" };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() =>
+      expect(goalApi.listGoals).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-001" })),
+    );
+    const ids = Array.from(document.querySelectorAll('[data-testid^="workspace-tab-"]')).map((el) =>
+      el.getAttribute("data-testid"),
+    );
+    expect(ids[ids.length - 1]).toBe("workspace-tab-goals");
+  });
+
+  it("thứ tự tab đã lưu CŨ (7 tab, chưa có goals) không vỡ: goals nối vào cuối", async () => {
+    window.localStorage.setItem(
+      "mediaos.tasks.workspaceTabOrder",
+      JSON.stringify(["members", "overview", "board", "list", "report", "activity", "settings"]),
+    );
+    setCapabilities({ "read:project": true, "view:goal": true });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("workspace-tab-goals")).toBeInTheDocument());
+    const ids = Array.from(document.querySelectorAll('[data-testid^="workspace-tab-"]')).map((el) =>
+      el.getAttribute("data-testid"),
+    );
+    expect(ids).toEqual([
+      "workspace-tab-members",
+      "workspace-tab-overview",
+      "workspace-tab-board",
+      "workspace-tab-list",
+      "workspace-tab-goals",
+    ]);
   });
 });
