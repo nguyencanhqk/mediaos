@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Plus, RefreshCw } from "lucide-react";
 import { goalApi, goalKeys, hrApi, hrKeys, PermissionGate, useCan } from "@mediaos/web-core";
 import { GOAL_PAGE_LIMIT_MAX, type GoalCoreResponseDto } from "@mediaos/contracts";
@@ -10,6 +10,9 @@ import { GOAL_ENGINE_PAIRS } from "../goals/constants";
 import { goalPeriodLabel } from "../goals/goal-format";
 import { GoalFinalizedBadge, GoalStatusBadge } from "../goals/components/GoalBadges";
 import { GoalProgressBar } from "../goals/components/GoalProgressBar";
+
+/** Trần số owner tra thêm theo id (ngoài trang danh bạ đầu) — tránh bắn N request vô hạn. */
+const OWNER_LOOKUP_MAX = 20;
 
 /**
  * S7-GOAL-PROJTAB-1 (lát A, US-GOAL-QL-10) — tab «Mục tiêu» của workspace dự án: mục tiêu CẤP DỰ ÁN gắn
@@ -33,15 +36,43 @@ export function ProjectGoalsTab({ projectId }: { projectId: string }) {
     staleTime: 30_000,
   });
   const { data: employeesPage } = useQuery({
-    queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
-    queryFn: () => hrApi.listEmployees({ pageSize: 100, status: "active" }),
+    queryKey: hrKeys.employees.list({ pageSize: 100 }),
+    queryFn: () => hrApi.listEmployees({ pageSize: 100 }),
     enabled: canView && canReadEmployees,
     staleTime: 60_000,
   });
-  const ownerNames = useMemo(
+  const goals: GoalCoreResponseDto[] = data ?? [];
+  const pageNames = useMemo(
     () => new Map((employeesPage?.items ?? []).map((e) => [e.id, e.fullName] as const)),
     [employeesPage],
   );
+  // Owner ngoài trang danh bạ (công ty >100 nhân viên / đã nghỉ) ⇒ tra theo đúng id, có trần.
+  const missingOwnerIds = useMemo(
+    () =>
+      employeesPage
+        ? [...new Set(goals.map((g) => g.ownerEmployeeId))]
+            .filter((id) => !pageNames.has(id))
+            .slice(0, OWNER_LOOKUP_MAX)
+        : [],
+    [employeesPage, goals, pageNames],
+  );
+  const lookups = useQueries({
+    queries: missingOwnerIds.map((id) => ({
+      queryKey: hrKeys.employees.detail(id),
+      queryFn: () => hrApi.getEmployee(id),
+      enabled: canView && canReadEmployees,
+      staleTime: 60_000,
+      retry: false,
+    })),
+  });
+  const ownerNames = useMemo(() => {
+    const names = new Map(pageNames);
+    lookups.forEach((q, i) => {
+      const id = missingOwnerIds[i];
+      if (id && q.data?.fullName) names.set(id, q.data.fullName);
+    });
+    return names;
+  }, [pageNames, lookups, missingOwnerIds]);
 
   if (!canView) return null;
 
@@ -51,7 +82,13 @@ export function ProjectGoalsTab({ projectId }: { projectId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-3" data-testid="project-goals-loading">
+      <div
+        className="space-y-3"
+        data-testid="project-goals-loading"
+        role="status"
+        aria-busy="true"
+      >
+        <span className="sr-only">{t("projectTab.loading")}</span>
         <div className="h-16 animate-pulse rounded bg-muted" />
         <div className="h-16 animate-pulse rounded bg-muted" />
       </div>
@@ -72,8 +109,6 @@ export function ProjectGoalsTab({ projectId }: { projectId: string }) {
       />
     );
   }
-
-  const goals: GoalCoreResponseDto[] = data ?? [];
 
   if (goals.length === 0) {
     return (
@@ -116,6 +151,11 @@ export function ProjectGoalsTab({ projectId }: { projectId: string }) {
           </Button>
         </PermissionGate>
       </div>
+      {goals.length >= GOAL_PAGE_LIMIT_MAX && (
+        <p className="text-xs text-muted-foreground" data-testid="project-goals-truncated">
+          {t("projectTab.truncated", { count: GOAL_PAGE_LIMIT_MAX })}
+        </p>
+      )}
       <ul className="space-y-2">
         {goals.map((goal) => (
           <li key={goal.id}>

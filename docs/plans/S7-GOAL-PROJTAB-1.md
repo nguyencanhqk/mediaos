@@ -222,3 +222,8 @@ dự án. Giá trị từ URL là **gợi ý, không phải quyền** — server
 **Nợ**: `bash harness/check.sh` toàn bộ chưa chạy ở bước này (chỉ spec đã chạm + typecheck + eslint). Khối «Gắn việc», số việc theo mục tiêu → lát B.
 
 Sổ vết KPI: (điền sau)
+
+**Sổ vết vá review (08/11)**
+- [LOW] Cắt im lặng ở 200 mục tiêu: listGoals trả mảng trần, không tổng ⇒ giữ trần, nay hiện dòng «Chỉ hiển thị 200 mục tiêu đầu tiên» khi đủ trần (testid project-goals-truncated); phân trang thật để lát B (project-coverage).
+- [LOW] Tên owner ngoài trang 100 nhân viên: bỏ lọc status=active (owner đã nghỉ có tên) + tra thêm theo id (getEmployee, trần 20) cho owner không có trong trang; vẫn chỉ khi read:employee.
+- [LOW] Loading skeleton: role=status + aria-busy + span sr-only (i18n projectTab.loading).

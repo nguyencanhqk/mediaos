@@ -59,6 +59,8 @@ export default {
     heading: "Mục tiêu của dự án ({{count}})",
     create: "Tạo mục tiêu dự án",
     owner: "Phụ trách",
+    loading: "Đang tải mục tiêu của dự án…",
+    truncated: "Chỉ hiển thị {{count}} mục tiêu đầu tiên của dự án.",
     empty: {
       title: "Dự án chưa có mục tiêu",
       description: "Chưa có mục tiêu cấp dự án nào gắn với dự án này.",
