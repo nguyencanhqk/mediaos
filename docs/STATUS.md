@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-07 08:55Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-08 11:54Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -25,7 +25,7 @@
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🟡 `S7-GOAL-PROJTAB-1` Tab «Mục tiêu» trong workspace dự án — lát A (xanh): danh sách mục tiêu gắn dự án bằng bộ lọc `projectId` sẵn có + «Tạo mục tiêu dự án» điền sẵn; lát B (vàng, sau): endpoint phủ mục tiêu của việc (gồm việc CHƯA gắn) + gắn việc tại chỗ
+- 🟡 `S7-GOAL-PROJTAB-1` Tab «Mục tiêu» trong workspace dự án — lát A (xanh): danh sách mục tiêu gắn dự án bằng bộ lọc `projectId` sẵn có + «Tạo mục tiêu dự án» điền sẵn (lát B tách sang S7-GOAL-PROJTAB-2)
 - 🔴 `S16-SOCIAL-IDXDEDUP-1` `file_links_company_id_idx` (mig 0433) thành TIỀN TỐ DƯ của `file_links_company_file_idx` (mig 0587) — cân drop, bán kính là MỌI module dùng `file_links`
 - 🔴 `S16-SOCIAL-RTGROUPCR-1` Fan-out `feed:comment.created` / `feed:reaction.changed` của bài `audience='group'` vào room nhóm `co:{c}:feedgroup:{groupId}` — hôm nay hai sự kiện đó CHỈ phát cho bài company (fail-closed có chủ đích của BE-2C, Q-CR)
 - 🔴 `S16-SOCIAL-GROUPPOSTDEL-1` Đua `034` xoá nhóm ↔ `002` đăng bài nhóm: cổng ghi `002` đọc nhóm KHÔNG khoá ⇒ bài commit được vào nhóm VỪA xoá mềm (REST ẩn bài mồ côi, nhưng từ BE-2C bài đó ĐƯỢC PHÁT vào room nhóm ⇒ thành viên cũ nhận payload mà REST đã ẩn) — khoá `FOR SHARE` hàng nhóm ở cổng ghi
@@ -112,6 +112,7 @@
 - 🔴 `S14-SEC-CAPWILDCARD-DEBT-1` Nợ sau S14-SEC-CAPWILDCARD-1 (N-G1…N-G9, plan §15.10): ratchet cờ sensitive ở call-site · trần tuổi + một nguồn nạp cho ảnh chụp catalog · tín hiệu suy biến capabilities · sàn thử-lại khi nạp lỗi · keyset scopes khi suy biến một phía · tách permission.service.ts ≤ 800 · khối catch anh em dùng serializeErrorChain · ca helper khẳng định giá trị
 
 **CHỜ (kẹt phụ thuộc):**
+- `S7-GOAL-PROJTAB-2` Tab «Mục tiêu» trong workspace dự án — lát B: endpoint `GET /goals/project-coverage` phủ mục tiêu của việc (gồm việc CHƯA gắn) + gắn việc tại chỗ qua GoalTaskPickerDialog ⏳ cần: S7-GOAL-PROJTAB-1
 - `S16-SOCIAL-VIDEOMIME-1` Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt`) KHÔNG có `video/*` dù SPEC-16 SC-01 hứa đính kèm video ⇒ mọi video ăn 415 `FOUNDATION-FILE-ERR-MIME` ở `054`; thêm `video/mp4` (allowlist + `MIME_TO_EXTENSIONS`, migration seed) — SAU khi tải về có `Content-Disposition` ⏳ cần: S16-SOCIAL-FE-2D
 - `S16-SOCIAL-ATTERRSPLIT-1` `SOCIAL-ERR-007` gộp HAI lỗi khác bản chất — `ATTACHMENT_LIMIT` (vượt trần 10 ảnh / 1 video / 20 MB) và `ATTACHMENT_INVALID` (tệp thiếu · không phải của mình · chưa `Uploaded` · đã link) cùng một mã (`social-errors.ts:30-31`) ⇒ FE chỉ nói được một câu gộp ⏳ cần: S16-SOCIAL-FE-2D
 - `S16-SOCIAL-FEADMINSHARED-1` Dọn thứ dùng chung của cụm quản trị SOCIAL: DoneNotice · useOutcomeFocus · list-states · DialogActions · claimsListRefreshed · invalidatePostSurfaces còn nằm dưới moderation/** dù màn huy hiệu + thống kê cùng dùng; khung chờ SKELETON_ROWS.map 4 bản · helper «lời gọi treo» 2 bản · FIRST_PAGE = 1 4 bản; ba spec PR-A còn khuôn hai fireEvent rời để mutant «bỏ khoá đồng bộ» sống; BadgeSettingsPage() vượt mốc 50 dòng / hàm ⏳ cần: S16-SOCIAL-FEMODINVAL-1
@@ -141,7 +142,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -150,6 +151,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `575a000d` | 2026-11-07 | chore(backlog): sổ hậu merge đợt 07/11 — 3 WO đóng dấu từ commit merge #661 · #662 · #663 · regen STATUS + INDEX |
 | `5ac49c1f` | 2026-11-07 | feat(dashboard): S20-DASH-TODAY-1 — dashboard Employee thành màn «Hôm nay»: hàng việc/đơn bấm được, khối mục tiêu cần check-in, trang mở đầu theo allowlist (#663) |
 | `322d1505` | 2026-11-07 | feat(goals): S20-GOAL-LINKEDTASKS-1 — tab Công việc gắn: mở drawer tại chỗ, nhóm theo người, «Thêm việc» tạo rồi gắn mục tiêu (#662) |
 | `2f34ab16` | 2026-11-07 | feat(tasks): S20-X-QUICKCREATE-1 — «+ Tạo việc» ở topbar và phím tắt Alt+Shift+N mở form gọn từ mọi trang (#661) |
@@ -161,7 +163,6 @@
 | `8cbfc4f8` | 2026-11-06 | chore(backlog): sổ hậu merge ZOD4 — S19-OPS-ZOD4-1 đóng dấu từ commit merge #657 · regen STATUS |
 | `9615312a` | 2026-11-06 | fix(deps): S19-OPS-ZOD4-1 — nâng zod 4.6.7 + nestjs-zod 5 + resolvers 5 toàn monorepo, vá GHSA-mrhx-c7xc-m3w5, gỡ ngoại lệ audit có hạn 23/11 (#657) |
 | `ca9259c5` | 2026-10-26 | chore(backlog): sổ hậu merge đợt 26/10 — 3 WO đóng dấu từ commit merge #654 · #655 · #656 · regen STATUS |
-| `6817e4e4` | 2026-10-26 | fix(tasks): S20-TASK-ASSIGNNOTI-1 — form Tạo/Sửa phát cùng sự kiện giao việc với route chuyên trách, cùng transaction, phản hồi tạo việc kèm cảnh báo nghỉ phép (#656) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

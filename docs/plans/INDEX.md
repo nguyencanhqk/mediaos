@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**736 WO** · có micro-plan: **377/736** · ⬜ 105 chờ · 🔵 2 đang làm · ✅ 628 xong · 🔴 1 chặn
+**737 WO** · có micro-plan: **378/737** · ⬜ 106 chờ · 🔵 2 đang làm · ✅ 628 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -361,6 +361,7 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S7-GOAL-PROJTAB-1` | 🟡 | ⬜ chờ | [📄](S7-GOAL-PROJTAB-1.md) | ✅S6-GOLIVE-1 ✅S20-GOAL-LISTURL-1 | Tab «Mục tiêu» trong workspace dự án — lát A (xanh): danh sách mục tiê |
+| `S7-GOAL-PROJTAB-2` | 🟡 | ⬜ chờ | [📄](S7-GOAL-PROJTAB-1.md) | ⏳S7-GOAL-PROJTAB-1 | Tab «Mục tiêu» trong workspace dự án — lát B: endpoint `GET /goals/pro |
 | `S7-CHAT-DOC-1` | 🟢 | ✅ xong | [📄](docs/SPEC/SPEC-15 CHAT.md) | — | Bộ tài liệu CHAT: SPEC-15 + DB-12 + API-13 + ma trận phân quyền §9c +  |
 | `S7-CHAT-DOC-2` | 🟢 | ✅ xong | [📄](S7-CHAT-WAVE.md) | ✅S7-CHAT-DOC-1 | Hoà CHAT-DEC-004 (owner lật: SA đọc được mọi phòng, có audit) vào bộ d |
 | `S7-CHAT-DB-1` | 🔴 | ✅ xong | [📄](S7-CHAT-DB-1.md) | ✅S7-CHAT-DOC-1 ✅S6-GOLIVE-1 | Migration CHAT: ALTER 3 bảng đã có (cột v1 + backfill TRƯỚC CHECK + co |
