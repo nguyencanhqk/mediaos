@@ -1,4 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  getCommentFocusRequests,
+  subscribeCommentFocusRequests,
+} from "./task-drawer-nav";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
@@ -326,6 +330,19 @@ export function TaskDetailContent({
     }
   }, [initialBreakdownTab, taskId]);
   const [collabTab, setCollabTab] = useState("comments");
+  // Bấm lại «Báo người giao» khi drawer đã mở đúng tab ⇒ URL không đổi; bộ đếm yêu cầu là tín hiệu duy nhất.
+  const focusRequest = useSyncExternalStore(
+    subscribeCommentFocusRequests,
+    getCommentFocusRequests,
+    getCommentFocusRequests,
+  );
+  const seenFocusRequest = useRef(focusRequest);
+  useEffect(() => {
+    if (focusRequest === seenFocusRequest.current) return;
+    seenFocusRequest.current = focusRequest;
+    setCollabTab("comments");
+    setFocusComposer(true);
+  }, [focusRequest]);
   // Autofocus ô soạn MỘT lần cho mỗi lần điều hướng `?taskTab=comment`; người dùng đổi tab ⇒ tắt,
   // quay lại «Bình luận» không cướp focus nữa.
   const [focusComposer, setFocusComposer] = useState(initialBreakdownTab === "comment");
@@ -438,6 +455,7 @@ export function TaskDetailContent({
               taskId={task.id}
               embedded
               autoFocusComposer={focusComposer}
+              focusRequest={focusRequest}
             />
           </TabsContent>
           <TabsContent value="files" className="p-4">

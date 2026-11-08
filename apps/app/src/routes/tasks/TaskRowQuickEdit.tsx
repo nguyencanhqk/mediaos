@@ -175,11 +175,17 @@ export function TaskRowDeadlineControl({
   readOnly,
   presets,
   onSaved,
+  onFailed,
 }: {
   task: TaskQuickEditRow;
   readOnly: ReactNode;
   presets?: readonly DeadlinePresetDefinition[];
   onSaved?: (saved: TaskCoreResponseDto) => void;
+  /**
+   * Bề mặt mà dòng có thể RỜI danh sách ngay khi vá lạc quan (khối «Việc trong kỳ nghỉ») tự hiện lỗi ở
+   * mức khối: có truyền ⇒ dòng KHÔNG hiện lỗi cục bộ nữa (state cục bộ mất cùng dòng). Mặc định không đổi.
+   */
+  onFailed?: (error: unknown) => void;
 }) {
   const { t } = useTranslation("tasks");
   const canDeadline = useCan(
@@ -195,6 +201,7 @@ export function TaskRowDeadlineControl({
     onWarnings: (warnings, updated) =>
       notifyAssigneeWarnings({ taskId: task.id, warnings, assigneeName: updated?.assigneeName }),
     onSaved: onSaved ? (result) => onSaved(result.task) : undefined,
+    onFailed: onFailed ? (error) => onFailed(error) : undefined,
   });
 
   if (!canDeadline || task.status === "Cancelled") return <>{readOnly}</>;
@@ -210,7 +217,7 @@ export function TaskRowDeadlineControl({
         disabled={mutation.isPending}
         onSelect={(dueAt) => mutation.mutate(dueAt)}
       />
-      {mutation.isError && (
+      {mutation.isError && !onFailed && (
         <TaskQuickEditError
           field="deadline"
           error={mutation.error}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   addDaysToLocalDate,
@@ -258,5 +258,95 @@ describe("LeaveTaskHandoff", () => {
     caps({ "read:task": true, "assign:task": true });
     renderBlock();
     expect(await screen.findByTestId("task-row-assignee-a")).toBeInTheDocument();
+  });
+
+  describe("lỗi server hiện ở mức KHỐI (dòng có thể đã rời danh sách khi vá lạc quan)", () => {
+    const afterLeave = async () => {
+      await screen.findByTestId("leave-handoff-row-a");
+      fireEvent.click(screen.getByTestId("task-row-deadline-a"));
+      fireEvent.click(screen.getByTestId("task-row-deadline-a-preset-afterLeave"));
+    };
+    const arrange = (reject: () => Promise<never>) => {
+      caps({ "read:task": true, "update-deadline:task": true });
+      vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([item("a", 1)]);
+      vi.mocked(taskCoreApi.changeDeadline).mockImplementation(reject);
+    };
+    const forbidden = () =>
+      Promise.reject(
+        new ApiError({
+          status: 403,
+          code: "AUTH-ERR-403",
+          message: "Bạn không có quyền đổi hạn việc này",
+        }),
+      );
+    const delayed = (make: () => Promise<never>) => () =>
+      new Promise<never>((_, reject) => setTimeout(() => make().catch(reject), 60));
+
+    it("403 tức thì: lý do ở khối, role=alert, dòng quay lại", async () => {
+      arrange(forbidden);
+      renderBlock();
+      await afterLeave();
+      const alert = await screen.findByTestId("leave-handoff-failure");
+      expect(alert).toHaveAttribute("role", "alert");
+      expect(alert).toHaveTextContent(/không có quyền/i);
+      expect(await screen.findByTestId("leave-handoff-row-a")).toBeInTheDocument();
+    });
+
+    it("403 trễ: dòng đã bị gỡ lạc quan vẫn để lại lý do ở khối", async () => {
+      arrange(delayed(forbidden));
+      renderBlock();
+      await afterLeave();
+      await waitFor(() =>
+        expect(screen.queryByTestId("leave-handoff-row-a")).not.toBeInTheDocument(),
+      );
+      expect(await screen.findByText(/không có quyền/i)).toBeInTheDocument();
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+    });
+
+    it("lỗi mạng (không message): chuỗi chung, tức thì và trễ", async () => {
+      const network = () => Promise.reject(new TypeError("Failed to fetch"));
+      arrange(network);
+      const first = renderBlock();
+      await afterLeave();
+      const instant = await screen.findByTestId("leave-handoff-failure");
+      expect(instant.textContent ?? "").not.toBe("");
+      expect(instant).not.toHaveTextContent(/không có quyền/i);
+      first.unmount();
+
+      arrange(delayed(network));
+      renderBlock();
+      await afterLeave();
+      expect((await screen.findByTestId("leave-handoff-failure")).textContent ?? "").not.toBe("");
+    });
+
+    it("lý do giữ tới khi người dùng thao tác tiếp", async () => {
+      arrange(forbidden);
+      renderBlock();
+      await afterLeave();
+      await screen.findByTestId("leave-handoff-failure");
+      fireEvent.click(screen.getByTestId("leave-handoff-open-a"));
+      expect(screen.queryByTestId("leave-handoff-failure")).not.toBeInTheDocument();
+    });
+
+    it("đổi người bị 403: lý do ở khối, không lặp ở dòng", async () => {
+      caps({ "read:task": true, "assign:task": true, "read:employee": true });
+      vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([item("a", 1)]);
+      vi.mocked(hrApi.listEmployees).mockResolvedValue({
+        items: [{ id: "emp-002", fullName: "Trần Thị B" }],
+        meta: {},
+      } as never);
+      vi.mocked(taskCoreApi.assign).mockRejectedValue(
+        new ApiError({ status: 403, code: "AUTH-ERR-403", message: "Forbidden" }),
+      );
+      renderBlock();
+      await screen.findByTestId("leave-handoff-row-a");
+      fireEvent.click(screen.getByTestId("task-row-assignee-a"));
+      const panel = await screen.findByRole("dialog");
+      fireEvent.click(await within(panel).findByText("Trần Thị B"));
+      expect(await screen.findByTestId("leave-handoff-failure")).toHaveTextContent(
+        /không có quyền đổi người/i,
+      );
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+    });
   });
 });

@@ -3,11 +3,17 @@
  * `?taskTab=comment`: đổi sang tab Tệp rồi quay lại «Bình luận» không được cướp focus.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TaskDetailContent } from "./TaskDetailContent";
+import { useTaskDrawer } from "./task-drawer-nav";
+
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+  return { ...actual, useNavigate: () => vi.fn() };
+});
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -98,5 +104,18 @@ describe("TaskDetailContent — autofocus ô soạn một lần", () => {
     fireEvent.click(commentsTab);
 
     expect(await screen.findByPlaceholderText(/viết bình luận/i)).not.toHaveFocus();
+  });
+
+  it("bấm lại «Báo người giao» khi ô soạn đã mount ⇒ focus lại ô soạn (URL không đổi)", async () => {
+    renderContent();
+    const composer = await screen.findByPlaceholderText(/viết bình luận/i);
+    expect(composer).toHaveFocus();
+    composer.blur();
+    expect(composer).not.toHaveFocus();
+
+    const { result } = renderHook(() => useTaskDrawer());
+    act(() => result.current.openTask("task-001", { tab: "comment" }));
+
+    expect(await screen.findByPlaceholderText(/viết bình luận/i)).toHaveFocus();
   });
 });

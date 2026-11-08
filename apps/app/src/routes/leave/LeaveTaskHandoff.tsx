@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -9,6 +9,7 @@ import { TASK_CORE_ENGINE_PAIRS } from "../tasks/constants";
 import { DEFAULT_DEADLINE_PRESETS, afterLeavePreset } from "../tasks/deadline-presets";
 import { TaskRowDeadlineControl } from "../tasks/TaskRowQuickEdit";
 import { TaskRowAssigneeControl } from "../tasks/TaskInlineFields";
+import { taskQuickEditErrorKey, type TaskQuickEditField } from "../tasks/task-quick-edit-errors";
 import { useTaskDrawer } from "../tasks/task-drawer-nav";
 import {
   isLeaveHandoffEligible,
@@ -23,7 +24,21 @@ import {
  * (`update-deadline:task` trong popover mốc hạn, `assign:task` ở ô Người). Thiếu `read:task` ⇒ không
  * render, không gọi API. Lỗi `/tasks/my` chỉ làm khối báo lỗi — phần còn lại của đơn không bị ảnh hưởng.
  */
-function HandoffRow({ task, endDate }: { task: MyTaskItemDto; endDate: string }) {
+/** Lỗi server của một thao tác trên dòng — hiện ở MỨC KHỐI vì dòng có thể đã rời danh sách (vá lạc quan). */
+interface HandoffFailure {
+  field: TaskQuickEditField;
+  error: unknown;
+}
+
+function HandoffRow({
+  task,
+  endDate,
+  onFailed,
+}: {
+  task: MyTaskItemDto;
+  endDate: string;
+  onFailed: (failure: HandoffFailure) => void;
+}) {
   const { t } = useTranslation("leave");
   const { openTask } = useTaskDrawer();
   const presets = useMemo(
@@ -50,13 +65,17 @@ function HandoffRow({ task, endDate }: { task: MyTaskItemDto; endDate: string })
       <TaskRowDeadlineControl
         task={task}
         presets={presets}
+        onFailed={(error) => onFailed({ field: "deadline", error })}
         readOnly={
           <span className="text-xs text-muted-foreground">
             {task.dueAt ? formatDateTime(task.dueAt, companyTimeZone()) : "—"}
           </span>
         }
       />
-      <TaskRowAssigneeControl task={task} />
+      <TaskRowAssigneeControl
+        task={task}
+        onFailed={(error) => onFailed({ field: "assignee", error })}
+      />
       {canComment && (
         <Button
           type="button"
@@ -78,12 +97,14 @@ function HandoffBody({
   isLoading,
   isError,
   onRetry,
+  onFailed,
 }: {
   tasks: readonly MyTaskItemDto[];
   endDate: string;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  onFailed: (failure: HandoffFailure) => void;
 }) {
   const { t } = useTranslation("leave");
   if (isLoading) return <div className="h-12 animate-pulse rounded bg-muted" />;
@@ -104,7 +125,7 @@ function HandoffBody({
   return (
     <ul className="divide-y divide-border">
       {tasks.map((task) => (
-        <HandoffRow key={task.id} task={task} endDate={endDate} />
+        <HandoffRow key={task.id} task={task} endDate={endDate} onFailed={onFailed} />
       ))}
     </ul>
   );
@@ -128,6 +149,8 @@ export function LeaveTaskHandoff({ request }: { request: LeavePeriod }) {
     () => (data ? tasksDueDuringLeave(data, request, timeZone) : []),
     [data, request, timeZone],
   );
+  const { t: tTasks } = useTranslation("tasks");
+  const [failure, setFailure] = useState<HandoffFailure | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const prevCount = useRef<number | null>(null);
   const settled = eligible && !isLoading && !isError && data !== undefined;
@@ -144,7 +167,12 @@ export function LeaveTaskHandoff({ request }: { request: LeavePeriod }) {
   if (!eligible) return null;
   return (
     <Card data-testid="leave-task-handoff">
-      <CardContent className="space-y-3 pt-5">
+      <CardContent
+        className="space-y-3 pt-5"
+        // Lý do giữ tới khi người dùng thao tác tiếp (bấm / phím trong khối) — thao tác mới có thể lại lỗi.
+        onClickCapture={() => setFailure(null)}
+        onKeyDownCapture={() => setFailure(null)}
+      >
         <h3
           ref={headingRef}
           tabIndex={-1}
@@ -157,12 +185,18 @@ export function LeaveTaskHandoff({ request }: { request: LeavePeriod }) {
         <p role="status" aria-live="polite" className="sr-only" data-testid="leave-handoff-status">
           {settled ? t("handoff.count", { count: due.length }) : ""}
         </p>
+        {failure && (
+          <p role="alert" data-testid="leave-handoff-failure" className="text-sm text-destructive">
+            {tTasks(taskQuickEditErrorKey(failure.field, failure.error))}
+          </p>
+        )}
         <HandoffBody
           tasks={due}
           endDate={request.endDate}
           isLoading={isLoading}
           isError={isError}
           onRetry={() => void refetch()}
+          onFailed={setFailure}
         />
       </CardContent>
     </Card>

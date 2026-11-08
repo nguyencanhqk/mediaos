@@ -35,6 +35,25 @@ export function readTaskDrawerTab(search: unknown): TaskDrawerTab | null {
   return (TASK_DRAWER_TABS as readonly unknown[]).includes(raw) ? (raw as TaskDrawerTab) : null;
 }
 
+/**
+ * Bộ đếm «yêu cầu focus ô soạn bình luận». Bấm «Báo người giao» khi drawer ĐÃ mở đúng việc ở tab Bình
+ * luận thì URL không đổi (`?taskTab=comment` y hệt) ⇒ chỉ một tín hiệu tường minh như thế này mới làm
+ * ô soạn focus lại. Mỗi lần `openTask(.., {tab:"comment"})` tăng 1.
+ */
+let commentFocusRequests = 0;
+const commentFocusListeners = new Set<() => void>();
+export function subscribeCommentFocusRequests(listener: () => void): () => void {
+  commentFocusListeners.add(listener);
+  return () => void commentFocusListeners.delete(listener);
+}
+export function getCommentFocusRequests(): number {
+  return commentFocusRequests;
+}
+function requestCommentFocus(): void {
+  commentFocusRequests += 1;
+  commentFocusListeners.forEach((listener) => listener());
+}
+
 /** Trang chi tiết mở ở tab mới (không có lịch sử trong app) ⇒ «Quay lại» về đây. */
 export const TASK_DETAIL_BACK_FALLBACK = "/tasks/my-tasks";
 
@@ -100,8 +119,10 @@ export function useTaskDrawer(): TaskDrawerControls {
         resetScroll: false,
       });
     return {
-      openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) =>
-        go(taskId, false, opts?.tab ?? null),
+      openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) => {
+        if (opts?.tab === "comment") requestCommentFocus();
+        go(taskId, false, opts?.tab ?? null);
+      },
       closeTask: () => go(null, true),
     };
   }, [navigate]);

@@ -71,6 +71,7 @@ function CommentComposer({
   candidates,
   onDone,
   autoFocus,
+  focusRequest,
   initialContent,
   initialMentionIds,
   submitLabel,
@@ -80,6 +81,7 @@ function CommentComposer({
   candidates: MentionCandidate[];
   onDone?: () => void;
   autoFocus?: boolean;
+  focusRequest?: number;
   initialContent?: string;
   initialMentionIds?: string[];
   submitLabel: string;
@@ -93,6 +95,12 @@ function CommentComposer({
   );
   const [mentionState, setMentionState] = useState<{ atIndex: number; query: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const seenFocusRequest = useRef(focusRequest);
+  useEffect(() => {
+    if (focusRequest === undefined || focusRequest === seenFocusRequest.current) return;
+    seenFocusRequest.current = focusRequest;
+    textareaRef.current?.focus();
+  }, [focusRequest]);
 
   const suggestions = useMemo(
     () => (mentionState ? filterMentionCandidates(candidates, mentionState.query) : []),
@@ -386,8 +394,11 @@ export function TaskCommentThread({
   taskId,
   embedded = false,
   autoFocusComposer = false,
+  focusRequest,
 }: {
   taskId: string;
+  /** Bộ đếm yêu cầu focus: đổi giá trị ⇒ focus lại ô soạn đang mount (autoFocus chỉ áp lúc mount). */
+  focusRequest?: number;
   /** S20-TASK-LEAVEHANDOFF-1 — «Báo người giao»: ô soạn bình luận mới có focus ngay khi mở. */
   autoFocusComposer?: boolean;
   /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
@@ -477,6 +488,7 @@ export function TaskCommentThread({
           taskId={taskId}
           candidates={candidates}
           autoFocus={autoFocusComposer}
+          focusRequest={focusRequest}
           submitLabel={t("tasks.detail.comments.send")}
           mutationFn={(content, mentionEmployeeIds) =>
             taskCollabApi.addComment(taskId, { content, mentionEmployeeIds })
