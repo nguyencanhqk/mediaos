@@ -303,7 +303,7 @@ export function TaskDetailContent({
 }: {
   taskId: string;
   /** S20-TASK-QUICKEDIT-1 — mở sẵn một tab của nhóm phân rã (`checklist`); `null` ⇒ Việc con. */
-  initialBreakdownTab?: "checklist" | null;
+  initialBreakdownTab?: "checklist" | "comment" | null;
   /** Gọi sau khi xoá thành công — trang thì quay lại danh sách, drawer thì đóng panel. */
   onDeleted: () => void;
   variant?: "page" | "drawer";
@@ -314,10 +314,13 @@ export function TaskDetailContent({
     TASK_CORE_ENGINE_PAIRS.READ.resourceType,
   );
   // Tab mặc định của mỗi nhóm; state ở đây (không trong panel con) để đổi tab không mất dữ liệu đã tải.
-  const [breakdownTab, setBreakdownTab] = useState<string>(initialBreakdownTab ?? "subtasks");
+  const [breakdownTab, setBreakdownTab] = useState<string>(
+    initialBreakdownTab === "checklist" ? "checklist" : "subtasks",
+  );
   // Drawer đang mở mà link «Mở checklist» của dòng khác đổi `?taskTab=` ⇒ chuyển tab theo.
   useEffect(() => {
-    if (initialBreakdownTab) setBreakdownTab(initialBreakdownTab);
+    if (initialBreakdownTab === "checklist") setBreakdownTab("checklist");
+    if (initialBreakdownTab === "comment") setCollabTab("comments");
   }, [initialBreakdownTab, taskId]);
   const [collabTab, setCollabTab] = useState("comments");
   const isDrawer = variant === "drawer";
@@ -421,7 +424,11 @@ export function TaskDetailContent({
             <TabsTrigger value="activity">{t("tasks.detail.tabs.activity")}</TabsTrigger>
           </TabsList>
           <TabsContent value="comments" className="p-4">
-            <TaskCommentThread taskId={task.id} embedded />
+            <TaskCommentThread
+              taskId={task.id}
+              embedded
+              autoFocusComposer={initialBreakdownTab === "comment"}
+            />
           </TabsContent>
           <TabsContent value="files" className="p-4">
             <TaskFilePanel taskId={task.id} projectId={task.projectId} embedded />

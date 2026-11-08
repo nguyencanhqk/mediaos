@@ -385,8 +385,11 @@ function CommentRow({
 export function TaskCommentThread({
   taskId,
   embedded = false,
+  autoFocusComposer = false,
 }: {
   taskId: string;
+  /** S20-TASK-LEAVEHANDOFF-1 — «Báo người giao»: ô soạn bình luận mới có focus ngay khi mở. */
+  autoFocusComposer?: boolean;
   /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
   embedded?: boolean;
 }) {
@@ -473,6 +476,7 @@ export function TaskCommentThread({
         <CommentComposer
           taskId={taskId}
           candidates={candidates}
+          autoFocus={autoFocusComposer}
           submitLabel={t("tasks.detail.comments.send")}
           mutationFn={(content, mentionEmployeeIds) =>
             taskCollabApi.addComment(taskId, { content, mentionEmployeeIds })

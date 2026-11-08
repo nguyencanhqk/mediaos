@@ -162,6 +162,17 @@ describe("TaskCommentThread", () => {
     expect(screen.queryByPlaceholderText(/viết bình luận/i)).not.toBeInTheDocument();
   });
 
+  // S20-TASK-LEAVEHANDOFF-1 — «Báo người giao»: ô soạn có focus khi bật autoFocusComposer.
+  it("focuses the composer only when autoFocusComposer is set", async () => {
+    setCapabilities({ "comment:task": true });
+    const first = renderWithQuery(<TaskCommentThread taskId="task-001" autoFocusComposer />);
+    const focused = await screen.findByPlaceholderText(/viết bình luận/i);
+    expect(focused).toHaveFocus();
+    first.unmount();
+    renderWithQuery(<TaskCommentThread taskId="task-001" />);
+    expect(await screen.findByPlaceholderText(/viết bình luận/i)).not.toHaveFocus();
+  });
+
   // ── ALLOW-PATH: hiển thị danh sách + gửi bình luận mới ──────────────────────
   it("renders comment list and submits a new comment", async () => {
     setCapabilities({ "comment:task": true, "read:employee": true });

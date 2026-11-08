@@ -22,10 +22,10 @@ export const TASK_DRAWER_PARAM = "task";
 
 /**
  * S20-TASK-QUICKEDIT-1 — tab mở sẵn trong drawer (`?taskTab=checklist`): lỗi «Cần hoàn tất checklist»
- * trên dòng dẫn thẳng tới tab Checklist. Chỉ nhận giá trị trong danh sách trắng; đóng drawer bỏ luôn.
+ * trên dòng dẫn thẳng tới tab Checklist. S20-TASK-LEAVEHANDOFF-1: `comment` = tab Bình luận, ô soạn có focus. Chỉ nhận giá trị trong danh sách trắng; đóng drawer bỏ luôn.
  */
 export const TASK_DRAWER_TAB_PARAM = "taskTab";
-export const TASK_DRAWER_TABS = ["checklist"] as const;
+export const TASK_DRAWER_TABS = ["checklist", "comment"] as const;
 export type TaskDrawerTab = (typeof TASK_DRAWER_TABS)[number];
 
 /** Tab hợp lệ của `?taskTab=` hoặc `null` (thiếu / giá trị lạ). */
