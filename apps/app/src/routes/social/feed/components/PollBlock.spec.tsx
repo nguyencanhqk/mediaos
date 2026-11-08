@@ -350,3 +350,86 @@ describe("FEBLOCKSEED — seed cache `043` từ `post.poll`", () => {
     expect(api.getPollResults).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * S16-SOCIAL-FEPOLLRACE-1 — một `043` đang bay KHÔNG được về sau `041/042/044` và đè số mới bằng ảnh cũ.
+ * `043` đầu về ngay; `043` thứ hai (do invalidate bên ngoài, vd sau lượt thích) treo tới khi ta thả.
+ */
+describe("FEPOLLRACE — 043 đang bay bị huỷ trước khi ghi kết quả mutation", () => {
+  async function renderWithHangingRefetch() {
+    const client = makeTestQueryClient();
+    let release: (v: FeedPollResultsDto) => void = () => {};
+    api.getPollResults.mockResolvedValueOnce(makeResults());
+    api.getPollResults.mockReturnValueOnce(
+      new Promise<FeedPollResultsDto>((resolve) => {
+        release = resolve;
+      }),
+    );
+    renderWithProviders(<PollBlock postId={POST_ID} isMine={true} />, client);
+    await screen.findByTestId("poll-block");
+    void client.invalidateQueries({ queryKey: socialKeys.polls.results(POST_ID) });
+    await waitFor(() => expect(api.getPollResults).toHaveBeenCalledTimes(2));
+    return { release: (v: FeedPollResultsDto) => release(v) };
+  }
+
+  const totalText = (n: number) => t("poll.totalVoters", { count: n });
+
+  it("bỏ phiếu xong rồi 043 cũ về muộn ⇒ vẫn hiện số MỚI", async () => {
+    const { release } = await renderWithHangingRefetch();
+    api.votePoll.mockResolvedValue(tally(1, 0, 1, [A]));
+    fireEvent.click(optionInput(A));
+    fireEvent.click(screen.getByTestId("poll-vote"));
+    await waitFor(() =>
+      expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(totalText(1)),
+    );
+
+    await act(async () => {
+      release(makeResults());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(totalText(1));
+    expect(screen.getByTestId(`poll-option-${A}`)).toHaveTextContent("100%");
+  });
+
+  it("rút phiếu xong rồi 043 cũ về muộn ⇒ vẫn hiện số MỚI", async () => {
+    api.getPollResults.mockReset();
+    const client = makeTestQueryClient();
+    let release: (v: FeedPollResultsDto) => void = () => {};
+    api.getPollResults.mockResolvedValueOnce(tally(1, 0, 1, [A]));
+    api.getPollResults.mockReturnValueOnce(
+      new Promise<FeedPollResultsDto>((resolve) => {
+        release = resolve;
+      }),
+    );
+    renderWithProviders(<PollBlock postId={POST_ID} isMine={false} />, client);
+    await screen.findByTestId("poll-block");
+    void client.invalidateQueries({ queryKey: socialKeys.polls.results(POST_ID) });
+    await waitFor(() => expect(api.getPollResults).toHaveBeenCalledTimes(2));
+    api.withdrawPollVote.mockResolvedValue(makeResults());
+    fireEvent.click(screen.getByTestId("poll-withdraw"));
+    await waitFor(() =>
+      expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(totalText(0)),
+    );
+
+    await act(async () => {
+      release(tally(1, 0, 1, [A]));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(totalText(0));
+  });
+
+  it("đóng bình chọn xong rồi 043 cũ về muộn ⇒ vẫn «Đã kết thúc»", async () => {
+    const { release } = await renderWithHangingRefetch();
+    api.closePoll.mockResolvedValue(makeResults({ status: "closed" }));
+    fireEvent.click(screen.getByTestId("poll-close"));
+    await waitFor(() =>
+      expect(screen.getByTestId("poll-status-label")).toHaveTextContent(t("poll.closed")),
+    );
+
+    await act(async () => {
+      release(makeResults());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId("poll-status-label")).toHaveTextContent(t("poll.closed"));
+  });
+});

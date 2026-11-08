@@ -103,20 +103,27 @@ export function PollBlock({ postId, isMine, seed, className }: PollBlockProps): 
     void queryClient.invalidateQueries({ queryKey: resultsKey });
   };
 
+  /** Huỷ `043` đang bay TRƯỚC khi mutation chạy: về sau kết quả `041/042/044` nó sẽ đè số mới bằng ảnh cũ. */
+  const cancelInFlightResults = (): Promise<void> =>
+    queryClient.cancelQueries({ queryKey: resultsKey });
+
   const voteMutation = useMutation({
     mutationFn: (optionIds: readonly string[]) => socialApi.votePoll(postId, optionIds),
+    onMutate: cancelInFlightResults,
     onSuccess: applyResult,
     onError: onFail("vote"),
   });
 
   const withdrawMutation = useMutation({
     mutationFn: () => socialApi.withdrawPollVote(postId),
+    onMutate: cancelInFlightResults,
     onSuccess: applyResult,
     onError: onFail("vote"),
   });
 
   const closeMutation = useMutation({
     mutationFn: () => socialApi.closePoll(postId),
+    onMutate: cancelInFlightResults,
     onSuccess: (result) => {
       applyResult(result);
       // Poll vừa đóng phải rời tab «Đang mở» + widget rail (plan §8 H5). Chỉ nhánh `list`: nhánh
