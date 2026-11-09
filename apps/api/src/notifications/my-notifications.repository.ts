@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { notifications } from "../db/schema/communication";
 import type { MyNotificationRow } from "./my-notifications.mapper";
@@ -39,6 +39,20 @@ const ROW_COLUMNS = {
 
 /** status hiệu lực = COALESCE(status, is_read?'Read':'Unread') — khoan dung hàng thiếu cột mới khi ĐỌC. */
 const EFFECTIVE_STATUS = sql`coalesce(${notifications.status}, case when ${notifications.isRead} then 'Read' else 'Unread' end)`;
+
+/**
+ * Lọc mức ưu tiên KHỚP hiển thị: hàng cũ priority NULL hiển thị là «Normal» (mapper effectivePriority) ⇒
+ * `Normal` phải gồm cả NULL; mức khác chỉ khớp đúng. Dạng `= x OR IS NULL` (không bọc coalesce lên cột) để
+ * planner vẫn có thể dùng BitmapOr nếu sau này có index priority; hiện chưa có index priority nên các index
+ * recipient_* thu hẹp tập trước (không đổi schema ở WO này).
+ */
+function priorityCond(priority: string): SQL {
+  const exact = eq(notifications.priority, priority);
+  if (priority !== "Normal") return exact;
+  const withNull = or(exact, isNull(notifications.priority));
+  if (!withNull) throw new Error("my-notifications.repository: or() trả undefined");
+  return withNull;
+}
 
 /** `and(...)` với danh sách cụ thể (không rỗng) luôn trả SQL — throw thay vì rơi vào 0-row âm thầm. */
 function mustAnd(...conds: SQL[]): SQL {
@@ -83,7 +97,7 @@ export class MyNotificationsRepository {
       conds.push(eq(notifications.notificationType, filter.notificationType));
     if (filter.sourceModule) conds.push(eq(notifications.moduleCode, filter.sourceModule));
     if (filter.eventCode) conds.push(eq(notifications.eventCode, filter.eventCode));
-    if (filter.priority) conds.push(eq(notifications.priority, filter.priority));
+    if (filter.priority) conds.push(priorityCond(filter.priority));
     if (filter.createdFrom) conds.push(gte(notifications.createdAt, filter.createdFrom));
     if (filter.createdTo) conds.push(lte(notifications.createdAt, filter.createdTo));
     return mustAnd(...conds);
@@ -237,7 +251,12 @@ export class MyNotificationsRepository {
     tx: TenantTx,
     companyId: string,
     userId: string,
-    filter: { sourceModule?: string; notificationType?: string; createdBefore?: Date },
+    filter: {
+      sourceModule?: string;
+      notificationType?: string;
+      priority?: string;
+      createdBefore?: Date;
+    },
   ): Promise<number> {
     const conds: SQL[] = [
       eq(notifications.companyId, companyId),
@@ -248,6 +267,7 @@ export class MyNotificationsRepository {
     if (filter.sourceModule) conds.push(eq(notifications.moduleCode, filter.sourceModule));
     if (filter.notificationType)
       conds.push(eq(notifications.notificationType, filter.notificationType));
+    if (filter.priority) conds.push(priorityCond(filter.priority));
     if (filter.createdBefore) conds.push(lte(notifications.createdAt, filter.createdBefore));
 
     const rows = await tx

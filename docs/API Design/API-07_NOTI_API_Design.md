@@ -1192,16 +1192,19 @@ channel
 {
   "source_module": null,
   "notification_type": null,
+  "priority": null,
   "created_before": null
 }
 ```
+
+`priority` (tuỳ chọn, S20-NOTI-PRIORITYFILTER-1): `Low|Normal|High|Urgent|Critical`; `Normal` gồm cả hàng cũ priority NULL (khớp `GET /notifications?priority=`). Khoá không biết bị bỏ qua (strip) — client mới phải chắc API đã có trường này.
 
 #### Business validation
 
 1. Chỉ update notification của user hiện tại.
 2. Chỉ update notification cùng company hiện tại.
 3. Chỉ update status `Unread`.
-4. Nếu có filter `source_module`, `notification_type`, `created_before`, phải áp dụng whitelist.
+4. Nếu có filter `source_module`, `notification_type`, `created_before`, phải áp dụng whitelist (gồm `priority`; điều kiện được AND với nhau).
 5. Nên update bằng bulk SQL có điều kiện, không loop từng dòng.
 6. Trả số lượng bản ghi đã cập nhật.
 
