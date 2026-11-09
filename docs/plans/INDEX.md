@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**737 WO** · có micro-plan: **378/737** · ⬜ 106 chờ · 🔵 2 đang làm · ✅ 628 xong · 🔴 1 chặn
+**738 WO** · có micro-plan: **380/738** · ⬜ 104 chờ · 🔵 2 đang làm · ✅ 631 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -360,8 +360,8 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S7-GOAL-PROJTAB-1` | 🟡 | ⬜ chờ | [📄](S7-GOAL-PROJTAB-1.md) | ✅S6-GOLIVE-1 ✅S20-GOAL-LISTURL-1 | Tab «Mục tiêu» trong workspace dự án — lát A (xanh): danh sách mục tiê |
-| `S7-GOAL-PROJTAB-2` | 🟡 | ⬜ chờ | [📄](S7-GOAL-PROJTAB-1.md) | ⏳S7-GOAL-PROJTAB-1 | Tab «Mục tiêu» trong workspace dự án — lát B: endpoint `GET /goals/pro |
+| `S7-GOAL-PROJTAB-1` | 🟡 | ✅ xong | [📄](S7-GOAL-PROJTAB-1.md) | ✅S6-GOLIVE-1 ✅S20-GOAL-LISTURL-1 | Tab «Mục tiêu» trong workspace dự án — lát A (xanh): danh sách mục tiê |
+| `S7-GOAL-PROJTAB-2` | 🟡 | ⬜ chờ | [📄](S7-GOAL-PROJTAB-1.md) | ✅S7-GOAL-PROJTAB-1 | Tab «Mục tiêu» trong workspace dự án — lát B: endpoint `GET /goals/pro |
 | `S7-CHAT-DOC-1` | 🟢 | ✅ xong | [📄](docs/SPEC/SPEC-15 CHAT.md) | — | Bộ tài liệu CHAT: SPEC-15 + DB-12 + API-13 + ma trận phân quyền §9c +  |
 | `S7-CHAT-DOC-2` | 🟢 | ✅ xong | [📄](S7-CHAT-WAVE.md) | ✅S7-CHAT-DOC-1 | Hoà CHAT-DEC-004 (owner lật: SA đọc được mọi phòng, có audit) vào bộ d |
 | `S7-CHAT-DB-1` | 🔴 | ✅ xong | [📄](S7-CHAT-DB-1.md) | ✅S7-CHAT-DOC-1 ✅S6-GOLIVE-1 | Migration CHAT: ALTER 3 bảng đã có (cột v1 + backfill TRƯỚC CHECK + co |
@@ -656,7 +656,7 @@
 | `S16-SOCIAL-IDENTITYLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-AVATARPRESIGN-1 | Vị từ «danh tính còn sống» KHÔNG thống nhất trong SOCIAL: tác giả bài/ |
 | `S16-SOCIAL-FEMODPAYLOAD-1` | amber | ✅ xong | [📄](S16-SOCIAL-FEMODPAYLOAD-1.md) | — | Menu ẩn/hiện bài (`use-feed-actions.ts:126-130`) gửi `{status:'hidden' |
 | `S16-SOCIAL-FEBLOCKSEED-1` | amber | ✅ xong | [📄](S16-SOCIAL-FEBLOCKSEED-1.md) | ✅S16-SOCIAL-BE-2D | Thẻ bài đọc khối BE-2D đã chở: `PollBlock` seed cache `043` từ `post.p |
-| `S16-SOCIAL-FEPOLLRACE-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FEBLOCKSEED-1 | `PollBlock` không huỷ `043` đang bay trước khi bỏ/rút phiếu/đóng bình  |
+| `S16-SOCIAL-FEPOLLRACE-1` | amber | ✅ xong | [📄](S16-SOCIAL-FEPOLLRACE-1.md) | ✅S16-SOCIAL-FEBLOCKSEED-1 | `PollBlock` không huỷ `043` đang bay trước khi bỏ/rút phiếu/đóng bình  |
 | `S16-SOCIAL-FESTALELISTS-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FEBLOCKSEED-1 | `invalidatePostLists` (use-feed-actions) · `useCreatePost` · `IdeaRevi |
 | `S16-SOCIAL-IDEALABEL-1` | amber | ✅ xong | — *(chưa)* | — | Nhãn trạng thái sáng kiến lệch giữa thông báo NOTI-032 (`IDEA_STATUS_L |
 | `S16-SOCIAL-FESEARCHBOUNDS-1` | amber | ✅ xong | — *(chưa)* | — | Tham số URL/ô tìm kiếm của bảng tin không theo biên hợp đồng: `q` > `F |
@@ -806,8 +806,9 @@
 | `S20-TASK-BULKACTIONS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-FE-TOAST-1 | Quản lý chọn nhiều việc rồi giao người, dời hạn, đổi trạng thái hoặc c |
 | `S20-TASK-OVERDUEDESK-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-FE-COMPANYTZ-1 | Trang Việc quá hạn thành bàn xử lý: thấy mỗi việc trễ bao nhiêu ngày,  |
 | `S20-TASK-PROJECTENTRY-1` | 🟢 | ✅ xong | — *(chưa)* | — | Tạo dự án xong vào thẳng tab Thành viên với hộp thêm thành viên đang m |
-| `S20-TASK-LEAVEHANDOFF-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-FE-COMPANYTZ-1 | Trên đơn nghỉ của tôi thấy ngay các việc đến hạn trong kỳ nghỉ và bàn  |
-| `S20-TASK-LEAVEPICKER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ⏳S20-TASK-BULKACTIONS-1 ✅S20-TASK-OVERDUEDESK-1 ⏳S20-TASK-LEAVEHANDOFF-1 ✅S20-TASK-DRAWER-1 ✅S20-FE-COMPANYTZ-1 | Quản lý bàn giao quanh kỳ nghỉ: từ đơn đang duyệt một chạm tới danh sá |
+| `S20-TASK-LEAVEHANDOFF-1` | 🟡 | ✅ xong | [📄](S20-TASK-LEAVEHANDOFF-1.md) | ✅S20-TASK-ASSIGNWARN-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-FE-COMPANYTZ-1 | Trên đơn nghỉ của tôi thấy ngay các việc đến hạn trong kỳ nghỉ và bàn  |
+| `S20-TASK-DEADLINEPOLISH-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-QUICKEDIT-1 ✅S20-TASK-LEAVEHANDOFF-1 | Chọn nhanh hạn: Chủ Nhật không hiện hai chip cùng một ngày, nút hạn gọ |
+| `S20-TASK-LEAVEPICKER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ⏳S20-TASK-BULKACTIONS-1 ✅S20-TASK-OVERDUEDESK-1 ✅S20-TASK-LEAVEHANDOFF-1 ✅S20-TASK-DRAWER-1 ✅S20-FE-COMPANYTZ-1 | Quản lý bàn giao quanh kỳ nghỉ: từ đơn đang duyệt một chạm tới danh sá |
 | `S20-GOAL-QUICKCHECKIN-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-FE-TOAST-1 | Mục tiêu: check-in nhanh (điền sẵn số cũ, độ tự tin một chạm, Ctrl+Ent |
 | `S20-GOAL-LINKEDTASKS-1` | 🟡 | ✅ xong | [📄](S20-GOAL-LINKEDTASKS-1.md) | ✅S20-CHAT-MSGTOTASK-1 ✅S20-TASK-DRAWER-1 | Tab «Công việc gắn» của mục tiêu: bấm dòng mở drawer việc, nhóm theo n |
 | `S20-GOAL-PARENTPICKER-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-GOAL-QUICKSTART-1 | Form mục tiêu: chọn mục tiêu cha bằng ô tìm kiếm, kỳ tự lấy theo cha,  |

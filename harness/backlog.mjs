@@ -24645,6 +24645,34 @@ export const backlog = [
     ],
   },
   {
+    id: "S20-TASK-DEADLINEPOLISH-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Chọn nhanh hạn: Chủ Nhật không hiện hai chip cùng một ngày, nút hạn gọn trên dòng việc đủ lớn để bấm",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/tasks/deadline-presets*.ts",
+      "apps/app/src/routes/tasks/DeadlineQuickPicker*.tsx",
+      "docs/plans/S20-TASK-DEADLINEPOLISH-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-TASK-QUICKEDIT-1", "S20-TASK-LEAVEHANDOFF-1"],
+    src: [
+      "Nợ review/smoke đợt 08/11 (PR #665 S20-TASK-LEAVEHANDOFF-1): chip «Thứ Hai tuần sau» trùng «Ngày mai» khi hôm nay là Chủ Nhật · nút variant «compact» của DeadlineQuickPicker cao 20px (< 24px WCAG 2.2 SC 2.5.8)",
+    ],
+    done_when: [
+      "Hôm nay Chủ Nhật (giờ công ty): danh sách mốc mặc định KHÔNG có hai chip cùng `localDate` — bỏ chip trùng theo ngày (giữ chip đứng trước), áp chung cho mọi mốc nối thêm (vd «Sau kỳ nghỉ» trùng «Ngày mai»); test thuần cho Chủ Nhật · Thứ Bảy · Thứ Sáu · ngày thường không đổi kết quả hiện có",
+      "Nút variant «compact» có vùng bấm ≥ 24×24 CSS px (đo bằng `getBoundingClientRect` trong trình duyệt thật — jsdom không tính bố cục) mà dòng việc không cao thêm; nhãn trợ năng và hành vi bàn phím giữ nguyên",
+      "Đo lại trên các màn dùng compact (TaskRowQuickEdit · OverdueTasksPage · SubtaskInlineControls · LeaveTaskHandoff) bằng trình duyệt thật + API giả lập, ảnh chụp trước/sau; `bash harness/check.sh` xanh",
+    ],
+    notes: [
+      "🟡 Seed 09/11/2026 ở sổ hậu merge đợt 08/11 (#664 · #665 · #666). Nhỏ, chỉ FE, ước 40–80 USD.",
+    ],
+  },
+  {
     id: "S20-TASK-LEAVEPICKER-1",
     module: "TASK",
     layer: "FE",
