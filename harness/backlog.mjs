@@ -22494,6 +22494,47 @@ export const backlog = [
     ],
   },
   {
+    id: "S19-LMS-MATACCESS-1",
+    module: "LMS",
+    layer: "SEC",
+    title:
+      "LMS: mọi đường đọc tài liệu và tệp bài giảng dùng chung một phép kiểm quyền truy cập khoá học",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-LMS-AUTHCENSUS-1"],
+    src: [
+      "Nợ review vòng 2 của S19-LMS-AUTHCENSUS-1 (plan lưu ngoài repo, `kept/wave-2026-11-08/`).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: census các route đọc tài liệu/tệp của LMS — route nào đã dùng phép kiểm quyền truy cập khoá học hiện có, route nào chưa — kết quả lưu NGOÀI repo công khai",
+      "Bất biến: người dùng chỉ đọc được tài liệu/tệp của khoá mình có quyền (ghi danh, hoặc vai quản trị/giảng viên); ca deny-path cho người dùng không có quyền với khoá ⇒ 403 không dữ liệu; luật census trong repo LMS chặn route đọc tệp mới thiếu phép kiểm",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-AUTHCENSUS-1 rồi đo lại; khi đóng WO chỉ ghi kết quả + sha",
+    ],
+    notes: [
+      "🔴 FULL gate. Seed 09/11/2026 sau khi S19-LMS-AUTHCENSUS-1 lên PROD. Chi tiết lưu ngoài repo — repo MediaOS PUBLIC. `apps/lms` là repo git RIÊNG (local) — KHÔNG sửa/build trong `apps/lms`.",
+    ],
+  },
+  {
+    id: "S19-LMS-UPLOADOWNER-1",
+    module: "LMS",
+    layer: "SEC",
+    title: "LMS: xoá tệp đã tải lên theo vai hoặc người tải lên",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-LMS-AUTHCENSUS-1"],
+    src: ["Nợ N1 vòng 2 của S19-LMS-AUTHCENSUS-1 (plan lưu ngoài repo, `kept/wave-2026-11-08/`)."],
+    done_when: [
+      "Plan chốt mô hình: ghi người tải lên khi tải tệp (cần đổi dữ liệu LMS) hay giới hạn theo vai — kèm cách xử lý tệp cũ chưa có người tải lên",
+      "Bất biến: chỉ người có quyền (theo mô hình đã chốt) xoá được tệp; ca deny-path ⇒ 403 và tệp vẫn còn; luồng tải lên/xoá hợp lệ của giảng viên/quản trị không vỡ",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-AUTHCENSUS-1 rồi đo lại; khi đóng WO chỉ ghi kết quả + sha",
+    ],
+    notes: ["🔴 FULL gate. Seed 09/11/2026. Chi tiết lưu ngoài repo — repo MediaOS PUBLIC."],
+  },
+  {
     id: "S19-LMS-SSORETURN-1",
     module: "LMS",
     layer: "INT",

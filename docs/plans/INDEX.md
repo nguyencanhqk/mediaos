@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**738 WO** · có micro-plan: **380/738** · ⬜ 104 chờ · 🔵 2 đang làm · ✅ 631 xong · 🔴 1 chặn
+**740 WO** · có micro-plan: **380/740** · ⬜ 105 chờ · 🔵 2 đang làm · ✅ 632 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -746,10 +746,12 @@
 | `S19-SEC-TASKFILEDENYLOG-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-TASKFILEURL-1 | Nhật ký truy cập tệp TASK không ghi các nhánh TỪ CHỐI — 404 (tệp không |
 | `S19-OPS-PRODDBBOOT-1` | 🟡 | ✅ xong | — *(chưa)* | — | Máy PROD: Docker tự bật lại không phụ thuộc Explorer + kênh báo động k |
 | `S19-LMS-DOCSAUTH-1` | 🔴 | ✅ xong | — *(chưa)* | — | LMS: siết quyền truy cập trang tài liệu /docs (chỉ người đã đăng nhập) |
+| `S19-LMS-MATACCESS-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-AUTHCENSUS-1 | LMS: mọi đường đọc tài liệu và tệp bài giảng dùng chung một phép kiểm  |
+| `S19-LMS-UPLOADOWNER-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-AUTHCENSUS-1 | LMS: xoá tệp đã tải lên theo vai hoặc người tải lên |
 | `S19-LMS-SSORETURN-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-DOCSAUTH-1 | LMS: quay lại trang gốc sau SSO |
 | `S19-LMS-DOCSROLE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-DOCSAUTH-1 | LMS: phạm vi đọc sổ tay theo vai trò |
 | `S19-LMS-SESSIONHARDEN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-DOCSAUTH-1 | LMS: gia cố lưu trữ phiên |
-| `S19-LMS-AUTHCENSUS-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-DOCSAUTH-1 | LMS: census điểm kiểm xác thực trên các trang (app) |
+| `S19-LMS-AUTHCENSUS-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S19-LMS-DOCSAUTH-1 | LMS: census điểm kiểm xác thực trên các trang (app) |
 | `S19-LMS-DOCSCONTENT-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-DOCSAUTH-1 | LMS: rà nội dung sổ tay |
 | `S19-SEC-SCOPEDENIEDCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-SCOPEDENIEDCODE-1 | Mã máy `AUTH-ERR-SCOPE-DENIED` cho RECRUIT · PAYROLL · HR (403 sàn sco |
 | `S19-SEC-FILEMETAGATE-1` | 🔴 | ✅ xong | [📄](S19-SEC-FILEMETAGATE-1.md) | ✅S16-SOCIAL-ATTMETAMASK-1 | Rà metadata tệp (tên · cỡ) trên các đường đọc NGOÀI SOCIAL — danh sách |
