@@ -19,6 +19,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
+    // S19-QA-FETESTNET-1 — danh sách việc con nạp mạng thật nếu không mock.
+    taskCoreApi: { ...actual.taskCoreApi, listSubtasks: () => Promise.resolve([]) },
     taskCollabApi: { getKanbanBoard: vi.fn(), moveTask: vi.fn(), moveTaskState: vi.fn() },
   };
 });

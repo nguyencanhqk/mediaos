@@ -17,8 +17,6 @@ const listNews = vi.fn();
 const listPolls = vi.fn();
 const listGroups = vi.fn();
 const listKudos = vi.fn();
-/** Thế chỗ `fetch` trong MỌI ca: luôn từ chối, và `afterEach` đòi 0 lời gọi — xem 🔴 ở `beforeEach`. */
-const fetchMock = vi.fn();
 /** Tham số URL mà `useSearch` trả về. Đặt trong từng ca để giả lập `/feed?q=...`. */
 let routeSearch: Record<string, unknown> = {};
 
@@ -70,22 +68,15 @@ beforeEach(() => {
   listGroups.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   listKudos.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   routeSearch = {};
-  // 🔴 Lưới chặn mạng (gate TypeScript của PR-C, TSC-05). File này dựng vỏ + slot THẬT nhưng KHÔNG mock `dashboardApi`:
-  // một ca mang đủ bốn cặp của ô DASH — hay gọi một API chưa mock — đi qua `apiFetch` THẬT tới địa chỉ API mặc định
-  // (`localhost:3100`); trên máy có API đang chạy đó là một request thật, và ca xanh / đỏ tuỳ máy. `fetch` vì vậy luôn
-  // từ chối, và `afterEach` đòi 0 lời gọi: ca như thế ĐỎ ngay ở đây. Ca cần ô DASH viết ở `…hr-widget.spec.tsx`.
-  fetchMock.mockReset().mockRejectedValue(new TypeError("mạng bị chặn trong test"));
-  vi.stubGlobal("fetch", fetchMock);
+  // Chặn mạng: lưới TOÀN CỤC (`src/test/fetch-net-guard.ts`, cài ở `setup.ts`) — file này dựng vỏ + slot THẬT nhưng KHÔNG mock
+  // `dashboardApi`; ca làm ô DASH mount (hay gọi API chưa mock) sẽ ĐỎ ở afterEach toàn cục kèm URL. Ca cần ô DASH: `…hr-widget.spec.tsx`.
 });
 
 afterEach(() => {
-  // Đếm TRƯỚC khi dọn (`clearAllMocks` xoá sổ lời gọi); so SAU khi dọn để ca đỏ không để lại cây đang mount.
-  const requestsLeavingTheTest = fetchMock.mock.calls.map((call) => String(call[0]));
   cleanup();
   resetCaps();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
-  expect(requestsLeavingTheTest).toEqual([]);
 });
 
 describe("SocialPortalShell — khung", () => {
@@ -429,4 +420,4 @@ describe("W2 — widget «Nhóm của tôi» (S16-SOCIAL-FE-2B, plan D14)", () =
 
 // W4 — ô DASH «Tổng quan nhân sự» ở cuối rail (S16-SOCIAL-FE-3C L7, hàng HR2 của plan) đo ở file riêng
 // `SocialPortalShell.hr-widget.spec.tsx`. Mọi ca của file NÀY chạy với `{view:feed}` hoặc caps rỗng ⇒ ô không mount;
-// một ca làm ô mount ở đây sẽ đỏ ở `afterEach` (0 lời gọi `fetch`) thay vì bắn request ra khỏi tiến trình test.
+// một ca làm ô mount ở đây sẽ đỏ ở lưới chặn mạng toàn cục thay vì bắn request ra khỏi tiến trình test.

@@ -88,6 +88,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
+    // S19-QA-FETESTNET-1 — topbar/vỏ nạp branding + avatar của tôi; không mock ⇒ lọt ra mạng thật.
+    brandingApi: { ...actual.brandingApi, getBranding: () => Promise.resolve({ logo: null, favicon: null }) },
+    meApi: { ...actual.meApi, getAvatar: () => Promise.resolve(null) },
     logoutSession: vi.fn().mockResolvedValue(undefined),
     getAuthRedirectUrl: () => "http://localhost:5270/login",
   };
