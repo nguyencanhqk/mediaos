@@ -26,6 +26,9 @@ import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
 import { useBrandingQuery } from "@/hooks/use-branding";
 import { useChatRealtime } from "@/hooks/use-chat-realtime";
+import { useNotificationRealtime } from "@/hooks/use-notification-realtime";
+import { useChatToast } from "@/hooks/use-chat-toast";
+import { useUnreadTitle } from "@/hooks/use-unread-title";
 import { QuickCreateHost } from "@/components/quick-create/QuickCreateHost";
 import { ChatDrawer } from "@/components/chat/ChatDrawer";
 import { CallProvider } from "@/components/chat/call/CallProvider";
@@ -100,6 +103,11 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
   // nổi của FE-3 phải nhận tin ở MỌI route, không chỉ khi đang mở trang chat. Hook tự gate quyền bên
   // trong (`view:chat-room`) và không render gì — không có quyền thì nó im lặng, KHÔNG chặn shell.
   useChatRealtime();
+  // S20-NOTI-LIVETOAST-1 — báo tức thì ở MỌI trang: thông báo mới (toast «Mở»), tin riêng/@nhắc (toast
+  // «Trả lời») và «(N)» trên tiêu đề tab. Mỗi hook tự gate quyền bên trong và chỉ gắn handler của mình.
+  useNotificationRealtime();
+  useChatToast();
+  useUnreadTitle();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const hasTaskParam = useRouterState({
     select: (s) => readTaskDrawerParam(s.location.search) !== null,

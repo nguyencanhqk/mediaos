@@ -35,6 +35,12 @@ vi.mock("@mediaos/web-core", () => ({
 
 import { useCan, myNotificationApi } from "@mediaos/web-core";
 import { NotificationBadge } from "./NotificationBadge";
+import {
+  UNREAD_POLL_CONNECTED_MS,
+  UNREAD_POLL_DISCONNECTED_MS,
+  useNotificationSocketState,
+} from "@/hooks/use-notification-realtime-state";
+import { act } from "@testing-library/react";
 
 const mockUseCan = useCan as ReturnType<typeof vi.fn>;
 const mockUnreadCount = myNotificationApi.unreadCount as ReturnType<typeof vi.fn>;
@@ -129,5 +135,28 @@ describe("NotificationBadge — dropdown toggle", () => {
     await waitFor(() => {
       expect(mockDropdown).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe("NotificationBadge — nhịp poll theo trạng thái socket (S20-NOTI-LIVETOAST-1)", () => {
+  function pollMs(qc: QueryClient): unknown {
+    const query = qc.getQueryCache().find({ queryKey: ["notifications", "unread-count"] });
+    return query?.observers[0]?.options.refetchInterval;
+  }
+
+  it("socket nối ⇒ 120 giây; socket mất ⇒ 30 giây (đổi ngay, không cần mount lại)", async () => {
+    const qc = buildQC();
+    useNotificationSocketState.setState({ connected: true });
+    render(
+      <QueryClientProvider client={qc}>
+        <I18nextProvider i18n={i18n}>
+          <NotificationBadge />
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(mockUnreadCount).toHaveBeenCalled());
+    expect(pollMs(qc)).toBe(UNREAD_POLL_CONNECTED_MS);
+    act(() => useNotificationSocketState.setState({ connected: false }));
+    await waitFor(() => expect(pollMs(qc)).toBe(UNREAD_POLL_DISCONNECTED_MS));
   });
 });

@@ -15,6 +15,7 @@ import { useAuthStore } from "@mediaos/web-core";
 import type { NotificationPreferenceDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
 import { MeNotificationPreferencesPage } from "./MeNotificationPreferencesPage";
+import { readToastPrefs, resetToastPrefsMemory } from "@/lib/toast-prefs";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -189,5 +190,50 @@ describe("MeNotificationPreferencesPage — data states (có access:me)", () => 
     });
     expect(inAppCheckbox.checked).toBe(true);
     expect(inAppCheckbox.disabled).toBe(false);
+  });
+});
+
+describe("MeNotificationPreferencesPage — tuỳ chọn toast trên trình duyệt này (S20-NOTI-LIVETOAST-1)", () => {
+  beforeEach(() => {
+    setCaps({ "access:me": true });
+    mockList.mockResolvedValue([]);
+    window.localStorage.clear();
+    resetToastPrefsMemory();
+  });
+
+  it("3 công tắc + ghi chú «chỉ áp dụng trên trình duyệt này»; mặc định bật · bật · TẮT", async () => {
+    renderPage();
+    const notifications = await screen.findByRole("checkbox", { name: "Hiện toast thông báo" });
+    expect(screen.getByText(/chỉ áp dụng trên trình duyệt này/i)).toBeInTheDocument();
+    expect(notifications).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Toast tin nhắn" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Xem trước nội dung" })).not.toBeChecked();
+  });
+
+  it("bật «Xem trước nội dung» ⇒ ghi localStorage theo userId, KHÔNG gọi API", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Xem trước nội dung" }));
+    expect(readToastPrefs("u1").preview).toBe(true);
+    expect(readToastPrefs("u2").preview).toBe(false);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it("localStorage bị chặn ⇒ không ném, công tắc vẫn đổi trong phiên", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    renderPage();
+    const box = await screen.findByRole("checkbox", { name: "Toast tin nhắn" });
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+    setItem.mockRestore();
+  });
+
+  it("lỗi tải danh sách loại ⇒ ba công tắc cục bộ vẫn dùng được", async () => {
+    mockList.mockRejectedValue(new Error("network"));
+    renderPage();
+    expect(
+      await screen.findByRole("checkbox", { name: "Hiện toast thông báo" }),
+    ).toBeInTheDocument();
   });
 });

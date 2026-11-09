@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { chatRoomTargetFromUrl } from "@/routes/chat/chat-room-link";
 import { taskIdFromPath, useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
@@ -29,6 +30,38 @@ export function isSafeInternalTarget(url: string | null | undefined): url is str
   return url.startsWith("/") && !url.startsWith("//");
 }
 
+/**
+ * Mở đích AN TOÀN của một thông báo (cùng luật với bấm dòng): việc ⇒ drawer việc, phòng chat ⇒ drawer chat,
+ * còn lại điều hướng router. Tách ra để toast realtime (S20-NOTI-LIVETOAST-1) dùng CHUNG, không chép luật.
+ * Caller PHẢI đã kiểm `isSafeInternalTarget`.
+ */
+export function useOpenNotificationTarget(): (targetUrl: string) => void {
+  const navigate = useNavigate();
+  const { openTask } = useTaskDrawer();
+  const openChatRoom = useChatRoomLinkOpener();
+  return useCallback(
+    (targetUrl: string) => {
+      const taskId = taskIdFromPath(targetUrl);
+      if (taskId) {
+        openTask(taskId);
+        return;
+      }
+      const chatTarget = chatRoomTargetFromUrl(targetUrl);
+      if (chatTarget) {
+        openChatRoom(chatTarget);
+        return;
+      }
+      // `to` KHÔNG tách `?…`/`#…` ⇒ đích có query đi bằng `href`; đích trần giữ `to` (target_url là chuỗi động).
+      if (/[?#]/.test(targetUrl)) {
+        void navigate({ href: targetUrl });
+        return;
+      }
+      void navigate({ to: targetUrl as "/" });
+    },
+    [navigate, openTask, openChatRoom],
+  );
+}
+
 interface NotificationTargetLinkProps {
   targetUrl: string | null | undefined;
   /** Gọi TRƯỚC khi điều hướng (vd mark-read) — không chặn navigate nếu lỗi. */
@@ -50,9 +83,7 @@ export function NotificationTargetLink({
   children,
   className,
 }: NotificationTargetLinkProps) {
-  const navigate = useNavigate();
-  const { openTask } = useTaskDrawer();
-  const openChatRoom = useChatRoomLinkOpener();
+  const openTarget = useOpenNotificationTarget();
   const safe = isSafeInternalTarget(targetUrl);
 
   if (!safe) {
@@ -71,25 +102,7 @@ export function NotificationTargetLink({
       className={className}
       onClick={() => {
         onBeforeNavigate?.();
-        const taskId = taskIdFromPath(targetUrl);
-        if (taskId) {
-          openTask(taskId);
-          return;
-        }
-        const chatTarget = chatRoomTargetFromUrl(targetUrl);
-        if (chatTarget) {
-          openChatRoom(chatTarget);
-          return;
-        }
-        // `to` KHÔNG tách `?…`/`#…` (router dựng cả chuỗi thành pathname — đo ở
-        // routes/dashboard/quick-action-targets.spec.ts) ⇒ đích có query đi bằng `href` (router tự tách
-        // pathname/search/hash). Đích trần giữ `to`: target_url là chuỗi động — cast "as \"/\"" là pattern
-        // ĐÃ DÙNG khắp router.tsx cho mọi điều hướng path động (vd LEAVE_PATHS.DETAIL(id)).
-        if (/[?#]/.test(targetUrl)) {
-          void navigate({ href: targetUrl });
-          return;
-        }
-        void navigate({ to: targetUrl as "/" });
+        openTarget(targetUrl);
       }}
     >
       {children}

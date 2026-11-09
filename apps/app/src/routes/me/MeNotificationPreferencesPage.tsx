@@ -41,6 +41,7 @@ import {
   Checkbox,
 } from "@mediaos/ui";
 import type { NotificationPreferenceDto, NotificationType } from "@mediaos/contracts";
+import { ToastPrefsCard } from "./MeNotificationPreferencesPage.toast";
 import { ME_ACCESS_PAIR, ME_NOTIFICATION_PREFERENCE_GROUPS } from "./constants";
 
 function MeNotificationPreferencesPageInner() {
@@ -94,7 +95,8 @@ function MeNotificationPreferencesPageInner() {
 
   if (isError) {
     return (
-      <div className="p-6">
+      <div className="space-y-6 p-6">
+        <ToastPrefsCard />
         <EmptyState
           title={t("notificationPreferencesPage.error.title")}
           description={t("notificationPreferencesPage.error.description")}
@@ -123,6 +125,8 @@ function MeNotificationPreferencesPageInner() {
         description={t("notificationPreferencesPage.description")}
         icon={BellRing}
       />
+
+      <ToastPrefsCard />
 
       {ME_NOTIFICATION_PREFERENCE_GROUPS.map((group) => (
         <Card key={group.groupKey}>
