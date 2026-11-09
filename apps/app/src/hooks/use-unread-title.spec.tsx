@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { ChatRoomDto } from "@mediaos/contracts";
+import { useAuthStore } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
 import { totalUnreadCount } from "@/components/chat/chat-unread";
 import { useUnreadTitle } from "./use-unread-title";
@@ -24,9 +25,13 @@ function setRooms(rooms: ChatRoomDto[]) {
 
 beforeEach(() => {
   document.title = "MediaOS";
+  useAuthStore.setState({ isAuthenticated: true, capabilities: { "access:chat": true } });
   setRooms([]);
 });
-afterEach(() => setRooms([]));
+afterEach(() => {
+  setRooms([]);
+  useAuthStore.setState({ isAuthenticated: false, capabilities: {} });
+});
 
 describe("useUnreadTitle", () => {
   it("«(N)» = totalUnreadCount của badge, kể cả phòng đã tắt tiếng", () => {
@@ -44,6 +49,13 @@ describe("useUnreadTitle", () => {
     act(() => setRooms([room("a", 7)]));
     expect(document.title).toBe("(7) MediaOS");
     act(() => setRooms([room("a", 0)]));
+    expect(document.title).toBe("MediaOS");
+  });
+
+  it("có view:chat-room nhưng KHÔNG access:chat ⇒ tiêu đề gốc, không «(N)»", () => {
+    useAuthStore.setState({ capabilities: { "view:chat-room": true } });
+    setRooms([room("a", 2)]);
+    renderHook(() => useUnreadTitle());
     expect(document.title).toBe("MediaOS");
   });
 

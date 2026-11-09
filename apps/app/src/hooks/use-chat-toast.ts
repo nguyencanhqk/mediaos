@@ -6,7 +6,7 @@
  *
  * Luật toast (tin của người KHÁC, chưa thu hồi): phòng riêng HOẶC nhắc tôi; phòng không tắt tiếng; không
  * đang mở đúng phòng đó (trang `/chat/<id>` hoặc drawer); tuỳ chọn «Toast tin nhắn» bật. Tin nhóm không
- * nhắc tôi chỉ tăng badge. Gộp cùng phòng trong {@link CHAT_TOAST_MERGE_MS}; thu hồi ⇒ gỡ toast.
+ * nhắc tôi chỉ tăng badge. Gộp cùng phòng trong {@link CHAT_TOAST_MERGE_MS}; thu hồi ⇒ chỉ cập nhật toast còn hiện.
  * Thân tin chỉ lấy từ payload ĐÃ NHẬN và chỉ khi bật «Xem trước nội dung» — không gọi API thêm.
  */
 import { useEffect, useRef } from "react";
@@ -115,6 +115,12 @@ export function useChatToast(): void {
       if (!parsed.success) return;
       const entry = byRoom.get(parsed.data.roomId);
       if (!entry?.bodies.has(parsed.data.messageId)) return;
+      // Toast đã tự tắt/bị đóng ⇒ không dựng lại; phòng đang được xem ⇒ không toast.
+      if (!toast.isActive(entry.toastId) || isRoomOnScreen(parsed.data.roomId)) {
+        toast.dismiss(entry.toastId);
+        byRoom.delete(parsed.data.roomId);
+        return;
+      }
       const bodies = new Map(entry.bodies);
       bodies.delete(parsed.data.messageId);
       if (bodies.size === 0) {

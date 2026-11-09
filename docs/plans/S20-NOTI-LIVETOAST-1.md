@@ -57,3 +57,5 @@ Sổ vết KPI: (điền sau)
 
 Sổ vết review:
 - [LOW] use-chat-toast: thu hồi 1 tin trong toast gộp không cập nhật «N tin» ⇒ đã vá: dựng lại toast với số đếm mới (về dạng đơn khi còn 1); ca test mới trong `use-chat-toast.spec` (đỏ trên mã cũ).
+- [MEDIUM] use-chat-toast: thu hồi 1 tin dựng lại toast cả khi toast đã tắt / phòng đang xem ⇒ đã vá: `toast.isActive(id)` (mới ở packages/ui) — toast không còn hiện hoặc phòng đang mở ⇒ gỡ entry, không dựng lại; 2 ca test mới (đỏ trên mã cũ).
+- [LOW] use-unread-title: «(N)» hiện khi có view:chat-room nhưng thiếu access:chat (badge header ẩn) ⇒ đã vá: cùng cổng `CHAT_PAIRS.ACCESS` qua `useCan`; 1 ca test mới (đỏ trên mã cũ).

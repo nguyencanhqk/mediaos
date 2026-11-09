@@ -131,6 +131,11 @@ export function dismissToast(id: string): void {
   commit(toasts.filter((t) => t.id !== id));
 }
 
+/** Toast còn đang hiện (chưa tự đóng / chưa bị đóng)? Cho phía gọi biết nên cập nhật hay bỏ qua. */
+export function isToastActive(id: string): boolean {
+  return toasts.some((t) => t.id === id);
+}
+
 /**
  * API gọi nhanh. Thoả `ToastFn` của web-core ⇒ app gắn bằng `configureToast(toast)` lúc khởi động.
  */
@@ -141,6 +146,7 @@ export const toast = {
   warning: (message: string, options?: ToastOptions): string =>
     showToast("warning", message, options),
   dismiss: dismissToast,
+  isActive: isToastActive,
   /** Đóng hết (vd khi đăng xuất). */
   clear: (): void => commit([]),
 };

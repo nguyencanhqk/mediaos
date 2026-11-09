@@ -16,6 +16,7 @@ import { CHAT_TOAST_MERGE_MS, useChatToast } from "./use-chat-toast";
 const getAppSocket = vi.fn();
 const toastSuccess = vi.fn();
 const toastDismiss = vi.fn();
+const toastIsActive = vi.fn();
 const openChatRoom = vi.fn();
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -29,6 +30,7 @@ vi.mock("@mediaos/ui", async (importOriginal) => {
     toast: {
       success: (...a: unknown[]) => toastSuccess(...a),
       dismiss: (...a: unknown[]) => toastDismiss(...a),
+      isActive: (...a: unknown[]) => toastIsActive(...a),
     },
   };
 });
@@ -90,6 +92,7 @@ beforeEach(() => {
   seq = 0;
   socket = makeFakeSocket();
   getAppSocket.mockReturnValue(socket);
+  toastIsActive.mockReturnValue(true);
   toastSuccess.mockImplementation(() => `toast-${toastSuccess.mock.calls.length}`);
   useAuthStore.setState({
     isAuthenticated: true,
@@ -238,6 +241,38 @@ describe("useChatToast", () => {
     recall(m3.id);
     expect(lastToast()[0]).toBe("Lan vừa nhắn cho bạn");
     expect(toastDismiss).toHaveBeenLastCalledWith(`toast-${toastSuccess.mock.calls.length - 1}`);
+  });
+
+  it("thu hồi khi toast đã tự tắt ⇒ KHÔNG dựng lại toast", () => {
+    renderHook(() => useChatToast());
+    const [m1, m2] = [msg(DM), msg(DM)];
+    [m1, m2].forEach(fire);
+    const before = toastSuccess.mock.calls.length;
+    toastIsActive.mockReturnValue(false);
+    act(() =>
+      socket.fire(WS_EVENTS.CHAT_MESSAGE_RECALLED, {
+        messageId: m2.id,
+        roomId: DM,
+        recalledAt: "2026-11-09T01:00:05.000Z",
+      }),
+    );
+    expect(toastSuccess.mock.calls.length).toBe(before);
+  });
+
+  it("thu hồi khi phòng đang được xem ⇒ KHÔNG dựng lại toast", () => {
+    renderHook(() => useChatToast());
+    const [m1, m2] = [msg(DM), msg(DM)];
+    [m1, m2].forEach(fire);
+    const before = toastSuccess.mock.calls.length;
+    window.history.pushState({}, "", `/chat/${DM}`);
+    act(() =>
+      socket.fire(WS_EVENTS.CHAT_MESSAGE_RECALLED, {
+        messageId: m2.id,
+        roomId: DM,
+        recalledAt: "2026-11-09T01:00:05.000Z",
+      }),
+    );
+    expect(toastSuccess.mock.calls.length).toBe(before);
   });
 
   it("unmount gỡ đúng handler của mình, không disconnect", () => {
