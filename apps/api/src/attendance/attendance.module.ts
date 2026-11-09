@@ -3,6 +3,7 @@ import { DatabaseModule } from "../db/db.module";
 import { EventsModule } from "../events/events.module";
 import { EventBus, type EventContext } from "../events/event-bus";
 import { AuditRepository } from "../foundation/audit/audit.repository";
+import { FilesModule } from "../foundation/files/files.module";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { PermissionModule } from "../permission/permission.module";
@@ -103,6 +104,8 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     SequenceModule,
     // S10-ATT-NOTIPROD-1 (additive): NotificationEngineService cho AttendanceAlertNotiJobHandler.intake().
     NotificationsModule,
+    // S19-SEC-FILEPOINTER-1 (additive): FileService cho quyết định xem tệp đính kèm đơn ATT.
+    FilesModule,
   ],
   controllers: [
     AttendanceController,

@@ -29,6 +29,9 @@ export type CompanyProfilePatch = Partial<{
   website: string | null;
 }>;
 
+/** Callback thuần do service cấp: nhận trạng thái logo hiện tại, trả phần `logoUrl` được phép ghi (hoặc rỗng). */
+export type LogoPrepare = (before: { logoUrl: string | null }) => Pick<CompanyProfilePatch, "logoUrl">;
+
 export interface SettingsAuditMeta {
   audit: AuditService;
   actorUserId: string;
@@ -48,6 +51,7 @@ export class SettingsRepository {
     companyId: string,
     data: CompanyProfilePatch,
     auditMeta: SettingsAuditMeta,
+    prepare?: LogoPrepare,
   ) {
     return this.db.withTenant(companyId, async (tx) => {
       // Read before-state for audit (only the fields we're about to mutate).
@@ -58,10 +62,12 @@ export class SettingsRepository {
         .limit(1);
 
       const beforeRow = existing[0];
+      // Luật logo nằm ở service; chạy TRONG tx để ném ⇒ rollback, 0 ghi, 0 audit.
+      const logoPart = prepare ? prepare({ logoUrl: beforeRow?.logoUrl ?? null }) : {};
 
       const rows = await tx
         .update(companies)
-        .set({ ...data, updatedAt: new Date() })
+        .set({ ...data, ...logoPart, updatedAt: new Date() })
         .where(eq(companies.id, companyId))
         .returning();
 

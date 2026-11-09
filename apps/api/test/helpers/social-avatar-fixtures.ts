@@ -40,8 +40,8 @@ export async function insertAvatarLink(
   createdBy: string,
 ): Promise<void> {
   await direct.query(
-    `INSERT INTO file_links (company_id, file_id, module_code, entity_type, entity_id, link_type, created_by)
-     VALUES ($1,$2,'ME','avatar',$3,'Avatar',$4)`,
+    `INSERT INTO file_links (company_id, file_id, module_code, entity_type, entity_id, link_type, created_by, is_primary)
+     VALUES ($1,$2,'ME','avatar',$3,'Avatar',$4,true)`,
     [companyId, fileId, employeeId, createdBy],
   );
 }

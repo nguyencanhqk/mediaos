@@ -4,6 +4,7 @@ import { DatabaseService } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import { type Company } from "../../db/schema/companies";
 import { assertCompanyActive } from "./company-status";
+import { resolveProfileLogoWrite } from "./company-logo-ref";
 import { CompanyRepository, type CompanyUpdatePatch } from "./company.repository";
 import type { CompanyView, PatchCompanyInput } from "./company.dto";
 
@@ -69,6 +70,19 @@ export class CompanyService {
 
   /** PATCH /foundation/company/current — cập nhật hồ sơ + audit-in-tx. */
   async updateCompany(actor: Actor, dto: PatchCompanyInput): Promise<CompanyView> {
+    return this.updateCompanyCore(actor, dto, "profile");
+  }
+
+  /** Lối DUY NHẤT của endpoint branding để đặt/gỡ logo (fileId đã qua lõi gắn tệp). */
+  async setBrandingLogo(actor: Actor, fileId: string | null): Promise<CompanyView> {
+    return this.updateCompanyCore(actor, { logoUrl: fileId }, "branding");
+  }
+
+  private async updateCompanyCore(
+    actor: Actor,
+    dto: PatchCompanyInput,
+    logo: "profile" | "branding",
+  ): Promise<CompanyView> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const existing = await this.repo.findCurrentTx(actor.companyId, tx);
       // Fail-closed: company không tồn tại cho tenant hợp lệ → 4xx sạch (KHÔNG NPE/500, KHÔNG write/audit).
@@ -80,7 +94,9 @@ export class CompanyService {
       // Suspended ⇒ 403 TRƯỚC mọi write/audit (BACKEND-04 §8.1 rule 1; allow-list status==='active').
       assertCompanyActive(existing.status);
 
-      const patch = pickEditable(dto);
+      const picked = pickEditable(dto);
+      const patch =
+        logo === "profile" ? applyProfileLogoRule(picked, existing.logoUrl, dto.logoUrl) : picked;
       // Không có field hợp lệ nào để đổi → no-op: trả current, KHÔNG audit (tránh audit rác).
       if (Object.keys(patch).length === 0) return toView(existing);
 
@@ -115,6 +131,17 @@ export class CompanyService {
       return toView(updated);
     });
   }
+}
+
+/** Đường hồ sơ: logo chỉ rỗng / http(s) / giữ nguyên; trả patch MỚI (immutable). */
+function applyProfileLogoRule(
+  patch: CompanyUpdatePatch,
+  current: string | null,
+  next: string | null | undefined,
+): CompanyUpdatePatch {
+  const { logoUrl: _omit, ...rest } = patch;
+  const decision = resolveProfileLogoWrite(current, next);
+  return decision.write ? { ...rest, logoUrl: decision.value } : rest;
 }
 
 /** Chỉ giữ key EDITABLE có mặt (đã Zod-strip). Immutable: dựng object MỚI. company_id/id/status KHÔNG bao giờ vào. */

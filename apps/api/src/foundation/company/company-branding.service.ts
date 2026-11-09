@@ -48,8 +48,9 @@ interface Actor {
  * LƯU TRỮ (KHÔNG migration):
  *   logo    → `companies.logo_url` (chứa fileId UUID) qua CompanyService.updateCompany ⇒ audit
  *             COMPANY_UPDATED in-tx + assertCompanyActive + withTenant TÁI DÙNG NGUYÊN VẸN.
- *   favicon → `company_settings['branding.favicon_file_id']` qua SettingService.updateCompanySetting ⇒
- *             audit COMPANY_SETTING_UPDATED in-tx.
+ *   favicon → `company_settings['branding.favicon_file_id']` qua lối branding riêng
+ *             SettingService.setBrandingFavicon (route cấu hình chung chỉ nhận rỗng / http(s) / giữ
+ *             giá trị cũ) ⇒ audit COMPANY_SETTING_UPDATED in-tx.
  * Cả hai đường ghi đều đã có audit + withTenant sẵn — service này KHÔNG tự ghi DB thẳng (KHÔNG nhân bản
  * đường audit thứ hai, tránh drift).
  *
@@ -366,20 +367,14 @@ export class CompanyBrandingService {
 
   /**
    * Ghi con trỏ qua service ĐÃ CÓ audit in-tx (KHÔNG ghi DB thẳng — tránh đường audit thứ hai):
-   *   logo    → CompanyService.updateCompany  ⇒ COMPANY_UPDATED (changed_fields tự tính = ['logoUrl']).
-   *   favicon → SettingService.updateCompanySetting ⇒ COMPANY_SETTING_UPDATED.
+   *   logo    → CompanyService.setBrandingLogo ⇒ COMPANY_UPDATED (changed_fields tự tính = ['logoUrl']).
+   *   favicon → SettingService.setBrandingFavicon ⇒ COMPANY_SETTING_UPDATED.
    */
   private async persistRef(actor: Actor, kind: BrandingKind, fileId: string | null): Promise<void> {
     if (kind === "logo") {
-      await this.company.updateCompany(actor, { logoUrl: fileId });
+      await this.company.setBrandingLogo(actor, fileId);
       return;
     }
-    await this.settings.updateCompanySetting(actor, FAVICON_SETTING_KEY, {
-      settingValue: fileId ?? "",
-      valueType: "String",
-      category: "Branding",
-      moduleCode: "FOUNDATION",
-      description: "fileId của favicon công ty (S5-BRAND-BE-1).",
-    });
+    await this.settings.setBrandingFavicon(actor, fileId);
   }
 }

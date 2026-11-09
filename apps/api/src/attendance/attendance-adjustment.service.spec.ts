@@ -11,6 +11,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   InternalServerErrorException,
@@ -115,6 +116,10 @@ function build(
       .fn()
       .mockImplementation((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn({})),
   };
+  const files = {
+    preflightLinkerView: vi.fn().mockResolvedValue({ kind: "allow", row: {}, ctx: { live: [], everLinked: false } }),
+    recheckLinkerViewTx: vi.fn().mockResolvedValue({ kind: "ok", row: {} }),
+  };
   const service = new AttendanceAdjustmentService(
     db as never,
     repo as never,
@@ -124,8 +129,9 @@ function build(
     hrTasks as never,
     audit as never,
     outbox as never,
+    files as never,
   );
-  return { service, repo, attendanceRepo, dataScope, permission, hrTasks, audit, outbox, db };
+  return { service, repo, attendanceRepo, dataScope, permission, hrTasks, audit, outbox, db, files };
 }
 
 const CREATE_DTO = {
@@ -405,5 +411,48 @@ describe("AttendanceAdjustmentService — reject + direct deny-paths", () => {
     ).rejects.toThrow(ConflictException);
     // The lock guard short-circuits before the scope check is even consulted.
     expect(dataScope.resolveAndAssert).not.toHaveBeenCalled();
+  });
+});
+
+describe("AttendanceAdjustmentService — đính kèm theo quyết định xem tệp", () => {
+  const FILE = "99999999-9999-9999-9999-999999999999";
+  const withFile = { ...CREATE_DTO, attachmentFileId: FILE };
+
+  it("không đính kèm ⇒ không gọi quyết định xem tệp", async () => {
+    const { service, files } = build();
+    await service.createRequest(actor, CREATE_DTO);
+    expect(files.preflightLinkerView).not.toHaveBeenCalled();
+    expect(files.recheckLinkerViewTx).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ kind: "forbidden", reason: "deny-owner", action: "Read" }, ForbiddenException],
+    [{ kind: "missing" }, BadRequestException],
+    [{ kind: "unlinkable", row: { scanStatus: "Infected" } }, BadRequestException],
+    [{ kind: "khong-hop-le" }, Error],
+  ])("kết quả %j ⇒ ném, không cấp mã, không ghi", async (outcome, errType) => {
+    const { service, files, hrTasks, repo } = build();
+    files.preflightLinkerView.mockResolvedValueOnce(outcome);
+    await expect(service.createRequest(actor, withFile)).rejects.toBeInstanceOf(errType);
+    expect(hrTasks.allocateTaskCodeBeforeTx).not.toHaveBeenCalled();
+    expect(repo.insertRequestTx).not.toHaveBeenCalled();
+  });
+
+  it("allow ⇒ so lại trong tx ghi rồi mới ghi đơn", async () => {
+    const { service, files, repo } = build();
+    await service.createRequest(actor, withFile);
+    expect(files.recheckLinkerViewTx).toHaveBeenCalledOnce();
+    expect(files.recheckLinkerViewTx.mock.invocationCallOrder[0]).toBeLessThan(
+      repo.insertRequestTx.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("so lại trả khác ok ⇒ ném, không ghi đơn", async () => {
+    const { service, files, repo } = build();
+    files.recheckLinkerViewTx.mockResolvedValueOnce({ kind: "missing" });
+    await expect(service.createRequest(actor, withFile)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(repo.insertRequestTx).not.toHaveBeenCalled();
   });
 });

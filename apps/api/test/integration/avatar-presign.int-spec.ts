@@ -76,11 +76,17 @@ async function insertAvatarLink(
   fileId: string,
   employeeId: string,
   createdBy: string,
-  opts: { linkType?: string; entityType?: string; moduleCode?: string; deleted?: boolean } = {},
+  opts: {
+    linkType?: string;
+    entityType?: string;
+    moduleCode?: string;
+    deleted?: boolean;
+    primary?: boolean;
+  } = {},
 ): Promise<void> {
   await direct.query(
-    `INSERT INTO file_links (company_id, file_id, module_code, entity_type, entity_id, link_type, created_by, deleted_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    `INSERT INTO file_links (company_id, file_id, module_code, entity_type, entity_id, link_type, created_by, deleted_at, is_primary)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       companyId,
       fileId,
@@ -90,6 +96,7 @@ async function insertAvatarLink(
       opts.linkType ?? "Avatar",
       createdBy,
       opts.deleted ? new Date() : null,
+      opts.primary ?? true,
     ],
   );
 }
@@ -165,8 +172,10 @@ describe.skipIf(!runDb)("S5-ME-BE-5 findVerifiedAvatarsTx (self-defending avatar
     const p = await person(A);
     const pending = await insertFile(direct, A.companyId, p.userId, { uploadStatus: "Pending" });
     await insertAvatarLink(direct, A.companyId, pending, p.employeeId, p.userId);
-    const infected = await insertFile(direct, A.companyId, p.userId, { scanStatus: "Infected" });
-    await insertAvatarLink(direct, A.companyId, infected, p.employeeId, p.userId);
+    // NV khác cho ảnh Infected: mỗi NV chỉ có một liên kết primary (uq_file_links_primary_per_entity_type).
+    const p2 = await person(A);
+    const infected = await insertFile(direct, A.companyId, p2.userId, { scanStatus: "Infected" });
+    await insertAvatarLink(direct, A.companyId, infected, p2.employeeId, p2.userId);
     expect(await verify(A.companyId, [pending, infected])).toHaveLength(0);
   });
 

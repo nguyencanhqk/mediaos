@@ -30,6 +30,9 @@ export interface AvatarSubject {
  *     `findVerifiedAvatarsTx` CHỈ trả file có link ME/avatar SỐNG (nguồn DUY NHẤT = MeAvatarService.setAvatar,
  *     đã validate owner+image) + image/*+Uploaded, VÀ caller khớp ĐÚNG cặp (employeeId, fileId) ⇒ đầu độc
  *     (trỏ contract/payslip/ID scan hoặc avatar người khác) KHÔNG bao giờ được ký (→ initials).
+ *   - NGOẠI LỆ directory-class chỉ đứng cho ảnh ĐỘC QUYỀN: link ME/avatar sống + primary + không có liên kết
+ *     sống nào khác. Ảnh dùng chung với chỗ khác ⇒ KHÔNG ký (→ initials). Đường ghi avatar mới phải tạo
+ *     link ME/avatar qua hàm chung; cột `avatar_url` không bao giờ là nguồn quyền.
  *   - KHÔNG ghi file_access_log / bump download_count (thumbnail → tránh nhiễu số liệu tải).
  *   - FAIL-SOFT: storage lỗi → BỎ QUA (không có trong map) ⇒ initials, KHÔNG 500 cả danh sách/cây.
  *

@@ -126,6 +126,8 @@ export class FileRepository {
    * hộ NV — owner cũ `=employee.user_id` sẽ CHẶN nhầm case này). Forge (ai đó gắn file NGƯỜI KHÁC làm avatar
    * mình): owner(victim) ≠ created_by(kẻ gắn) ⇒ loại — VẪN CHẶN. Bỏ JOIN employee_profiles (không còn cần).
    *
+   * Chỉ ký ảnh ĐỘC QUYỀN: link primary + không có liên kết sống nào khác ngoài cặp (NV, tệp) này.
+   *
    * Trả kèm `employeeId` (= link.entity_id) để caller khớp ĐÚNG (employee, file) — B mượn fileId avatar của A
    * (đầu độc chéo) KHÔNG khớp (entity_id=A ≠ B) ⇒ KHÔNG ký cho B. Company-scoped + RLS. ids rỗng → [].
    */
@@ -135,6 +137,7 @@ export class FileRepository {
     tx: TenantTx,
   ): Promise<VerifiedAvatarMeta[]> {
     if (fileIds.length === 0) return [];
+    const otherLink = alias(fileLinks, "fl2");
     return tx
       .select({
         employeeId: fileLinks.entityId,
@@ -159,6 +162,27 @@ export class FileRepository {
           ne(files.scanStatus, "Infected"),
           like(files.mimeType, "image/%"),
           eq(files.ownerUserId, fileLinks.createdBy),
+          eq(fileLinks.isPrimary, true),
+          // Vị từ độc quyền (ngoại lệ directory-class): ảnh còn liên kết sống nào khác ⇒ không ký.
+          // KHÔNG thêm điều kiện nào khác vào `otherLink`.
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(otherLink)
+              .where(
+                and(
+                  eq(otherLink.fileId, files.id),
+                  isNull(otherLink.deletedAt),
+                  not(
+                    and(
+                      eq(otherLink.moduleCode, AVATAR_LINK_MODULE),
+                      eq(otherLink.entityType, AVATAR_LINK_ENTITY),
+                      eq(otherLink.entityId, fileLinks.entityId),
+                    )!,
+                  ),
+                ),
+              ),
+          ),
         ),
       );
   }

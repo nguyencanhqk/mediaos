@@ -4,7 +4,9 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
+import { BRANDING_ERROR_CODES, FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
+import { FAVICON_SETTING_KEY } from "../company/branding.constants";
+import { classifyBrandingRef } from "../company/company-logo-ref";
 import { DatabaseService } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import { PermissionService } from "../../permission/permission.service";
@@ -200,8 +202,35 @@ export class SettingService {
     key: string,
     dto: PatchCompanySettingInput,
   ): Promise<SafeSettingView> {
+    return this.updateCompanySettingCore(actor, key, dto, false);
+  }
+
+  /** Lối DUY NHẤT của endpoint branding để đặt/gỡ con trỏ favicon (fileId đã qua lõi gắn tệp). */
+  async setBrandingFavicon(actor: Actor, fileId: string | null): Promise<SafeSettingView> {
+    return this.updateCompanySettingCore(
+      actor,
+      FAVICON_SETTING_KEY,
+      {
+        settingValue: fileId ?? "",
+        valueType: "String",
+        category: "Branding",
+        moduleCode: "FOUNDATION",
+        description: "fileId của favicon công ty (S5-BRAND-BE-1).",
+      },
+      true,
+    );
+  }
+
+  private async updateCompanySettingCore(
+    actor: Actor,
+    key: string,
+    input: PatchCompanySettingInput,
+    viaBranding: boolean,
+  ): Promise<SafeSettingView> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const [existing] = await this.repo.findOneCompanyTx(actor.companyId, key, tx);
+      const dto =
+        key === FAVICON_SETTING_KEY && !viaBranding ? guardFaviconRef(existing, input) : input;
       const [systemRef] = await this.repo.findOneSystemTx(key, tx);
 
       // Sticky secret guard (deny TRƯỚC validateValue/upsert): nếu setting hiện hữu đang là SecretRef
@@ -600,4 +629,24 @@ export class SettingService {
       }
     }
   }
+}
+
+/** Con trỏ favicon ngoài endpoint branding chỉ nhận rỗng / http(s) / giữ giá trị hiện có. */
+function guardFaviconRef(
+  existing: { settingValue: unknown } | undefined,
+  input: PatchCompanySettingInput,
+): PatchCompanySettingInput {
+  const next = input.settingValue;
+  if (typeof next !== "string") throw faviconRefError();
+  const current = typeof existing?.settingValue === "string" ? existing.settingValue : null;
+  const decision = classifyBrandingRef(current, next);
+  if (decision === "reject") throw faviconRefError();
+  return decision === "keep" ? { ...input, settingValue: current! } : input;
+}
+
+function faviconRefError(): BadRequestException {
+  return new BadRequestException({
+    code: BRANDING_ERROR_CODES.FAVICON_REF,
+    message: "Favicon chỉ nhận URL http(s) hoặc rỗng; tệp favicon đặt qua endpoint thương hiệu.",
+  });
 }

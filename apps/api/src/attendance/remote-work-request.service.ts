@@ -18,6 +18,12 @@ import type {
   SubmitRemoteWorkRequest,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
+import { FileService } from "../foundation/files/files.service";
+import {
+  assertRecheckOk,
+  decidePointerFile,
+} from "../foundation/files/file-pointer-guard";
+import type { FileAccessContext } from "../foundation/files/file-access-decision";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
@@ -77,6 +83,7 @@ export class RemoteWorkRequestService {
     private readonly dataScope: DataScopeService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly files: FileService,
   ) {}
 
   // ─── Create (create-own:remote-request → Draft) ────────────────────────────────
@@ -85,9 +92,19 @@ export class RemoteWorkRequestService {
     actor: Actor,
     dto: CreateRemoteWorkRequest,
   ): Promise<RemoteWorkRequestDetail> {
+    const decided = await this.decideAttachment(actor, dto);
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const target = await this.resolveCreateTarget(actor, dto, tx);
+        if (decided && dto.attachmentFileId) {
+          const checked = await this.files.recheckLinkerViewTx(
+            actor.companyId,
+            dto.attachmentFileId,
+            decided,
+            tx,
+          );
+          assertRecheckOk(checked);
+        }
         const [row] = await this.repo.insertRequestTx(
           actor.companyId,
           {
@@ -127,6 +144,27 @@ export class RemoteWorkRequestService {
         return this.loadDetailTx(actor.companyId, row.id, tx);
       })
       .catch((err: unknown) => this.mapError(err, "createRequest", { companyId: actor.companyId }));
+  }
+
+  /**
+   * Đính kèm: người nộp phải xem được tệp theo cùng quyết định với `GET /foundation/files/:id`. Chạy SAU khi
+   * đích nộp đã hợp lệ (lỗi quyền/phạm vi của ATT giữ nguyên thứ tự, chưa chạm tệp) và NGOÀI tx ghi.
+   * Không có tệp ⇒ `null`, đường tạo giữ một tx như cũ.
+   */
+  private async decideAttachment(
+    actor: Actor,
+    dto: CreateRemoteWorkRequest,
+  ): Promise<FileAccessContext | null> {
+    if (!dto.attachmentFileId) return null;
+    await this.db
+      .withTenant(actor.companyId, (tx) => this.resolveCreateTarget(actor, dto, tx))
+      .catch((err: unknown) =>
+        this.mapError(err, "createRequest.authz", { companyId: actor.companyId }),
+      );
+    return decidePointerFile(this.files, actor, dto.attachmentFileId, {
+      moduleCode: "ATT",
+      entityType: "remote_work_request",
+    });
   }
 
   /** Own employee unless targetEmployeeId is set AND the actor holds a wider-than-Own create scope. */
