@@ -26,6 +26,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     chatApi: {
       ...actual.chatApi,
       getMessages: (...args: unknown[]) => getMessages(...args),
+      // S19-QA-FETESTNET-1 — roster + ping gõ nạp mạng thật nếu không mock. Hàm thường (không vi.fn) vì restoreAllMocks.
+      listMembers: () => Promise.resolve([]),
+      pingTyping: () => Promise.resolve(undefined),
       getPinned: (...args: unknown[]) => getPinned(...args),
       markRead: vi.fn().mockResolvedValue({ roomId: "", lastReadSeq: 0, unreadCount: 0 }),
       sendMessage: (...args: unknown[]) => sendMessage(...args),

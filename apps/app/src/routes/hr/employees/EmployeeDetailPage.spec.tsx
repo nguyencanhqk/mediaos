@@ -17,6 +17,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     hrApi: {
       getEmployee: vi.fn(),
     },
+    // S19-QA-FETESTNET-1 — AccountLinkSection nạp trạng thái tài khoản; treo = giữ hành vi cũ (chưa có data), không mạng.
+    authUsersApi: { getUser: () => new Promise(() => {}) },
     // S2-FE-HR-9 — Tab "File hồ sơ" gọi employeeFilesApi.getEmployeeFiles khi có file-view:employee.
     employeeFilesApi: {
       getEmployeeFiles: vi.fn(),

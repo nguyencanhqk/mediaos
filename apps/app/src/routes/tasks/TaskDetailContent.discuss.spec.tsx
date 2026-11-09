@@ -29,6 +29,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     },
     taskFileApi: { getTaskFiles: vi.fn().mockResolvedValue([]) },
     taskProjectApi: { listProjects: vi.fn().mockResolvedValue([]) },
+    // S19-QA-FETESTNET-1 — cột trạng thái dự án nạp mạng thật nếu không mock.
+    taskStatesApi: { listStates: () => Promise.resolve([]) },
     hrApi: {
       listDepartments: vi.fn().mockResolvedValue([]),
       listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),

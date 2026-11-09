@@ -52,6 +52,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       // Hàm thường, KHÔNG `vi.fn()`: `vi.restoreAllMocks()` ở afterEach trả `vi.fn` về rỗng ⇒ ping trả
       // `undefined` và `.catch` của nó ném ở ca sau.
       pingTyping: () => Promise.resolve(undefined),
+      listMembers: () => Promise.resolve([]),
       listRooms: vi.fn().mockResolvedValue([]),
       listRoomFiles: vi.fn().mockResolvedValue([]),
       getPinned: vi.fn().mockResolvedValue([]),

@@ -15,8 +15,6 @@ import { FeedPage } from "./FeedPage";
 import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
 
 const listFeed = vi.fn();
-/** Thế chỗ `fetch` trong MỌI ca: luôn từ chối, và `afterEach` đòi 0 lời gọi — xem 🔴 ở `beforeEach`. */
-const fetchMock = vi.fn();
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -47,21 +45,14 @@ const STRIP = "Liên kết nhanh";
 
 beforeEach(() => {
   listFeed.mockReset().mockResolvedValue(page([makePost()]));
-  // 🔴 Lưới chặn mạng (gate bảo mật của PR-C, SEC-02 — khuôn của `SocialPortalShell.spec.tsx`). File này dựng `FeedPage`
-  // THẬT và chỉ thay `listFeed` + socket: trang hay một component con thêm một lời gọi lúc mount mà ở đây chưa mock thì
-  // `apiFetch` THẬT đi tới địa chỉ API mặc định (`localhost:3100`) — trên máy có API đang chạy đó là một request thật,
-  // còn ca vẫn xanh. `fetch` vì vậy luôn từ chối, và `afterEach` đòi 0 lời gọi: ca như thế ĐỎ ngay ở đây.
-  fetchMock.mockReset().mockRejectedValue(new TypeError("mạng bị chặn trong test"));
-  vi.stubGlobal("fetch", fetchMock);
+  // Chặn mạng: lưới TOÀN CỤC (`src/test/fetch-net-guard.ts`, cài ở `setup.ts`) — `FeedPage` THẬT chỉ thay `listFeed` + socket;
+  // một lời gọi chưa mock lúc mount ⇒ ca ĐỎ ở afterEach toàn cục kèm URL.
 });
 
 afterEach(() => {
-  // Đếm TRƯỚC khi dọn; so SAU khi dọn để ca đỏ không để lại cây đang mount hay `fetch` giả cho ca kế tiếp.
-  const requestsLeavingTheTest = fetchMock.mock.calls.map((call) => String(call[0]));
   cleanup();
   resetCaps();
   vi.unstubAllGlobals();
-  expect(requestsLeavingTheTest).toEqual([]);
 });
 
 describe("L6 — `FeedPage` mount dải ô liên kết nhanh ngay trên ô soạn bài", () => {

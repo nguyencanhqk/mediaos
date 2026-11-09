@@ -17,7 +17,12 @@ import i18n from "@/i18n";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
-  return { ...actual, useCan: vi.fn(() => true) };
+  return {
+    ...actual,
+    useCan: vi.fn(() => true),
+    // S19-QA-FETESTNET-1 — ping «đang gõ» gọi mạng thật nếu không mock (hàm thường: restoreAllMocks).
+    chatApi: { ...actual.chatApi, pingTyping: () => Promise.resolve(undefined) },
+  };
 });
 
 import { useCan } from "@mediaos/web-core";
