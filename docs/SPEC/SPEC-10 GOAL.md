@@ -83,6 +83,8 @@ Chi tiết công thức, recompute và quy tắc biên: **§13** (phần lõi c�
 - Task gắn goal bằng `tasks.goal_id` (TASK sở hữu cột, GOAL sở hữu nghiệp vụ gắn/tháo).
 - Tiến độ dự án dẫn xuất bằng **đếm-lá** task của dự án qua service TASK dùng chung (`ProjectsService.countsByStatusLeaf` — DECISIONS-05 D-35, cùng nguồn số với widget project-progress). ⚠️ Cột `projects.progress_percent` tồn tại trong schema (0478) nhưng là **cột chết không writer nào nuôi** (xác minh code 2026-07-20) — CẤM đọc.
 
+- **Q14 = B (owner chọn 23/10/2026) — tên hiển thị người phụ trách / người check-in.** Là hiển thị-từ-nguồn (không sao chép): `GET /goals`, `/goals/tree`, `/goals/:id`, `/me/goals` trả thêm `ownerName`; `GET /goals/:id/updates` trả thêm `actorName`; cả bốn kèm `lastCheckinAt` (= MAX `created_at` của `goal_updates` có `update_type=checkin`, tính bằng MỘT truy vấn gộp cho cả lô). Người có `view:goal` thấy TÊN HIỂN THỊ **không cần** `read:employee` với họ (như `assigneeName` của task) — CHỈ tên: không email, SĐT, mã nhân viên hay trường HR khác. Hồ sơ xoá mềm/không có tên ⇒ `null` (FE hiện «—»); nghỉ việc (`resigned`/`terminated`) ⇒ tên kèm «(Đã nghỉ)». Ba trường `optional`, không `.default()`; phản hồi ghi (POST/PATCH/check-in) có thể vắng. FE: «Check-in cuối» quá 7 ngày lịch (giờ công ty) của mục tiêu `manual` + `Active` ⇒ nhãn «Cần check-in»; chế độ đo tự động không có nhãn.
+
 ### 3.4 Điểm kiểm soát duy nhất = CHỐT KỲ (finalize)
 
 MVP **không có luồng phê duyệt** khi tạo/sửa goal (GOAL-DEC-003). Kiểm soát chất lượng số liệu nằm ở bước **chốt kỳ**: quản lý bấm chốt → goal đóng băng (`finalized_at`), cấm mọi sửa đổi/check-in/recompute. Số đã chốt là số mà module đánh giá tương lai được phép tin.

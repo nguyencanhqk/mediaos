@@ -13,7 +13,9 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
+import { employeeProfiles } from "../db/schema/employees";
 import { goals, type Goal } from "../db/schema/goals";
+import { users } from "../db/schema/users";
 import {
   buildGoalReadScopeExists,
   findActiveActorEmployeeTx,
@@ -133,6 +135,10 @@ export interface TaskRefRow {
   projectDepartmentId: string | null;
 }
 
+/** Hậu tố tên người phụ trách đã nghỉ việc (SPEC-10 Q14 = B). Hồ sơ xoá mềm/không có ⇒ null («—»). */
+export const GOAL_OWNER_LEFT_SUFFIX = " (Đã nghỉ)";
+const OWNER_LEFT_STATUSES = new Set(["resigned", "terminated"]);
+
 @Injectable()
 export class GoalsRepository {
   // ── Data-scope EXISTS (lọc TẠI DB, defense-in-depth trên RLS) ─────────────────
@@ -166,6 +172,52 @@ export class GoalsRepository {
   }
 
   // ── Reads ────────────────────────────────────────────────────────────────────
+
+  /**
+   * S20-GOAL-OWNERCHECKIN-1 (Q14 = B) — TÊN HIỂN THỊ người phụ trách theo LÔ (một truy vấn). Chỉ cột
+   * `users.full_name`: KHÔNG email/SĐT/mã NV/trường HR khác. KHÔNG gate `read:employee` — người xem đã
+   * qua cổng `view:goal` + phạm vi đọc của mục tiêu (như `assigneeName` của task). Hồ sơ xoá mềm hoặc
+   * không có ⇒ null («—»); nghỉ việc (resigned/terminated) ⇒ tên + «(Đã nghỉ)». `company_id` ở CẢ hai bảng.
+   */
+  async ownerNamesTx(
+    tx: TenantTx,
+    companyId: string,
+    employeeIds: readonly string[],
+  ): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (employeeIds.length === 0) return out;
+    const rows = await tx
+      .select({
+        employeeId: employeeProfiles.id,
+        fullName: users.fullName,
+        userDeletedAt: users.deletedAt,
+        status: employeeProfiles.status,
+        deletedAt: employeeProfiles.deletedAt,
+      })
+      .from(employeeProfiles)
+      .leftJoin(
+        users,
+        and(eq(users.id, employeeProfiles.userId), eq(users.companyId, employeeProfiles.companyId)),
+      )
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          inArray(employeeProfiles.id, [...employeeIds]),
+        ),
+      );
+    for (const r of rows) {
+      const name = r.fullName?.trim();
+      if (r.deletedAt || r.userDeletedAt || !name) {
+        out.set(r.employeeId, null);
+      } else {
+        out.set(
+          r.employeeId,
+          OWNER_LEFT_STATUSES.has(r.status) ? name + GOAL_OWNER_LEFT_SUFFIX : name,
+        );
+      }
+    }
+    return out;
+  }
 
   /** Điều kiện lọc dùng chung cho list/tree (KHÔNG gồm predicate scope — caller AND thêm). */
   private filterConds(companyId: string, f: GoalListFilter): SQL[] {

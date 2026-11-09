@@ -8,6 +8,7 @@ import { useGoalTreeExpansion, type GoalTreeExpansion } from "../goal-tree-state
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./GoalBadges";
 import { GoalCheckinDialogTrigger } from "./GoalCheckinDialogTrigger";
 import { GoalProgressBar } from "./GoalProgressBar";
+import { GoalCheckinCell, GoalNeedsCheckinBadge } from "./GoalCheckinCell";
 
 interface GoalTreeViewProps {
   nodes: GoalTreeNodeDto[];
@@ -174,6 +175,15 @@ function GoalTreeNode({
             {node.name}
           </span>
           <GoalLevelBadge level={node.level} />
+          <span
+            className="max-w-40 truncate text-xs text-muted-foreground"
+            title={node.ownerName ?? undefined}
+            data-testid={`goal-owner-${node.id}`}
+          >
+            {node.ownerName ?? "—"}
+          </span>
+          <GoalCheckinCell goal={node} />
+          <GoalNeedsCheckinBadge goal={node} />
           <div className="w-40">
             <GoalProgressBar progressPercent={node.progressPercent} compact />
           </div>

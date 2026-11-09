@@ -40,6 +40,7 @@ import {
   type GoalPeriodRange,
 } from "./goal-list-search";
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
+import { GoalCheckinCell, GoalNeedsCheckinBadge } from "./components/GoalCheckinCell";
 import { GoalProgressBar } from "./components/GoalProgressBar";
 import { GoalTreeView } from "./components/GoalTreeView";
 import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
@@ -478,6 +479,25 @@ function useGoalColumns(
           <span className="whitespace-nowrap text-sm text-muted-foreground">
             {formatPeriod(row.original.periodStart, row.original.periodEnd)}
           </span>
+        ),
+      },
+      {
+        id: "owner",
+        header: t("list.columns.owner"),
+        accessorFn: (g) => g.ownerName ?? "",
+        cell: ({ row }) => (
+          <span className="text-sm text-foreground">{row.original.ownerName ?? "—"}</span>
+        ),
+      },
+      {
+        id: "lastCheckin",
+        header: t("list.columns.lastCheckin"),
+        accessorFn: (g) => g.lastCheckinAt ?? "",
+        cell: ({ row }) => (
+          <div className="flex flex-col items-start gap-0.5">
+            <GoalCheckinCell goal={row.original} />
+            <GoalNeedsCheckinBadge goal={row.original} />
+          </div>
         ),
       },
       {

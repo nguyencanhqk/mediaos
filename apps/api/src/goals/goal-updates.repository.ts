@@ -1,7 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, max } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { goalUpdates, type GoalUpdate } from "../db/schema/goals";
+import { users } from "../db/schema/users";
+import type { GoalUpdateRowWithActor } from "./goals.mapper";
 
 /**
  * S5-GOAL-BE-2 — sổ `goal_updates` (DB-11 §6.2 · SPEC-10 §13/§15 GOAL-API-007/008/009).
@@ -50,20 +52,66 @@ export class GoalUpdatesRepository {
     return row;
   }
 
-  /** Lịch sử check-in mới nhất trước (GOAL-API-008). Khớp index `idx_goal_updates_goal`. */
+  /**
+   * Lịch sử check-in mới nhất trước (GOAL-API-008). Khớp index `idx_goal_updates_goal`.
+   * S20-GOAL-OWNERCHECKIN-1 (Q14 = B): LEFT JOIN `users` lấy TÊN HIỂN THỊ người check-in — chỉ cột
+   * `full_name`; tài khoản đã xoá mềm ⇒ null («—»). Người gọi đã qua cổng đọc mục tiêu (view:goal).
+   */
   async listByGoalTx(
     tx: TenantTx,
     companyId: string,
     goalId: string,
     limit: number,
     offset: number,
-  ): Promise<GoalUpdate[]> {
-    return tx
-      .select()
+  ): Promise<GoalUpdateRowWithActor[]> {
+    const rows = await tx
+      .select({
+        update: goalUpdates,
+        actorName: users.fullName,
+        actorDeletedAt: users.deletedAt,
+      })
       .from(goalUpdates)
+      .leftJoin(
+        users,
+        and(eq(users.id, goalUpdates.actorUserId), eq(users.companyId, goalUpdates.companyId)),
+      )
       .where(and(eq(goalUpdates.companyId, companyId), eq(goalUpdates.goalId, goalId)))
       .orderBy(desc(goalUpdates.createdAt))
       .limit(limit)
       .offset(offset);
+    return rows.map((r) => ({
+      ...r.update,
+      actorName: r.actorDeletedAt ? null : (r.actorName ?? null),
+    }));
+  }
+
+  /**
+   * S20-GOAL-OWNERCHECKIN-1 — MAX(created_at) check-in theo LÔ mục tiêu bằng MỘT truy vấn GROUP BY
+   * (không truy vấn từng mục tiêu). Chỉ `update_type=checkin` — chốt/mở lại kỳ không tính là check-in.
+   * Mục tiêu chưa từng check-in vắng khỏi Map. company_id tường minh (BẤT BIẾN #1).
+   */
+  async lastCheckinByGoalIdsTx(
+    tx: TenantTx,
+    companyId: string,
+    goalIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (goalIds.length === 0) return out;
+    const rows = await tx
+      .select({ goalId: goalUpdates.goalId, lastAt: max(goalUpdates.createdAt) })
+      .from(goalUpdates)
+      .where(
+        and(
+          eq(goalUpdates.companyId, companyId),
+          inArray(goalUpdates.goalId, [...goalIds]),
+          eq(goalUpdates.updateType, "checkin"),
+        ),
+      )
+      .groupBy(goalUpdates.goalId);
+    for (const r of rows) {
+      if (r.lastAt === null || r.lastAt === undefined) continue;
+      out.set(r.goalId, new Date(r.lastAt).toISOString());
+    }
+    return out;
   }
 }
