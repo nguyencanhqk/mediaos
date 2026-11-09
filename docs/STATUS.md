@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 07:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 07:08Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -118,6 +118,7 @@
 - `S16-SOCIAL-ATTERRSPLIT-1` `SOCIAL-ERR-007` gộp HAI lỗi khác bản chất — `ATTACHMENT_LIMIT` (vượt trần 10 ảnh / 1 video / 20 MB) và `ATTACHMENT_INVALID` (tệp thiếu · không phải của mình · chưa `Uploaded` · đã link) cùng một mã (`social-errors.ts:30-31`) ⇒ FE chỉ nói được một câu gộp ⏳ cần: S16-SOCIAL-FE-2D
 - `S16-SOCIAL-FEADMINSHARED-1` Dọn thứ dùng chung của cụm quản trị SOCIAL: DoneNotice · useOutcomeFocus · list-states · DialogActions · claimsListRefreshed · invalidatePostSurfaces còn nằm dưới moderation/** dù màn huy hiệu + thống kê cùng dùng; khung chờ SKELETON_ROWS.map 4 bản · helper «lời gọi treo» 2 bản · FIRST_PAGE = 1 4 bản; ba spec PR-A còn khuôn hai fireEvent rời để mutant «bỏ khoá đồng bộ» sống; BadgeSettingsPage() vượt mốc 50 dòng / hàm ⏳ cần: S16-SOCIAL-FEMODINVAL-1
 - `S16-SOCIAL-FECOMMENTA11Y-1` Hàng bình luận: ba nút chữ «Trả lời» · «Xoá» · «Báo cáo» mang CÙNG tên trợ năng ở mọi hàng (bài 20 bình luận = 20 nút «Báo cáo» giống hệt nhau) và hộp thoại «Báo cáo bình luận» không nói đang báo cáo bình luận NÀO — trong khi hộp thoại được thiết kế để sống tiếp khi hàng đã bị gỡ khỏi danh sách; kèm dời khoá i18n `admin.quickLinks.*` về đúng chỗ khi `social.ts` hết bị khoá ⏳ cần: S16-SOCIAL-FE-2D
+- `S16-SOCIAL-FESTALELISTS-CREATEPOST-1` Đăng bài mới làm mới đúng mọi danh sách SOCIAL (tìm kiếm · bài trên hồ sơ) qua cùng helper làm mới danh sách bài ⏳ cần: S16-SOCIAL-FESTALELISTS-1, S16-SOCIAL-FE-2D
 - `S19-FE-SIGNEDTAB-2` Mở tệp qua URL ký — phần còn lại sau SIGNEDTAB-1: 3 nút HR/SYSTEM gọi `window.open(url)` SAU `await` (API > ~5 s + chặn popup ⇒ không tab, không tệp, không báo) (N3) · guard scheme của helper còn nhận `http:` (N11) · CHAT gắn URL ký tạo lúc render vào `<a target=_blank>` (bấm muộn có thể quá TTL — CHƯA đo) ⏳ cần: S16-SOCIAL-FILEOPENUX-1
 - `S19-SEC-SCOPEDENIEDCODE-1` Mã máy `AUTH-ERR-SCOPE-DENIED` cho RECRUIT · PAYROLL · HR (403 sàn scope hôm nay rơi về `AUTH-ERR-FORBIDDEN`) ⏳ cần: S16-SOCIAL-SCOPEDENIEDCODE-1
 - `S16-SOCIAL-STORAGERATCHET-1` Mọi int-spec có thể phát lời gọi storage thật (trực tiếp qua `ObjectStorageService` hoặc qua route mà server đọc/ghi object) đều nằm trong manifest và mở `openStorageTestGate` — ép bằng quy tắc dương, không chỉ dựa vào tripwire của hồ sơ `offline` ⏳ cần: S16-SOCIAL-PDFBATCHLEAK-1
@@ -139,7 +140,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -148,6 +149,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `74011b20` | 2026-11-09 | chore(status): regen sau #672 (S20-NOTI-PRIORITYFILTER-1 phần FE) — Đợt 2 đóng |
 | `08542d18` | 2026-11-09 | fix(notifications): S20-NOTI-PRIORITYFILTER-1 (2/2 FE) — «đánh dấu đã đọc theo bộ lọc» một lời gọi, mốc theo thời điểm server (#672) |
 | `03bad02e` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 2 — 4 WO đóng dấu từ #671 · #668 · #669 · #670 · gieo S20-FE-WAVE2POLISH-1 + S20-NOTI-WSPAYLOAD-1 · regen STATUS + INDEX |
 | `af1520f1` | 2026-11-09 | feat(notifications): S20-NOTI-LIVETOAST-1 — toast realtime thông báo + tin nhắn, «(N)» trên tiêu đề tab, tuỳ chọn toast theo trình duyệt (#670) |
@@ -159,7 +161,6 @@
 | `e2747a7a` | 2026-11-09 | chore(backlog): paths Đợt 2 (kế hoạch 07/11b) — plan một tệp cho BULKACTIONS · LIVETOAST · PRIORITYFILTER; PRIORITYFILTER thêm contracts my-notification + thu test API về *notification* |
 | `43e25b89` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 1b — S19-QA-FETESTNET-1 đóng dấu từ #667 · gieo S19-QA-FETESTNET-2 (lưới cho apps/console) · regen STATUS + INDEX |
 | `d00faa3b` | 2026-11-09 | test(app): S19-QA-FETESTNET-1 — lưới chặn fetch toàn cục cho suite test FE, vá 12 spec lọt mạng (#667) |
-| `fbc295ab` | 2026-11-09 | chore(backlog): S19-LMS-AUTHCENSUS-1 lên PROD (LMS 1dcd1d3) · gieo S19-LMS-MATACCESS-1 + S19-LMS-UPLOADOWNER-1 · regen STATUS + INDEX |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

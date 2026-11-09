@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**743 WO** · có micro-plan: **385/743** · ⬜ 103 chờ · 🔵 2 đang làm · ✅ 637 xong · 🔴 1 chặn
+**744 WO** · có micro-plan: **385/744** · ⬜ 104 chờ · 🔵 2 đang làm · ✅ 637 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -658,6 +658,7 @@
 | `S16-SOCIAL-FEBLOCKSEED-1` | amber | ✅ xong | [📄](S16-SOCIAL-FEBLOCKSEED-1.md) | ✅S16-SOCIAL-BE-2D | Thẻ bài đọc khối BE-2D đã chở: `PollBlock` seed cache `043` từ `post.p |
 | `S16-SOCIAL-FEPOLLRACE-1` | amber | ✅ xong | [📄](S16-SOCIAL-FEPOLLRACE-1.md) | ✅S16-SOCIAL-FEBLOCKSEED-1 | `PollBlock` không huỷ `043` đang bay trước khi bỏ/rút phiếu/đóng bình  |
 | `S16-SOCIAL-FESTALELISTS-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FEBLOCKSEED-1 | `invalidatePostLists` (use-feed-actions) · `useCreatePost` · `IdeaRevi |
+| `S16-SOCIAL-FESTALELISTS-CREATEPOST-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FESTALELISTS-1 ⏳S16-SOCIAL-FE-2D | Đăng bài mới làm mới đúng mọi danh sách SOCIAL (tìm kiếm · bài trên hồ |
 | `S16-SOCIAL-IDEALABEL-1` | amber | ✅ xong | — *(chưa)* | — | Nhãn trạng thái sáng kiến lệch giữa thông báo NOTI-032 (`IDEA_STATUS_L |
 | `S16-SOCIAL-FESEARCHBOUNDS-1` | amber | ✅ xong | — *(chưa)* | — | Tham số URL/ô tìm kiếm của bảng tin không theo biên hợp đồng: `q` > `F |
 | `S16-SOCIAL-FEMODERRMSG-1` | amber | ✅ xong | — *(chưa)* | — | Lỗi kiểm duyệt KHÔNG phải 403 (404 bài đã xoá · 422 · 409) hiện câu ch |
