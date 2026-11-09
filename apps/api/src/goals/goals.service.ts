@@ -77,14 +77,15 @@ export class GoalsService {
     companyId: string,
     rows: readonly Goal[],
   ): Promise<(row: Goal) => GoalIdentityExtra> {
-    const [names, last] = await Promise.all([
-      this.repo.ownerNamesTx(tx, companyId, [...new Set(rows.map((r) => r.ownerEmployeeId))]),
-      this.updates.lastCheckinByGoalIdsTx(
-        tx,
-        companyId,
-        rows.map((r) => r.id),
-      ),
+    // Tuần tự: cùng MỘT kết nối của tx — Promise.all chỉ là giả song song (driver xếp hàng).
+    const names = await this.repo.ownerNamesTx(tx, companyId, [
+      ...new Set(rows.map((r) => r.ownerEmployeeId)),
     ]);
+    const last = await this.updates.lastCheckinByGoalIdsTx(
+      tx,
+      companyId,
+      rows.map((r) => r.id),
+    );
     return (row) => ({
       ownerName: names.get(row.ownerEmployeeId) ?? null,
       lastCheckinAt: last.get(row.id) ?? null,

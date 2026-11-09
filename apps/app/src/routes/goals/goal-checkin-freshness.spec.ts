@@ -53,4 +53,10 @@ describe("goal-checkin-freshness", () => {
   it("định dạng tooltip theo giờ công ty", () => {
     expect(formatCompanyDateTime("2026-11-08T20:30:00Z", TZ)).toBe("09/11/2026 03:30");
   });
+
+  it("khoá lastCheckinAt VẮNG (undefined) = không biết ⇒ KHÔNG cần check-in; null ⇒ rơi về createdAt", () => {
+    const { lastCheckinAt: _omit, ...absent } = base;
+    expect(needsCheckin(absent, NOW, TZ)).toBe(false);
+    expect(needsCheckin({ ...base, lastCheckinAt: null }, NOW, TZ)).toBe(true);
+  });
 });

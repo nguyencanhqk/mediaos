@@ -34,8 +34,9 @@ export function GoalCheckinCell({ goal, now }: { goal: CellGoal; now?: Date }) {
   const tz = companyTimeZone();
   const clock = now ?? new Date();
   const stale = needsCheckin(goal, clock, tz);
+  const unknown = goal.lastCheckinAt === undefined;
   const age = goal.lastCheckinAt ? checkinAgeDays(goal, clock, tz) : null;
-  let label = t("checkinFreshness.never");
+  let label = unknown ? "—" : t("checkinFreshness.never");
   if (age !== null) {
     label = age === 0 ? t("checkinFreshness.today") : t("checkinFreshness.daysAgo", { count: age });
   }
@@ -52,6 +53,9 @@ export function GoalCheckinCell({ goal, now }: { goal: CellGoal; now?: Date }) {
   return (
     <span
       title={title}
+      tabIndex={title ? 0 : undefined}
+      aria-label={title ? `${label} — ${title}` : undefined}
+      role={title ? "group" : undefined}
       data-testid={`goal-lastcheckin-${goal.id}`}
       data-stale={stale ? "true" : undefined}
       className={

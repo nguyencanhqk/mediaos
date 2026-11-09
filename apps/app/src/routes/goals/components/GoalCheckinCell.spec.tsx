@@ -43,4 +43,28 @@ describe("GoalCheckinCell", () => {
     wrap(<GoalNeedsCheckinBadge goal={goal({ progressMode: "children" })} now={NOW} />);
     expect(screen.queryByTestId("goal-needs-checkin-g1")).toBeNull();
   });
+
+  it("tooltip tới được bằng bàn phím: focus được + tên trợ năng chứa ngày giờ", () => {
+    wrap(<GoalCheckinCell goal={goal()} now={NOW} />);
+    const cell = screen.getByTestId("goal-lastcheckin-g1");
+    expect(cell).toHaveAttribute("tabindex", "0");
+    cell.focus();
+    expect(cell).toHaveFocus();
+    expect(cell.getAttribute("aria-label")).toContain("01/11/2026 12:00");
+  });
+
+  it("khoá lastCheckinAt VẮNG (API cũ) ⇒ không «Cần check-in», không «Chưa check-in»", () => {
+    const g = goal();
+    delete (g as { lastCheckinAt?: unknown }).lastCheckinAt;
+    wrap(
+      <>
+        <GoalCheckinCell goal={g as never} now={NOW} />
+        <GoalNeedsCheckinBadge goal={g as never} now={NOW} />
+      </>,
+    );
+    const cell = screen.getByTestId("goal-lastcheckin-g1");
+    expect(cell).not.toHaveAttribute("data-stale");
+    expect(cell).not.toHaveTextContent("Chưa check-in");
+    expect(screen.queryByTestId("goal-needs-checkin-g1")).toBeNull();
+  });
 });

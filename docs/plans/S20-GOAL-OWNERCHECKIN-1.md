@@ -30,3 +30,11 @@ Zone amber · FULL gate. Một đợt, một PR. Không migration (index `idx_go
 - `check.sh --lane-db` đầy đủ + security-reviewer/database-reviewer/silent-failure-hunter: brain chạy trước PR.
 - «(Đã nghỉ)» là hậu tố tiếng Việt do server ghép (DTO chỉ cho phép một chuỗi tên); đa ngôn ngữ ⇒ đổi sang cờ riêng ở WO sau.
 - `companyTimeZone()` hiện trả hằng mặc định (hạ tầng S20-FE-COMPANYTZ-1).
+
+## Sổ vết — vá review (vòng 1)
+1. [LOW security] Phán quyết census `ownerNamesTx` nói sai đường /me ⇒ sửa lời: /me lọc `mineEmployeeId` (token), không `readScopeExists`. Chỉ chữ, không ca test (không đổi hành vi).
+2. [LOW database] Thiếu ca actor đã xoá ⇒ int-spec seed 1 dòng check-in của user xoá mềm, khẳng định `actorName = null` + không lộ tên. Mã đã đúng sẵn nên ca là lưới chống hồi quy (xanh ngay; không thể đỏ trên mã cũ). Ca chéo công ty bỏ: FK/seed chéo tenant không dựng được sạch, JOIN `company_id` đã phủ bằng census.
+3. [LOW database] `identityOf` Promise.all trên một tx ⇒ đổi tuần tự (cùng số truy vấn; `lastcheckin.spec` đếm select vẫn xanh). Hành vi không đổi nên không có ca đỏ.
+4. [LOW a11y] `GoalCheckinCell` thêm `tabIndex=0` + `aria-label` (nhãn + ngày giờ) khi có tooltip; ca test focus + tên trợ năng — ĐỎ trên mã cũ → xanh.
+5. [LOW failure-modes] `checkinAgeDays`: `undefined` = không biết ⇒ không nhãn «Cần check-in», ô hiện «—»; chỉ `null` mới rơi về createdAt. 2 ca (unit + Cell) ĐỎ trên mã cũ → xanh.
+- Chạy: FE goals 24 file/355 xanh; int-spec + test/foundation 57 file/752 xanh (không skip); typecheck api+app, eslint xanh.

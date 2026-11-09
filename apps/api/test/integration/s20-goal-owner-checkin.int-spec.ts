@@ -136,6 +136,7 @@ describe.skipIf(!hasLaneDb)("S20-GOAL-OWNERCHECKIN-1 tên + check-in cuối (DB 
     const strictUser = await mk("strict", "Phạm Chỉ Own");
     const goneUser = await mk("gone", "Võ Đã Nghỉ");
     const delUser = await mk("del", "Hồ Sơ Xoá");
+    const ghostUser = await mk("ghost", "Người Check-in Đã Xoá");
     const headEmp = await seedEmp(A.companyId, headUser);
     const viewerEmp = await seedEmp(A.companyId, viewerUser);
     const strictEmp = await seedEmp(A.companyId, strictUser);
@@ -164,6 +165,8 @@ describe.skipIf(!hasLaneDb)("S20-GOAL-OWNERCHECKIN-1 tên + check-in cuối (DB 
     await seedUpdate(A.companyId, gDept, headUser, "checkin", "2026-10-05T01:00:00Z");
     await seedUpdate(A.companyId, gDept, viewerUser, "checkin", "2026-10-09T01:00:00Z");
     await seedUpdate(A.companyId, gDept, headUser, "finalize", "2026-10-20T01:00:00Z");
+    await seedUpdate(A.companyId, gDept, ghostUser, "checkin", "2026-10-03T01:00:00Z");
+    await direct.query("UPDATE users SET deleted_at=now() WHERE id=$1", [ghostUser]);
     await seedUpdate(A.companyId, gStrict, strictUser, "checkin", "2026-10-07T01:00:00Z");
 
     const bu = await seedUser(direct, B.companyId, `bu@${B.slug}.test`, hash);
@@ -234,9 +237,12 @@ describe.skipIf(!hasLaneDb)("S20-GOAL-OWNERCHECKIN-1 tên + check-in cuối (DB 
     expect(detail.body.data.ownerName).toBe("Trần Trưởng Phòng");
     expect(detail.body.data.lastCheckinAt).toBe("2026-10-09T01:00:00.000Z");
     const ups = await get(tViewer, `/goals/${gDept}/updates`);
-    const rows = (ups.body.data as { updateType: string; actorName: string }[]).map(
+    const rows = (ups.body.data as { updateType: string; actorName: string | null }[]).map(
       (u) => `${u.updateType}:${u.actorName}`,
     );
+    // DENY: người check-in đã xoá mềm ⇒ KHÔNG lộ tên (null)
+    expect(rows).toContain("checkin:null");
+    expect(JSON.stringify(ups.body)).not.toContain("Người Check-in Đã Xoá");
     expect(rows).toContain("checkin:Trần Trưởng Phòng");
     expect(rows).toContain("checkin:Lê Người Xem");
   });

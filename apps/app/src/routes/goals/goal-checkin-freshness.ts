@@ -38,8 +38,13 @@ export function tracksManualCheckin(
   return goal.progressMode === "manual" && goal.status === "Active";
 }
 
-/** Tuổi check-in cuối; chưa từng check-in ⇒ tính từ lúc tạo (mục tiêu mới tạo hôm nay chưa «quá hạn»). */
+/**
+ * Tuổi check-in cuối. `null` tường minh (chưa từng check-in) ⇒ tính từ lúc tạo (mục tiêu mới tạo hôm nay
+ * chưa «quá hạn»). `undefined` (khoá VẮNG: API cũ chưa deploy, phản hồi ghi, mock) = KHÔNG BIẾT ⇒ null,
+ * để không báo «Cần check-in» oan hàng loạt.
+ */
 export function checkinAgeDays(goal: FreshnessFacts, now: Date, timeZone: string): number | null {
+  if (goal.lastCheckinAt === undefined) return null;
   return calendarDaysSince(goal.lastCheckinAt ?? goal.createdAt, now, timeZone);
 }
 
