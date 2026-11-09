@@ -395,9 +395,45 @@ describe.skipIf(!hasLaneDb)(
         expect(await faviconOf()).toBe(same);
       });
 
+      it("kiểu giá trị khác String / giá trị không phải chuỗi ⇒ 400, hàng trong DB không đổi", async () => {
+        await setFavicon("https://seed.test/f.ico");
+        const f = await seedFile(uid("adm"));
+        const rowOf = () =>
+          scalar(
+            `SELECT value_type || '|' || (setting_value #>> '{}') AS v FROM company_settings
+             WHERE company_id = $1 AND setting_key = $2 AND deleted_at IS NULL`,
+            [w.A.companyId, FAVICON_KEY],
+          );
+        const before = await rowOf();
+        const patchJson = (v: unknown) =>
+          w
+            .patch(tok("adm"), `/foundation/company-settings/${FAVICON_KEY}`)
+            .send({ settingValue: v, valueType: "Json" });
+        expect((await patchJson({ fileId: f })).status).toBe(400);
+        expect((await patchJson(f)).status).toBe(400);
+        expect(await rowOf()).toBe(before);
+        expect(await faviconOf()).toBe("https://seed.test/f.ico");
+      });
+
+      it("khoá cấu hình khác vẫn ghi được như cũ qua route chung", async () => {
+        const key = "branding.fp1_other_key";
+        const res = await w
+          .patch(tok("adm"), `/foundation/company-settings/${key}`)
+          .send({ settingValue: "abc", valueType: "String", category: "Branding" });
+        expectOk(res, "khoá khác");
+        const v = await scalar(
+          `SELECT setting_value #>> '{}' AS v FROM company_settings
+           WHERE company_id = $1 AND setting_key = $2 AND deleted_at IS NULL`,
+          [w.A.companyId, key],
+        );
+        expect(v).toBe("abc");
+      });
+
       it("endpoint branding vẫn đặt được favicon bằng mã tệp", async () => {
         const f = await seedFile(uid("adm"));
-        const res = await w.put(tok("adm"), "/foundation/company/branding/favicon").send({ fileId: f });
+        const res = await w
+          .put(tok("adm"), "/foundation/company/branding/favicon")
+          .send({ fileId: f });
         expectOk(res, "PUT branding/favicon");
         expect(await faviconOf()).toBe(f);
       });

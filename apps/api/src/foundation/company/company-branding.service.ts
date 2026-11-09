@@ -48,8 +48,9 @@ interface Actor {
  * LƯU TRỮ (KHÔNG migration):
  *   logo    → `companies.logo_url` (chứa fileId UUID) qua CompanyService.updateCompany ⇒ audit
  *             COMPANY_UPDATED in-tx + assertCompanyActive + withTenant TÁI DÙNG NGUYÊN VẸN.
- *   favicon → `company_settings['branding.favicon_file_id']` qua SettingService.updateCompanySetting ⇒
- *             audit COMPANY_SETTING_UPDATED in-tx.
+ *   favicon → `company_settings['branding.favicon_file_id']` qua lối branding riêng
+ *             SettingService.setBrandingFavicon (route cấu hình chung chỉ nhận rỗng / http(s) / giữ
+ *             giá trị cũ) ⇒ audit COMPANY_SETTING_UPDATED in-tx.
  * Cả hai đường ghi đều đã có audit + withTenant sẵn — service này KHÔNG tự ghi DB thẳng (KHÔNG nhân bản
  * đường audit thứ hai, tránh drift).
  *
