@@ -61,3 +61,8 @@ không phải đụng tệp của hai PR đó.
 - `SocialPortalShell.hr-widget.spec.tsx` còn giữ `fetchMock` riêng vì `observe()` đưa số lời gọi vào object
   so sánh của ca DENY; lưới toàn cục phủ thay được nhưng đổi cấu trúc ca ⇒ để lượt sau (cùng nhóm #580).
 - `apps/auth` giữ BẢN CHÉP của `fetch-net-guard.ts` (không sửa `packages/*`); đổi một nơi phải đổi nơi kia.
+
+## 5. Sổ vết (vá review 09/11)
+
+- [LOW] Lưới bỏ sót lời gọi ngoài cửa sổ beforeEach..afterEach — VÁ: bỏ `reset()` ở `beforeEach`; sổ tích luỹ, `take()` rút ở `afterEach` + thêm `afterAll`; mỗi lời gọi mang nhãn ca LÚC GỌI (`during`). Đỏ→xanh: spec thăm dò tạm (fetch ở `beforeAll` + `afterAll`) XANH trên mã cũ, ĐỎ trên mã mới (cả hai URL bị nêu); thêm ca vĩnh viễn «lời gọi từ beforeAll/giữa ca vẫn nằm trong sổ» ở `fetch-net-guard.spec.ts` (app + auth). Suite app 476/476 vẫn xanh (không còn lọt ngoài cửa sổ cũ). Phép đo `FETCH_GUARD=record` dùng cùng đường ⇒ con số «12 spec lọt» là cận dưới của lượt cũ, lượt đo lại không thêm ca.
+- [LOW] Header `fetch-net-guard.ts` nói cài lưới ở `beforeEach` — VÁ: sửa thành «mức module + afterEach/afterAll», cả bản app và bản chép ở auth; ghi giới hạn nhãn `during` (lời gọi giữa ca mang tên ca vừa xong).

@@ -58,8 +58,22 @@ describe("fetch-net-guard — lưới thật (createFetchNetGuard)", () => {
       "http://a.test/2",
       "http://a.test/3",
     ]);
-    net.reset();
+    expect(net.take()).toHaveLength(3);
     expect(net.calls()).toEqual([]);
+  });
+
+  it("DENY: lời gọi từ beforeAll/giữa ca vẫn nằm trong sổ cho tới khi rút, kèm nhãn ca lúc gọi (không bị xoá ở đầu ca)", async () => {
+    let phase = "beforeAll-giả";
+    const net = createFetchNetGuard(() => phase);
+    await net.guard("http://a.test/early").catch(() => undefined);
+    phase = "ca-sau";
+
+    const drained = net.take();
+
+    expect(drained).toEqual([{ url: "http://a.test/early", during: "beforeAll-giả" }]);
+    expect(evaluateGuard({ testFile: "f", testName: "t", calls: drained, currentFetch: net.guard, isGuard: true, isDeclaredMock: false })[0]).toContain(
+      "[lúc gọi: beforeAll-giả]",
+    );
   });
 });
 
