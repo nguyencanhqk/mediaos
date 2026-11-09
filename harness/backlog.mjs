@@ -25483,6 +25483,7 @@ export const backlog = [
       "docs/plans/S20-GOAL-OWNERCHECKIN-1.md",
       "apps/app/src/routes/goals/goal-checkin-freshness*.ts",
       "apps/app/src/routes/goals/components/GoalCheckinCell*.tsx",
+      "packages/ui/src/components/ui/data-table*.tsx",
       "harness/backlog.mjs",
     ],
     skills: ["security-review", "database-review", "code-review"],
