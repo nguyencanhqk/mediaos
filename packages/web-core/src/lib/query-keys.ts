@@ -1497,13 +1497,8 @@ export const socialKeys = {
    * đòi thêm `manage:feed-post`, nên dữ liệu đó không được nằm dưới `feed.allOf()` mà mọi người có
    * `view:feed` đang đọc. Hệ quả: ẩn/hiện/xoá bài ở nơi khác phải invalidate đích danh khoá này.
    *
-   * ⚠️ HIỆN TRẠNG (S16-SOCIAL-FE-3, gate TS vòng 1 mục TS-04 · gate code vòng 1 mục CODE-02 — CHƯA trả,
-   * CHƯA có Work Order; ca «NỢ ĐÃ BIẾT» ở `moderation/lib/moderation-invalidation.spec.tsx` của apps/app
-   * ghim đúng hiện trạng này, trả nợ thì ca đó phải đổi): màn Kiểm duyệt đã làm
-   * (`moderation-invalidation.ts`); đường menu ⋯ của thẻ bài (`feed/lib/use-feed-actions.ts`,
-   * `invalidatePostLists`) CHƯA invalidate `hiddenPosts()` lẫn `reports.lists()`. Hai query đó `staleTime: 0`
-   * và chỉ mount ở màn Kiểm duyệt nên hôm nay chỉ lộ MỘT nhịp dữ liệu cũ khi quay lại màn (mount lại là
-   * đọc lại). Thêm một nơi mount khác cho hai khoá này thì phải trả nợ trước.
+   * ĐÃ TRẢ NỢ (S16-SOCIAL-FEMODINVAL-1): cả màn Kiểm duyệt lẫn menu ⋯ của thẻ bài (ẩn / xoá) đều làm mới
+   * `hiddenPosts()` + `reports.lists()` qua MỘT nguồn — `apps/app` `feed/lib/post-list-invalidation.ts`.
    */
   moderation: {
     allOf: () => [...rootKeys.social, "moderation"] as const,

@@ -12,19 +12,20 @@
  * pill từ `post.idea` trong cache DANH SÁCH/CHI TIẾT bài ⇒ xét duyệt (thành công, hoặc lỗi — 409 ERR-019
  * = người khác vừa đổi trạng thái) invalidate CẢ các cache đó, không chỉ `ideas.allOf()`. Thiếu ⇒ quay
  * lại `/feed` trong `staleTime` 30s thấy pill cũ. Trên màn 008 chúng không có observer ⇒ chỉ bị đánh dấu,
- * 0 request thừa. (Nợ: `search` · `profilePosts` — cùng khe hở với `invalidatePostLists`.)
+ * 0 request thừa. Tập khoá là MỘT nguồn (`feed/lib/post-list-invalidation.ts`, S16-SOCIAL-FESTALELISTS-1) — gồm cả `search` · `profilePosts`.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button, Dialog } from "@mediaos/ui";
-import { ApiError, socialApi, socialKeys } from "@mediaos/web-core";
+import { ApiError, socialApi } from "@mediaos/web-core";
 import {
   FEED_NOTE_MAX,
   type FeedIdeaItemDto,
   type FeedIdeaReviewTargetDto,
   type ReviewFeedIdeaDto,
 } from "@mediaos/contracts";
+import { invalidatePostLists } from "../feed/lib/post-list-invalidation";
 import { ActionErrorBanner } from "../feed/components/ActionErrorBanner";
 import { ideaReviewTargets, isReviewNoteRequired, isReviewSubmittable } from "./lib/idea-review";
 
@@ -44,12 +45,7 @@ export function IdeaReviewDialog({ idea, onClose }: IdeaReviewDialogProps): Reac
   const [error, setError] = React.useState<{ forbidden: boolean } | null>(null);
 
   /** Màn 008 + mọi cache mà pill trên thẻ bài đọc (docblock đầu file). */
-  const invalidateIdeaViews = (): void => {
-    void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
-    void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
-    void queryClient.invalidateQueries({ queryKey: socialKeys.saved() });
-    void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(idea.postId) });
-  };
+  const invalidateIdeaViews = (): void => invalidatePostLists(queryClient, { postId: idea.postId });
 
   const mutation = useMutation({
     mutationFn: (body: ReviewFeedIdeaDto) => socialApi.reviewIdea(idea.postId, body),

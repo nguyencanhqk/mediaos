@@ -195,10 +195,16 @@ export const socialApi = {
    * tầng 2 (`SOCIAL_MODERATION_FIELD_PAIRS`) ⇒ FE gate mục «Ghim» bằng `manage:feed-news`, **không**
    * bằng `manage:feed-post` (plan §5.2). Gate nhầm ở đây cho ra một mục menu bấm vào là 403.
    */
-  moderatePost: (postId: string, body: ModerateFeedPostDto): Promise<FeedPostDto> =>
+  moderatePost: (
+    postId: string,
+    body: ModerateFeedPostDto,
+    signal?: AbortSignal,
+  ): Promise<FeedPostDto> =>
     apiFetch(`/social/posts/${postId}/moderation`, feedPostSchema, {
       method: "PATCH",
       body: JSON.stringify(body),
+      // Khoá `signal` CHỈ có mặt khi nơi gọi truyền (hạn chờ của `useGuardedMutation`).
+      ...(signal === undefined ? {} : { signal }),
     }),
 
   // ── 007..009 — cờ cá nhân trên bài (view · save) ──────────────────────────────────────────────

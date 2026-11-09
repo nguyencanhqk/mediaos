@@ -336,8 +336,8 @@ describe("UH1 — «Hiện lại»", () => {
     fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
 
     await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(2));
-    expect(moderatePost.mock.calls[0]).toEqual([HIDDEN_POST_ID, { hidden: false }]);
-    expect(moderatePost.mock.calls[1]).toEqual([SECOND_POST_ID, { hidden: false }]);
+    expect(moderatePost.mock.calls[0]?.slice(0, 2)).toEqual([HIDDEN_POST_ID, { hidden: false }]);
+    expect(moderatePost.mock.calls[1]?.slice(0, 2)).toEqual([SECOND_POST_ID, { hidden: false }]);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
@@ -361,7 +361,7 @@ describe("DC1 — bấm đúp «Hiện lại»", () => {
     await settle();
 
     expect(moderatePost).toHaveBeenCalledTimes(1);
-    expect(moderatePost.mock.calls[0]).toEqual([HIDDEN_POST_ID, { hidden: false }]);
+    expect(moderatePost.mock.calls[0]?.slice(0, 2)).toEqual([HIDDEN_POST_ID, { hidden: false }]);
     expect(unhideButtons()[1]).toBeDisabled();
   });
 });
@@ -657,12 +657,12 @@ describe("Lỗi của 006 «Hiện lại»", () => {
     expect(alert).toHaveAttribute("data-reason", "outcomeUnknown");
     expect(alert).toHaveTextContent(OUTCOME_UNKNOWN_TEXT);
     await waitFor(() => expect(listFeed).toHaveBeenCalledTimes(2));
-    expect(moderatePost.mock.calls[0]).toEqual([SECOND_POST_ID, { hidden: false }]);
+    expect(moderatePost.mock.calls[0]?.slice(0, 2)).toEqual([SECOND_POST_ID, { hidden: false }]);
 
     fireEvent.click(within(alert).getByRole("button", { name: RETRY }));
 
     await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(2));
-    expect(moderatePost.mock.calls[1]).toEqual([SECOND_POST_ID, { hidden: false }]);
+    expect(moderatePost.mock.calls[1]?.slice(0, 2)).toEqual([SECOND_POST_ID, { hidden: false }]);
     expect(await screen.findByText(UNHIDDEN)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -760,6 +760,28 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     expect(within(alert).getByRole("button", { name: RETRY })).toBeInTheDocument();
     expect(listFeed).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled();
+  });
+});
+
+describe("«Hiện lại» nối signal (S16-SOCIAL-FEMODINVAL-1)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("006 nhận AbortSignal; quá hạn chờ ⇒ signal bị HUỶ (yêu cầu treo không còn sống)", async () => {
+    moderatePost.mockImplementation(() => new Promise<never>(() => undefined));
+    renderTab();
+    await list();
+    vi.useFakeTimers();
+
+    fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+    await advanceFakeTimers(0);
+    const signal = moderatePost.mock.calls[0]?.[2] as AbortSignal | undefined;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
+
+    await advanceFakeTimers(30_000);
+    expect(signal?.aborted).toBe(true);
   });
 });
 
