@@ -24418,6 +24418,73 @@ export const backlog = [
     ],
   },
   {
+    id: "S20-FE-WAVE2POLISH-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Gọn sau đợt 09/11: nút «Chọn nhanh» ở thanh hàng loạt có tên trợ năng chứa nhãn hiển thị; «đánh dấu đã đọc theo bộ lọc» báo khi không có gì để đánh dấu; toast thông tin dùng biến thể riêng",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/tasks/TaskBulkActionBar*.tsx",
+      "apps/app/src/routes/notifications/NotificationListPageActions*.tsx",
+      "apps/app/src/routes/notifications/NotificationListPage*.tsx",
+      "apps/app/src/hooks/use-notification-realtime*.ts*",
+      "apps/app/src/hooks/use-chat-toast*.ts*",
+      "packages/ui/src/components/ui/toast*.tsx",
+      "apps/app/src/i18n/locales/vi/tasks.ts",
+      "apps/app/src/i18n/locales/vi/notifications.ts",
+      "docs/plans/S20-FE-WAVE2POLISH-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-TASK-BULKACTIONS-1", "S20-NOTI-LIVETOAST-1", "S20-NOTI-PRIORITYFILTER-1"],
+    src: [
+      "Nợ smoke/review đợt 09/11: PR #669 (nút «Chọn nhanh» trong mục Dời hạn: chữ hiển thị «Chọn nhanh» nhưng aria-label «Dời hạn» — WCAG 2.2 SC 2.5.3) · PR #672 (mark-all-read trả updated_count = 0 mà không báo gì) · PR #670 (toast thông báo/tin nhắn đang dùng biến thể success vì packages/ui chưa có info)",
+    ],
+    done_when: [
+      "Nút «Chọn nhanh» (và mọi nút trên thanh hàng loạt) có tên trợ năng CHỨA nhãn hiển thị — test bằng getByRole name + textContent",
+      "«Đánh dấu đã đọc theo bộ lọc» trả updated_count = 0 ⇒ thông báo «Không có thông báo nào khớp bộ lọc để đánh dấu» (không báo thành công rỗng); > 0 ⇒ báo số đã đánh dấu",
+      "packages/ui toast thêm biến thể info (additive, không đổi biến thể cũ); toast thông báo realtime + toast tin nhắn dùng info; test packages/ui + spec hook; chunk-test 5 gói FE xanh",
+    ],
+    notes: [
+      "🟡 Seed 09/11/2026 ở sổ hậu merge Đợt 2 (#669 · #670 · #671 · #668; #672 chờ merge). Nhỏ, chỉ FE, ước 40–80 USD.",
+    ],
+  },
+  {
+    id: "S20-NOTI-WSPAYLOAD-1",
+    module: "NOTI",
+    layer: "FULL",
+    title:
+      "Sự kiện realtime notification:new mang sẵn tiêu đề và đích mở (đã qua cùng lớp DTO/masking như REST) để toast không phải gọi thêm API cho mỗi thông báo",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "packages/contracts/src/notification*.ts",
+      "packages/contracts/src/ws*.ts",
+      "apps/api/src/notifications/**",
+      "apps/api/src/realtime/**",
+      "apps/api/test/**/*notification*",
+      "apps/app/src/hooks/use-notification-realtime*.ts*",
+      "docs/API Design/**",
+      "docs/plans/S20-NOTI-WSPAYLOAD-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-NOTI-LIVETOAST-1"],
+    src: [
+      "Nợ PR #670 (S20-NOTI-LIVETOAST-1): payload WS notification:new là DTO cũ (không title/target_url, type luôn general, refId/refType null) ⇒ mỗi thông báo FE gọi thêm GET /notifications/dropdown",
+    ],
+    done_when: [
+      "wsNotificationEventSchema thêm title + target_url (tuỳ chọn, tương thích ngược) lấy từ CÙNG mapper/masking với REST — không io.emit thẳng row (CLAUDE.md §5 realtime); target_url qua cùng bộ lọc đích an toàn",
+      "FE dùng payload khi có, rơi về gọi dropdown khi thiếu (client cũ/server cũ); test đếm lời gọi API = 0 khi payload đủ",
+      "Int-spec trên LANE_DB: payload không mang trường nhạy cảm của người khác, cross-tenant không nhận sự kiện; bash harness/check.sh xanh",
+    ],
+    notes: [
+      "🟡 Seed 09/11/2026 ở sổ hậu merge Đợt 2. BE + contracts + FE: FE tự lên Pages khi merge, API deploy tay ⇒ FE phải chạy được với server cũ (fallback). Ước 100–160 USD.",
+    ],
+  },
+  {
     id: "S20-NOTI-LISTNAV-1",
     module: "NOTI",
     layer: "FE",
