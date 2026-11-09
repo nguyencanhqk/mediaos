@@ -13,6 +13,7 @@ import { NotificationListFilters } from "./NotificationListPageFilters";
 import { NotificationListMarkRead, NotificationRowLink } from "./NotificationListPageActions";
 import {
   hasActiveNotificationListFilters,
+  listWatermark,
   toNotificationListQuery,
   useNotificationListSearch,
 } from "./notification-list-search";
@@ -159,7 +160,7 @@ export function NotificationListPage() {
         title={t("list.title")}
         description={t("list.description")}
         icon={Bell}
-        actions={<NotificationListMarkRead search={search} items={items} />}
+        actions={<NotificationListMarkRead search={search} watermark={listWatermark(data)} />}
       >
         <NotificationListFilters search={search} onChange={update} />
       </PageHeader>

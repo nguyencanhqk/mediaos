@@ -407,52 +407,42 @@ describe("NotificationListPage — đánh dấu đã đọc theo bộ lọc (S20
     expect(mockMarkAllRead.mock.calls[0]?.[0]).toBeUndefined();
   });
 
-  it("chỉ lọc nguồn ⇒ mark-all-read theo source_module (endpoint hỗ trợ)", async () => {
+  it("chỉ lọc nguồn ⇒ MỘT lời gọi mark-all-read mang source_module + created_before", async () => {
     searchRef.current = { source: "TASK" };
     mockMarkAllRead.mockResolvedValue({});
-    mockList.mockResolvedValue([item({})]);
+    mockList.mockResolvedValue([item({ title: "Việc nguồn" })]);
     renderPage();
+    await screen.findByRole("button", { name: /^Việc nguồn/ });
     fireEvent.click(
       await screen.findByRole("button", { name: "Đánh dấu đã đọc tất cả trong bộ lọc này" }),
     );
 
-    await waitFor(() => expect(mockMarkAllRead).toHaveBeenCalledWith({ source_module: "TASK" }));
+    await waitFor(() => expect(mockMarkAllRead).toHaveBeenCalledTimes(1));
+    const body = mockMarkAllRead.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body.source_module).toBe("TASK");
+    expect(body.priority).toBeUndefined();
+    expect((body.created_before as Date).toISOString()).toBe("2026-07-01T09:00:00.001Z");
     expect(screen.queryByRole("button", { name: "Đánh dấu tất cả đã đọc" })).toBeNull();
   });
 
-  it("có lọc mức ưu tiên ⇒ chỉ đánh dấu các dòng chưa đọc TRONG TRANG (endpoint không lọc priority)", async () => {
+  it("có lọc mức ưu tiên ⇒ MỘT lời gọi mark-all-read mang priority + created_before, KHÔNG gọi từng dòng", async () => {
     searchRef.current = { priority: "High" };
-    mockMarkRead.mockResolvedValue({});
+    mockMarkAllRead.mockResolvedValue({});
     mockList.mockResolvedValue([
       item({ notification_id: "u1", title: "Việc A", priority: "High" }),
-      item({
-        notification_id: "r1",
-        title: "Việc B",
-        priority: "High",
-        status: "Read",
-        is_read: true,
-      }),
       item({ notification_id: "u2", title: "Việc C", priority: "High" }),
     ]);
     renderPage();
-    // Chờ dữ liệu: lúc đang tải nút bị vô hiệu (chưa có dòng nào).
     await screen.findByRole("button", { name: /^Việc C/ });
-    fireEvent.click(await screen.findByRole("button", { name: "Đánh dấu đã đọc trong trang này" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Đánh dấu đã đọc tất cả trong bộ lọc này" }),
+    );
 
-    await waitFor(() => expect(mockMarkRead).toHaveBeenCalledTimes(2));
-    expect(mockMarkRead).toHaveBeenCalledWith("u1");
-    expect(mockMarkRead).toHaveBeenCalledWith("u2");
-    expect(mockMarkAllRead).not.toHaveBeenCalled();
-  });
-
-  it("lọc mức ưu tiên, trang không còn dòng chưa đọc ⇒ nút đánh dấu trong trang bị vô hiệu", async () => {
-    searchRef.current = { priority: "Low" };
-    mockList.mockResolvedValue([
-      item({ title: "Thông báo đã xem", priority: "Low", status: "Read", is_read: true }),
-    ]);
-    renderPage();
-    await screen.findByRole("button", { name: /^Thông báo đã xem/ });
-    const button = await screen.findByRole("button", { name: "Đánh dấu đã đọc trong trang này" });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(mockMarkAllRead).toHaveBeenCalledTimes(1));
+    const body = mockMarkAllRead.mock.calls[0]?.[0] as { priority?: string; created_before: Date };
+    expect(body.priority).toBe("High");
+    // mốc = created_at server mới nhất (+1ms), KHÔNG phải đồng hồ client
+    expect(body.created_before.toISOString()).toBe("2026-07-01T09:00:00.001Z");
+    expect(mockMarkRead).not.toHaveBeenCalled();
   });
 });

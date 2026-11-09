@@ -14,6 +14,7 @@ import { useCallback, useMemo } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   myNotificationPrioritySchema,
+  type MarkAllNotificationsReadRequest,
   type MyNotificationListQuery,
   type MyNotificationPriority,
 } from "@mediaos/contracts";
@@ -117,18 +118,42 @@ export function clearNotificationListFilters(prev: SearchRecord): SearchRecord {
 }
 
 /**
- * Phạm vi «đánh dấu đã đọc» theo khả năng của `POST /notifications/mark-all-read`
- * (`markAllNotificationsReadRequestSchema` nhận `source_module`, KHÔNG nhận `priority`):
+ * Phạm vi «đánh dấu đã đọc» (S20-NOTI-PRIORITYFILTER-1): `POST /notifications/mark-all-read` nhận cả
+ * `source_module` lẫn `priority` (+ `created_before`) ⇒ mọi bộ lọc đều đánh dấu được trong MỘT lời gọi.
  *  - `all`    — không lọc nguồn/mức: đánh dấu mọi thông báo chưa đọc (như cũ).
- *  - `filter` — chỉ lọc nguồn: endpoint lọc đúng bộ lọc này.
- *  - `page`   — có lọc mức ưu tiên: endpoint không lọc được ⇒ chỉ các dòng chưa đọc trong trang.
+ *  - `filter` — có lọc nguồn và/hoặc mức: gửi đúng bộ lọc (`notificationMarkAllBody`).
  * `status` không đổi phạm vi: endpoint vốn chỉ đổi thông báo đang chưa đọc.
  */
-export type NotificationMarkAllScope = "all" | "filter" | "page";
+export type NotificationMarkAllScope = "all" | "filter";
 
 export function notificationMarkAllScope(search: NotificationListSearch): NotificationMarkAllScope {
-  if (search.priority) return "page";
-  return search.source ? "filter" : "all";
+  return search.source || search.priority ? "filter" : "all";
+}
+
+/**
+ * Mốc «đã thấy» lấy từ SERVER: `created_at` mới nhất của các dòng đang hiện (+1ms vì ISO cắt về mili-giây
+ * còn cột DB có micro-giây, `created_before` so `<=` ⇒ không cộng thì dòng mới nhất bị bỏ sót). Không
+ * dùng đồng hồ client (lệch đồng hồ ⇒ dòng đang thấy vẫn Unread / dòng đến sau bị đánh dấu nhầm).
+ * Danh sách rỗng hoặc ngày rác ⇒ null (nút bị khoá).
+ */
+export function listWatermark(items: readonly { created_at: string }[] | undefined): Date | null {
+  const times = (items ?? []).map((i) => Date.parse(i.created_at)).filter(Number.isFinite);
+  return times.length > 0 ? new Date(Math.max(...times) + 1) : null;
+}
+
+/**
+ * Body mark-all-read theo bộ lọc URL. `createdBefore` = `listWatermark` (mốc theo đồng hồ SERVER): thông
+ * báo đến SAU mốc (chưa hiện cho người dùng) không bị đánh dấu nhầm.
+ */
+export function notificationMarkAllBody(
+  search: NotificationListSearch,
+  createdBefore: Date,
+): MarkAllNotificationsReadRequest {
+  return {
+    ...(search.source ? { source_module: search.source } : {}),
+    ...(search.priority ? { priority: search.priority } : {}),
+    created_before: createdBefore,
+  };
 }
 
 /**
