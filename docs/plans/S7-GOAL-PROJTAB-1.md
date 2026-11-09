@@ -193,3 +193,41 @@ dự án. Giá trị từ URL là **gợi ý, không phải quyền** — server
 - **Không** thêm chế độ đo mới, không đụng engine tính %.
 - **Không** cho tạo/sửa mục tiêu cấp phòng ban từ trong tab dự án (sai ngữ cảnh sở hữu).
 - **Không** phân rã template từ tab này (đã có `GOAL-SCREEN-004`).
+
+---
+
+## Lát A — 08/11/2026
+
+> Cập nhật: §2–§5 ở trên là bản 08/01 và đã **CŨ** ở các điểm dưới. Lát B (endpoint `project-coverage`,
+> khối 2, «Gắn việc») tách sang `S7-GOAL-PROJTAB-2`. Lát A chỉ FE, KHÔNG endpoint/contract/web-core.
+
+**Quyết định**
+- Tab `goals` thêm CUỐI `PROJECT_WORKSPACE_TABS` (`?tab=goals`); `ProjectGoalsTab.tsx` gọi `goalApi.listGoals({projectId, limit})` = `GET /goals?projectId=` sẵn có.
+- Thiếu `view:goal` ⇒ **ẨN tab** (lọc trong `visibleTabs`), theo story 23/10 (US-GOAL-QL-10) — **thay** vế «EmptyState forbidden» của §5 cũ. `?tab=goals` khi thiếu quyền ⇒ rơi về Tổng quan, tab không mount ⇒ 0 lời gọi /goals (tab còn tự gate `useCan` lần hai).
+- Mỗi dòng: mã · tên · trạng thái · «đã chốt kỳ» · `GoalProgressBar` (null = «chưa đo», không vẽ 0%) · người phụ trách · kỳ. Tên người phụ trách tra danh bạ chỉ khi có `read:employee`, không thì «—» (DTO chỉ có UUID; không N request).
+- Rỗng + `create:goal` (PermissionGate) ⇒ «Tạo mục tiêu dự án» → `/goals/new?level=project&projectId=` (prefill của S20-GOAL-LISTURL-1, route đã có `validateGoalFormPrefill` — chỉ kiểm, không dựng lại). Nút cũng có ở đầu danh sách khi đã có mục tiêu.
+- Lỗi API ⇒ EmptyState + «Thử lại»; các tab khác không bị ảnh hưởng (query nằm trong tab).
+- Thứ tự tab đã lưu cũ (7 tab): `sanitizeWorkspaceTabOrder` nối `goals` vào đuôi — có test.
+- i18n: nhãn tab = 1 dòng ở `vi/tasks.ts`; còn lại `vi/goals.ts` khối `projectTab`.
+
+**done_when → test**
+| Tiêu chí | Test |
+| --- | --- |
+| `goals` ∈ tab, deep-link, thứ tự cũ | `workspace-constants.spec.ts` (3 ca mới) · `ProjectDetailPage.spec.tsx` «tab Mục tiêu» |
+| 2 mục tiêu kèm tiến độ/trạng thái/phụ trách | `ProjectGoalsTab.spec.tsx` |
+| Rỗng + create:goal ⇒ prefill; thiếu create ⇒ không nút | `ProjectGoalsTab.spec.tsx` |
+| Thiếu view:goal ⇒ ẩn tab, `?tab=goals` về mặc định, 0 gọi | `ProjectDetailPage.spec.tsx` + `ProjectGoalsTab.spec.tsx` |
+| API lỗi + Thử lại | `ProjectGoalsTab.spec.tsx` |
+
+**Nợ**: `bash harness/check.sh` toàn bộ chưa chạy ở bước này (chỉ spec đã chạm + typecheck + eslint). Khối «Gắn việc», số việc theo mục tiêu → lát B.
+
+Sổ vết KPI: (điền sau)
+
+**Sổ vết vá review (08/11)**
+- [LOW] Cắt im lặng ở 200 mục tiêu: listGoals trả mảng trần, không tổng ⇒ giữ trần, nay hiện dòng «Chỉ hiển thị 200 mục tiêu đầu tiên» khi đủ trần (testid project-goals-truncated); phân trang thật để lát B (project-coverage).
+- [LOW] Tên owner ngoài trang 100 nhân viên: bỏ lọc status=active (owner đã nghỉ có tên) + tra thêm theo id (getEmployee, trần 20) cho owner không có trong trang; vẫn chỉ khi read:employee.
+- [LOW] Loading skeleton: role=status + aria-busy + span sr-only (i18n projectTab.loading).
+
+**Sổ vết vá vòng 2 (08/11)**
+- [LOW] Request thừa danh bạ: `GET /hr/employees` chỉ bật khi `/goals` thành công VÀ có ≥1 mục tiêu (`isSuccess && goals.length>0`); ca test đếm lời gọi (rỗng · lỗi · có mục tiêu = 1 lần).
+- [cặp quyền] Chọn phương án MỘT: tab hiện khi có ĐỦ `view:goal` + `access:goal` (router.tsx: `goal.new` · `goal.detail` đều `requiredAnyPermissions:["access:goal"]`). Lý do: cổng của màn phải khớp cổng đường đích; ẩn cả tab gọn hơn để lại tab xem được mà mọi liên kết rơi vào «không có quyền». Nút tạo vẫn gate thêm `create:goal`. Ca test: view+create thiếu access ⇒ ẩn tab + `?tab=goals` về Tổng quan + 0 gọi; access thiếu view ⇒ ẩn.

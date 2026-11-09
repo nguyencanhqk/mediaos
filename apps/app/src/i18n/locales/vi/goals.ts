@@ -54,6 +54,23 @@ export default {
 
   finalizedBadge: "Đã chốt kỳ",
 
+  // S7-GOAL-PROJTAB-1 — tab «Mục tiêu» của workspace dự án (lát A).
+  projectTab: {
+    heading: "Mục tiêu của dự án ({{count}})",
+    create: "Tạo mục tiêu dự án",
+    owner: "Phụ trách",
+    loading: "Đang tải mục tiêu của dự án…",
+    truncated: "Chỉ hiển thị {{count}} mục tiêu đầu tiên của dự án.",
+    empty: {
+      title: "Dự án chưa có mục tiêu",
+      description: "Chưa có mục tiêu cấp dự án nào gắn với dự án này.",
+    },
+    error: {
+      title: "Không tải được mục tiêu của dự án",
+      description: "Đã có lỗi khi tải danh sách mục tiêu. Các tab khác vẫn dùng được.",
+    },
+  },
+
   list: {
     create: "Tạo mục tiêu",
     // S20-GOAL-DECOMPOSE-1 — lối vào danh mục việc mẫu (gate manage:task-template).

@@ -95,6 +95,7 @@ export default {
         activity: "Hoạt động",
         members: "Thành viên",
         settings: "Cài đặt",
+        goals: "Mục tiêu",
       },
       fields: {
         code: "Mã dự án",

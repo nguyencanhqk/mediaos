@@ -26,6 +26,9 @@ export const PROJECT_WORKSPACE_TABS = [
   "activity",
   "members",
   "settings",
+  // S7-GOAL-PROJTAB-1 — tab «Mục tiêu»: THÊM CUỐI (sanitizeWorkspaceTabOrder nối vào đuôi thứ tự cũ);
+  // ẩn khi thiếu view:goal (ProjectDetailPage).
+  "goals",
 ] as const;
 export type ProjectWorkspaceTab = (typeof PROJECT_WORKSPACE_TABS)[number];
 

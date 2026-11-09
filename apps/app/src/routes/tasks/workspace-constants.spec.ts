@@ -77,7 +77,19 @@ describe("sanitizeWorkspaceTabOrder", () => {
       "report",
       "activity",
       "members",
+      "goals",
     ]);
+  });
+
+  it("thứ tự đã lưu từ trước khi có tab Mục tiêu ⇒ goals nối CUỐI, thứ tự cũ giữ nguyên", () => {
+    const legacy = ["members", "overview", "board", "list", "report", "activity", "settings"];
+    expect(sanitizeWorkspaceTabOrder(legacy)).toEqual([...legacy, "goals"]);
+  });
+
+  it("?tab=goals là deep-link hợp lệ", () => {
+    expect(parseWorkspaceTab("goals")).toBe("goals");
+    expect(parseWorkspaceTabParam("goals")).toBe("goals");
+    expect(validateProjectWorkspaceSearch({ tab: "goals" })).toEqual({ tab: "goals" });
   });
 
   it("không phải mảng (storage hỏng/null) → thứ tự mặc định", () => {
