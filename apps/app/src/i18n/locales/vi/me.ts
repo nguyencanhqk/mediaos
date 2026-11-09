@@ -137,6 +137,16 @@ export default {
     viewAll: "Xem tất cả thông báo",
   },
   notificationPreferencesPage: {
+    // S20-NOTI-LIVETOAST-1 — 3 tuỳ chọn toast, lưu trên trình duyệt này (localStorage theo userId).
+    toastPrefs: {
+      title: "Toast trên trình duyệt này",
+      browserOnly: "Chỉ áp dụng trên trình duyệt này, không đồng bộ sang thiết bị khác.",
+      notifications: "Hiện toast thông báo",
+      messages: "Toast tin nhắn",
+      preview: "Xem trước nội dung",
+      previewHint:
+        "Tắt: toast tin nhắn chỉ hiện tên người gửi và tên phòng, không hiện nội dung tin.",
+    },
     title: "Tuỳ chọn thông báo",
     description: "Bật/tắt loại thông báo bạn muốn nhận theo từng kênh.",
     error: {

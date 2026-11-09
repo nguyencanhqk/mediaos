@@ -54,6 +54,18 @@ vi.mock("@/hooks/use-branding", () => ({ useBrandingQuery: () => ({ data: undefi
 const useChatRealtimeMock = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/use-chat-realtime", () => ({ useChatRealtime: useChatRealtimeMock }));
 
+// S20-NOTI-LIVETOAST-1 — ba hook báo tức thì có spec riêng; ở đây chỉ khoá: shell mount MỖI hook đúng một lần.
+const liveHooks = vi.hoisted(() => ({
+  notification: vi.fn(),
+  chatToast: vi.fn(),
+  title: vi.fn(),
+}));
+vi.mock("@/hooks/use-notification-realtime", () => ({
+  useNotificationRealtime: liveHooks.notification,
+}));
+vi.mock("@/hooks/use-chat-toast", () => ({ useChatToast: liveHooks.chatToast }));
+vi.mock("@/hooks/use-unread-title", () => ({ useUnreadTitle: liveHooks.title }));
+
 function setUser(mustSetupTwoFactor: boolean) {
   useAuthStore.setState({
     isAuthenticated: true,
@@ -145,6 +157,22 @@ describe("ProtectedShell — nối hạ tầng realtime CHAT (S7-CHAT-FE-1)", ()
     setUser(true);
     renderShell("/home");
     expect(useChatRealtimeMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ProtectedShell — báo tức thì ở mọi trang (S20-NOTI-LIVETOAST-1)", () => {
+  afterEach(() => {
+    cleanup();
+    useAuthStore.setState({ isAuthenticated: false, user: null, mustSetupTwoFactor: false });
+  });
+
+  it("shell mount ⇒ mỗi hook (thông báo · toast tin · tiêu đề tab) chạy ĐÚNG 1 lần", () => {
+    for (const h of Object.values(liveHooks)) h.mockClear();
+    setUser(false);
+    renderShell("/home");
+    expect(liveHooks.notification).toHaveBeenCalledTimes(1);
+    expect(liveHooks.chatToast).toHaveBeenCalledTimes(1);
+    expect(liveHooks.title).toHaveBeenCalledTimes(1);
   });
 });
 

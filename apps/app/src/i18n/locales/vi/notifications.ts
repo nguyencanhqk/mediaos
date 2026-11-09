@@ -6,6 +6,18 @@
  * File này CHỈ thêm khoá MỚI (list/detail/badge/dropdown/actions/status/priority) — KHÔNG đụng khoá cũ.
  */
 export default {
+  // S20-NOTI-LIVETOAST-1 — toast realtime (thông báo + tin nhắn). Khối riêng, KHÔNG đặt trong chat.ts.
+  toast: {
+    open: "Mở",
+  },
+  liveToast: {
+    reply: "Trả lời",
+    unknownSender: "Một đồng nghiệp",
+    unknownRoom: "một cuộc trò chuyện",
+    direct: "{{sender}} vừa nhắn cho bạn",
+    mention: "{{sender}} nhắc bạn trong {{room}}",
+    multi: "{{count}} tin nhắn mới từ {{sender}}",
+  },
   badge: {
     ariaLabel: "Thông báo",
     loadError: "Không thể tải số thông báo chưa đọc",

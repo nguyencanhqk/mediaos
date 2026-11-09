@@ -6,15 +6,14 @@ import { Bell } from "lucide-react";
 import { myNotificationApi, notificationKeys, useCan } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
 import { NotificationDropdown } from "./NotificationDropdown";
+import { useUnreadPollInterval } from "@/hooks/use-notification-realtime-state";
 import { NOTI_ENGINE_PAIRS, NOTI_PATHS } from "@/routes/notifications/constants";
-
-const UNREAD_COUNT_POLL_INTERVAL_MS = 30_000;
 
 /**
  * NotificationBadge — S4-FE-NOTI-1. Chuông header dùng cho apps/app (mirror @mediaos/ui NotificationBell
  * nhưng gọi ĐÚNG route THẬT S4-NOTI-BE-1 — file cũ đã broken sau khi route legacy bị gỡ, xem ghi chú
  * blocker). Dùng GET /notifications/unread-count (NOTI-API-003, partial index) — KHÔNG gọi list() chỉ để
- * đếm. Poll {@link UNREAD_COUNT_POLL_INTERVAL_MS} để badge tự cập nhật khi có thông báo mới.
+ * đếm. Poll 120 giây khi socket nối (realtime đẩy số mới), 30 giây khi socket mất (S20-NOTI-LIVETOAST-1).
  *
  * Gate = read:notification (Own) — mirror route-level `NOTI.NOTIFICATION.VIEW_OWN` (đã map
  * PERMISSION_CODE_TO_PAIR → "read:notification"); thiếu quyền ⇒ ẩn HOÀN TOÀN (KHÔNG hiện chuông rỗng).
@@ -26,11 +25,12 @@ export function NotificationBadge() {
   const ref = useRef<HTMLDivElement>(null);
   const canRead = useCan(NOTI_ENGINE_PAIRS.READ.action, NOTI_ENGINE_PAIRS.READ.resourceType);
 
+  const pollMs = useUnreadPollInterval();
   const { data, isError } = useQuery({
     queryKey: notificationKeys.unreadCount(),
     queryFn: () => myNotificationApi.unreadCount(),
     enabled: canRead,
-    refetchInterval: UNREAD_COUNT_POLL_INTERVAL_MS,
+    refetchInterval: pollMs,
   });
 
   useEffect(() => {
