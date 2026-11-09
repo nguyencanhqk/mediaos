@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { UpdateCompanySettingsRequest } from '@mediaos/contracts';
 import { assertValidTimezone } from '../common/tz.util';
 import { AuditService } from '../events/audit.service';
+import { resolveProfileLogoWrite } from '../foundation/company/company-logo-ref';
 import { SettingsRepository } from './settings.repository';
 
 @Injectable()
@@ -30,7 +31,6 @@ export class SettingsService {
     const rows = await this.repo.updateCompanySettings(
       companyId,
       {
-        logoUrl: dto.logoUrl,
         timezone: dto.timezone,
         currency: dto.currency,
         language: dto.language,
@@ -53,6 +53,11 @@ export class SettingsService {
         website: dto.website,
       },
       { audit: this.audit, actorUserId },
+      // Logo: chỉ rỗng / http(s) / giữ giá trị hiện có; fileId chỉ qua endpoint branding.
+      (before) => {
+        const decision = resolveProfileLogoWrite(before.logoUrl, dto.logoUrl);
+        return decision.write ? { logoUrl: decision.value } : {};
+      },
     );
 
     if (!rows[0]) throw new NotFoundException('Company not found');

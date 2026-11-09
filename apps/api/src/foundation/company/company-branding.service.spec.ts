@@ -18,7 +18,7 @@ import { CompanyBrandingService } from "./company-branding.service";
  *   - confirm/set: owner-check (IDOR) + state Uploaded + MIME THẬT chạy TRƯỚC mọi side-effect.
  *   - getBranding: FAIL-SOFT narrow-by-type (Forbidden/NotFound/Conflict → null); lỗi hạ tầng KHÁC propagate.
  *   - logo dạng URL cũ (không phải UUID) → source='external', KHÔNG gọi presign (tương thích ngược).
- *   - đường ghi: logo qua CompanyService.updateCompany · favicon qua SettingService.updateCompanySetting
+ *   - đường ghi: logo qua CompanyService.setBrandingLogo · favicon qua SettingService.updateCompanySetting
  *     (audit in-tx tái dùng — service KHÔNG tự mở đường audit thứ hai).
  * Deny-path HTTP thật (403 thiếu update:foundation-company, cross-tenant) ở int-spec (DB cô lập).
  */
@@ -101,7 +101,7 @@ function makeService(over: Partial<Deps> = {}): { svc: CompanyBrandingService; d
     resolveSetting: deps.resolveSetting,
     updateCompanySetting: deps.updateCompanySetting,
   };
-  const company = { getCurrent: deps.getCurrent, updateCompany: deps.updateCompany };
+  const company = { getCurrent: deps.getCurrent, setBrandingLogo: deps.updateCompany };
 
   const svc = new CompanyBrandingService(
     db as never,
@@ -240,10 +240,10 @@ describe("CompanyBrandingService — guard sở hữu/trạng thái (IDOR)", () 
 });
 
 describe("CompanyBrandingService — setAsset ghi qua service có audit sẵn", () => {
-  it("logo → CompanyService.updateCompany({logoUrl:fileId}) (audit COMPANY_UPDATED tái dùng)", async () => {
+  it("logo → CompanyService.setBrandingLogo(fileId) (audit COMPANY_UPDATED tái dùng)", async () => {
     const { svc, deps } = makeService();
     const asset = await svc.setAsset(ACTOR, "logo", FILE_ID);
-    expect(deps.updateCompany).toHaveBeenCalledWith(ACTOR, { logoUrl: FILE_ID });
+    expect(deps.updateCompany).toHaveBeenCalledWith(ACTOR, FILE_ID);
     expect(deps.updateCompanySetting).not.toHaveBeenCalled();
     expect(asset).toMatchObject({ source: "file", fileId: FILE_ID });
   });
@@ -298,7 +298,7 @@ describe("CompanyBrandingService — setAsset ghi qua service có audit sẵn", 
   it("removeAsset idempotent: chưa đặt gì vẫn xoá con trỏ, không ném", async () => {
     const { svc, deps } = makeService();
     await expect(svc.removeAsset(ACTOR, "logo")).resolves.toBeUndefined();
-    expect(deps.updateCompany).toHaveBeenCalledWith(ACTOR, { logoUrl: null });
+    expect(deps.updateCompany).toHaveBeenCalledWith(ACTOR, null);
   });
 });
 

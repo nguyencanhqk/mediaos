@@ -54,6 +54,7 @@ export const listContractsQuerySchema = z.object({
 export type ListContractsQuery = z.infer<typeof listContractsQuerySchema>;
 
 // ── Create / Update ──────────────────────────────────────────────────────────────
+// Tệp hợp đồng KHÔNG nằm trong DTO tạo/sửa: chỉ gắn qua `POST /hr/contracts/:id/file` (lõi gắn tệp).
 
 export const createContractSchema = z.object({
   employeeId: idSchema,
@@ -65,7 +66,6 @@ export const createContractSchema = z.object({
   signedDate: isoDate.optional(),
   status: contractStatusEnum.optional(),
   isPrimary: z.boolean().optional(),
-  fileId: idSchema.optional(),
   note: z.string().max(2000).optional(),
 });
 export type CreateContractRequest = z.infer<typeof createContractSchema>;
@@ -79,7 +79,6 @@ export const updateContractSchema = z.object({
   signedDate: isoDate.nullable().optional(),
   status: contractStatusEnum.optional(),
   isPrimary: z.boolean().optional(),
-  fileId: idSchema.nullable().optional(),
   note: z.string().max(2000).nullable().optional(),
 });
 export type UpdateContractRequest = z.infer<typeof updateContractSchema>;

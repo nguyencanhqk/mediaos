@@ -18,6 +18,12 @@ import type {
   RejectAdjustmentRequest,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
+import { FileService } from "../foundation/files/files.service";
+import {
+  assertRecheckOk,
+  decidePointerFile,
+} from "../foundation/files/file-pointer-guard";
+import type { FileAccessContext } from "../foundation/files/file-access-decision";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
@@ -116,6 +122,7 @@ export class AttendanceAdjustmentService {
     private readonly hrTasks: HrTasksService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly files: FileService,
   ) {}
 
   /** The append-only event sinks bundled for the extracted emitter helpers (attendance-adjustment.apply). */
@@ -142,6 +149,10 @@ export class AttendanceAdjustmentService {
         this.mapError(err, "createRequest.authz", { companyId: actor.companyId }),
       );
 
+    // Người nộp phải xem được tệp đính kèm (cùng quyết định với GET /foundation/files/:id) — SAU Phase 1
+    // (lỗi quyền/kỳ của ATT giữ thứ tự) và TRƯỚC khi cấp mã: từ chối KHÔNG đốt mã.
+    const decided = await this.decideAttachment(actor, dto);
+
     // Phase 2 — cấp task_code Ở TX RIÊNG (mirror TaskCoreService.createTask): counter FOR UPDATE serialize
     // (0 dup) rồi COMMIT ngay, KHÔNG giữ lock suốt business tx dài. allocateTaskCodeBeforeTx map Inactive→409
     // (TASK-ERR-CODE-COUNTER-INACTIVE) fail-loud ⇒ KHÔNG tạo task task_code=NULL câm, KHÔNG 500 raw. mapError
@@ -160,6 +171,15 @@ export class AttendanceAdjustmentService {
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         await this.assertPeriodOpenForDate(actor.companyId, dto.workDate, tx);
+        if (decided && dto.attachmentFileId) {
+          const checked = await this.files.recheckLinkerViewTx(
+            actor.companyId,
+            dto.attachmentFileId,
+            decided,
+            tx,
+          );
+          assertRecheckOk(checked);
+        }
         const task = await this.hrTasks.createApprovalTaskTx(tx, actor.companyId, {
           title: `Duyệt điều chỉnh công ${dto.workDate}`,
           assigneeUserId: null,
@@ -179,6 +199,18 @@ export class AttendanceAdjustmentService {
         return this.loadDetailTx(actor.companyId, row.id, tx);
       })
       .catch((err: unknown) => this.mapConflict(err, "createRequest", actor, dto.workDate));
+  }
+
+  /** Quyết định xem tệp đính kèm của người nộp (null khi không đính kèm). */
+  private async decideAttachment(
+    actor: Actor,
+    dto: CreateAdjustmentRequest,
+  ): Promise<FileAccessContext | null> {
+    if (!dto.attachmentFileId) return null;
+    return decidePointerFile(this.files, actor, dto.attachmentFileId, {
+      moduleCode: "ATT",
+      entityType: "attendance_adjustment_request",
+    });
   }
 
   /** Insert the Pending request row + its up-front (is_applied=false) proposal ledger entries. */

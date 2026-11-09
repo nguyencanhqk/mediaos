@@ -52,6 +52,11 @@ const CONTRACT_RESOURCE = "contract";
  * tree), hr/company-admin → Company (unchanged, mig 0462). `manage:contract` stays Company-only (no
  * Own/Team grant seeded) — employee/manager CANNOT create/update/delete/link-file (still 403).
  */
+/** Mọi trường đều `undefined` ⇒ không có gì để ghi. */
+function isEmptyPatch(patch: ContractPatch): boolean {
+  return Object.values(patch).every((v) => v === undefined);
+}
+
 @Injectable()
 export class ContractService {
   constructor(
@@ -174,7 +179,7 @@ export class ContractService {
           signedDate: dto.signedDate ?? null,
           status,
           isPrimary: dto.isPrimary ?? false,
-          fileId: dto.fileId ?? null,
+          fileId: null,
           note: dto.note ?? null,
         });
         if (!created) throw new Error("Failed to create contract");
@@ -233,9 +238,13 @@ export class ContractService {
           signedDate: dto.signedDate,
           status: dto.status,
           isPrimary: dto.isPrimary,
-          fileId: dto.fileId,
           note: dto.note,
         };
+        // Patch rỗng ⇒ không ghi, không audit (trả bản hiện tại).
+        if (isEmptyPatch(patch)) {
+          const ms = await this.resolveExpiringMilestones(user.companyId);
+          return this.toDto(before, Math.max(...ms));
+        }
         const after = await this.repo.updateTx(tx, user.companyId, id, user.id, patch);
         if (!after) throw new NotFoundException("Contract not found");
 
