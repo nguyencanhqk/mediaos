@@ -966,4 +966,39 @@ export default {
       },
     },
   },
+  // S20-TASK-BULKACTIONS-1 (US-TASK-QL-03) — chọn nhiều việc + thanh hành động hàng loạt.
+  bulk: {
+    barLabel: "Thao tác hàng loạt trên các việc đã chọn",
+    selectRow: "Chọn việc {{title}}",
+    selectAll: "Chọn tất cả việc đang hiện",
+    selected: "Đã chọn {{count}} việc",
+    actions: {
+      assign: "Giao cho…",
+      deadline: "Dời hạn",
+      status: "Đổi trạng thái",
+      moveState: "Chuyển cột",
+    },
+    confirm: {
+      assign: "Giao {{count}} việc cho {{name}}",
+      deadline: "Dời hạn {{count}} việc sang {{when}}",
+      status: "Đổi {{count}} việc sang «{{status}}»",
+      moveState: "Chuyển {{count}} việc sang cột «{{name}}»",
+    },
+    confirmButton: "Xác nhận",
+    cancel: "Huỷ",
+    clear: "Bỏ chọn tất cả",
+    overLimit:
+      "Mỗi lần chỉ làm được tối đa {{max}} việc — bạn đang chọn {{count}}. Hãy bỏ bớt việc đã chọn.",
+    result: {
+      allOk: "Đã thực hiện cho {{count}} việc",
+      partial: "{{ok}}/{{total}} thành công",
+      allFailed: "Không thực hiện được cho cả {{total}} việc",
+      rowFailed: "Không thực hiện được",
+    },
+    warnings: {
+      onLeaveNamed: "{{count}} việc: {{name}} đang nghỉ phép",
+      onLeave: "{{count}} việc: người thực hiện có đơn nghỉ phép trùng hạn mới",
+      notMember: "{{count}} việc: người nhận không phải thành viên dự án",
+    },
+  },
 };

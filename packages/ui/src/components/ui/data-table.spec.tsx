@@ -1,6 +1,7 @@
+import * as React from "react";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { DataTable } from "./data-table";
 
 /**
@@ -240,5 +241,70 @@ describe("DataTable — ghim cột + footer (v1.1)", () => {
     );
     expect(screen.queryByLabelText("Trang sau")).not.toBeInTheDocument();
     expect(screen.getByText("footer riêng")).toBeInTheDocument();
+  });
+});
+
+describe("DataTable — rowSelection (S20-TASK-BULKACTIONS-1)", () => {
+  function Harness({
+    onRowClick,
+    initial = {},
+  }: {
+    onRowClick?: (row: Row) => void;
+    initial?: RowSelectionState;
+  }) {
+    const [state, setState] = React.useState<RowSelectionState>(initial);
+    return (
+      <>
+        <output data-testid="selected">{Object.keys(state).filter((k) => state[k]).join(",")}</output>
+        <DataTable
+          columns={columns}
+          data={data}
+          onRowClick={onRowClick}
+          rowSelection={{
+            state,
+            onChange: setState,
+            getRowId: (r) => r.id,
+            selectAllLabel: "Chọn tất cả",
+            rowLabel: (r) => `Chọn ${r.name}`,
+          }}
+        />
+      </>
+    );
+  }
+
+  it("không truyền rowSelection ⇒ không có checkbox nào (hành vi cũ)", () => {
+    render(<DataTable columns={columns} data={data} />);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("chọn một dòng theo id; bấm checkbox KHÔNG kích hoạt onRowClick", () => {
+    const onRowClick = vi.fn();
+    render(<Harness onRowClick={onRowClick} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn Bình" }));
+    expect(screen.getByTestId("selected")).toHaveTextContent("E2");
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("checkbox đầu bảng chọn rồi bỏ chọn cả trang", () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả" }));
+    expect(screen.getByTestId("selected")).toHaveTextContent("E1,E2");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả" }));
+    expect(screen.getByTestId("selected")).toHaveTextContent("");
+  });
+
+  it("bấm chọn KHÔNG gắn lại checkbox (giữ tiêu điểm bàn phím) dù cột của màn gọi dựng lại mỗi render", () => {
+    render(<Harness />);
+    const box = screen.getByRole("checkbox", { name: "Chọn An" });
+    box.focus();
+    fireEvent.click(box);
+    expect(screen.getByRole("checkbox", { name: "Chọn An" })).toBe(box);
+    expect(document.activeElement).toBe(box);
+  });
+
+  it("trạng thái truyền vào được phản ánh (dòng đã chọn hiện tích)", () => {
+    render(<Harness initial={{ E1: true }} />);
+    expect(screen.getByRole("checkbox", { name: "Chọn An" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Chọn Bình" })).not.toBeChecked();
   });
 });
