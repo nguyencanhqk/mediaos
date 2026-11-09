@@ -138,6 +138,41 @@ describe("DataTable — sắp xếp server (manual-mode)", () => {
     expect(onSortingChange).toHaveBeenCalledTimes(1);
   });
 
+  it("nút sắp mang TÊN CỘT làm tên trợ năng (WCAG 2.5.3) + th có aria-sort theo chiều đang sắp", () => {
+    const { rerender } = render(
+      <DataTable
+        columns={groupedColumns}
+        data={groupedData}
+        sorting={[]}
+        onSortingChange={vi.fn()}
+      />,
+    );
+    const btn = screen.getByTestId("sort-name");
+    expect(btn).toHaveAccessibleName("Tên");
+    expect(btn.closest("th")).toHaveAttribute("aria-sort", "none");
+    rerender(
+      <DataTable
+        columns={groupedColumns}
+        data={groupedData}
+        sorting={[{ id: "name", desc: false }]}
+        onSortingChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("sort-name").closest("th")).toHaveAttribute("aria-sort", "ascending");
+    rerender(
+      <DataTable
+        columns={groupedColumns}
+        data={groupedData}
+        sorting={[{ id: "name", desc: true }]}
+        onSortingChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("sort-name").closest("th")).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+  });
+
   it("KHÔNG truyền onSortingChange → không có affordance sắp xếp (không manual-sort)", () => {
     render(<DataTable columns={groupedColumns} data={groupedData} />);
     expect(screen.queryByTestId("sort-name")).not.toBeInTheDocument();

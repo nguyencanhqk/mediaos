@@ -248,6 +248,16 @@ export function DataTable<TData, TValue>({
                       "px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground",
                       pinClass(index, all.length),
                     )}
+                    // Tên trợ năng của nút sắp = chính tên cột (WCAG 2.5.3); chiều đang sắp nằm ở aria-sort của th.
+                    aria-sort={
+                      canSort
+                        ? sortDir === "asc"
+                          ? "ascending"
+                          : sortDir === "desc"
+                            ? "descending"
+                            : "none"
+                        : undefined
+                    }
                   >
                     {header.isPlaceholder ? null : canSort ? (
                       <button
@@ -255,9 +265,6 @@ export function DataTable<TData, TValue>({
                         onClick={header.column.getToggleSortingHandler()}
                         className="flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-foreground"
                         data-testid={`sort-${header.column.id}`}
-                        aria-label={t("sort.by", {
-                          defaultValue: "Sắp xếp theo cột",
-                        })}
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         <SortIndicator dir={sortDir} />

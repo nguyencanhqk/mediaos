@@ -80,16 +80,17 @@ type SortableGoal = { ownerName?: string | null; lastCheckinAt?: string | null }
 
 /**
  * Sắp tại chỗ (client) theo «Phụ trách» (tên, collation tiếng Việt) hoặc «Check-in cuối» (ISO UTC).
- * Không tên / chưa check-in / khoá vắng LUÔN xuống cuối ở cả hai chiều (ổn định — giữ thứ tự server
+ * Không tên (kể cả chuỗi rỗng) / chưa check-in / khoá vắng LUÔN xuống cuối ở cả hai chiều (ổn định — giữ thứ tự server
  * giữa chúng). Không có cột sắp hợp lệ ⇒ trả lại CHÍNH mảng vào (cùng tham chiếu, không render thừa).
  */
 export function sortGoalRows<T extends SortableGoal>(
-  rows: readonly T[],
+  rows: T[],
   sorting: readonly { id: string; desc: boolean }[],
-): readonly T[] {
+): T[] {
   const s = sorting[0];
   if (!s || !GOAL_SORTABLE_COLUMNS.has(s.id)) return rows;
-  const keyOf = (g: T) => (s.id === "owner" ? g.ownerName : g.lastCheckinAt) ?? null;
+  // Tên rỗng/chỉ khoảng trắng coi như KHÔNG tên (xuống cuối), không nổi lên đầu chiều tăng.
+  const keyOf = (g: T) => (s.id === "owner" ? g.ownerName?.trim() : g.lastCheckinAt) || null;
   const dir = s.desc ? -1 : 1;
   return [...rows].sort((a, b) => {
     const ka = keyOf(a);

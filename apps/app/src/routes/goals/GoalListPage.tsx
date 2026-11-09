@@ -401,7 +401,7 @@ export function GoalListPage() {
           )}
           <DataTable
             columns={columns}
-            data={sortedRows as GoalCoreResponseDto[]}
+            data={sortedRows}
             sorting={sorting}
             onSortingChange={setSorting}
             isLoading={activeQuery.isLoading}
@@ -550,7 +550,9 @@ function withSortableOnly(
   cols: ColumnDef<GoalCoreResponseDto>[],
 ): ColumnDef<GoalCoreResponseDto>[] {
   return cols.map((c) =>
-    c.id && GOAL_SORTABLE_COLUMNS.has(c.id) ? c : { ...c, enableSorting: false },
+    c.id && GOAL_SORTABLE_COLUMNS.has(c.id)
+      ? { ...c, enableMultiSort: false } // sortGoalRows chỉ áp MỘT cột ⇒ không cho Shift+bấm thêm cột thứ hai
+      : { ...c, enableSorting: false },
   );
 }
 

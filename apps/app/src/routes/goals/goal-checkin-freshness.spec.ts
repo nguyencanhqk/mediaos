@@ -97,4 +97,11 @@ describe("sortGoalRows — cột «Phụ trách» + «Check-in cuối» sắp t�
     ]);
     expect(ids(rows)).toEqual(before);
   });
+  it("tên rỗng / chỉ khoảng trắng coi như không tên ⇒ xuống cuối", () => {
+    const xs = [
+      { id: "e", ownerName: "  ", lastCheckinAt: null },
+      { id: "a", ownerName: "An", lastCheckinAt: null },
+    ];
+    expect(ids(sortGoalRows(xs, [{ id: "owner", desc: false }]))).toEqual(["a", "e"]);
+  });
 });
