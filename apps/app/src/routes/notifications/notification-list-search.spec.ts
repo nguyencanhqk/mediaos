@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest";
 import {
   clearNotificationListFilters,
   hasActiveNotificationListFilters,
+  notificationMarkAllBody,
   notificationMarkAllScope,
   patchNotificationListSearch,
   toNotificationListQuery,
@@ -117,8 +118,8 @@ describe("patch / clear — giữ tham số khác trên URL", () => {
   });
 });
 
-// POST /notifications/mark-all-read nhận `source_module` nhưng KHÔNG nhận `priority`
-// (markAllNotificationsReadRequestSchema) ⇒ có lọc mức ưu tiên thì chỉ đánh dấu trong trang hiện tại.
+// POST /notifications/mark-all-read nhận source_module + priority + created_before ⇒ mọi bộ lọc đều đi
+// MỘT lời gọi (S20-NOTI-PRIORITYFILTER-1).
 describe("notificationMarkAllScope — theo khả năng endpoint mark-all-read", () => {
   it.each([
     [{}, "all"],
@@ -126,9 +127,26 @@ describe("notificationMarkAllScope — theo khả năng endpoint mark-all-read",
     [{ page: 3 }, "all"],
     [{ source: "CHAT" as const }, "filter"],
     [{ source: "TASK" as const, status: "Unread" as const }, "filter"],
-    [{ priority: "High" as const }, "page"],
-    [{ source: "GOAL" as const, priority: "Low" as const }, "page"],
+    [{ priority: "High" as const }, "filter"],
+    [{ source: "GOAL" as const, priority: "Low" as const }, "filter"],
   ])("%j ⇒ %s", (search, expected) => {
     expect(notificationMarkAllScope(search)).toBe(expected);
+  });
+});
+
+describe("notificationMarkAllBody", () => {
+  const at = new Date("2026-01-02T03:04:05.000Z");
+  it("gửi nguồn + mức + mốc tải danh sách", () => {
+    expect(notificationMarkAllBody({ source: "TASK", priority: "Normal", page: 2 }, at)).toEqual({
+      source_module: "TASK",
+      priority: "Normal",
+      created_before: at,
+    });
+  });
+  it("chỉ lọc mức ⇒ không có source_module", () => {
+    expect(notificationMarkAllBody({ priority: "High" }, at)).toEqual({
+      priority: "High",
+      created_before: at,
+    });
   });
 });

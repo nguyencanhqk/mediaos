@@ -99,7 +99,7 @@ export function NotificationListPage() {
   const query = toNotificationListQuery(search, NOTI_LIST_PAGE_SIZE);
   const isFiltered = hasActiveNotificationListFilters(search);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, dataUpdatedAt, isLoading, isError, refetch } = useQuery({
     queryKey: notificationKeys.list(query),
     queryFn: () => myNotificationApi.list(query),
     enabled: canView,
@@ -159,7 +159,7 @@ export function NotificationListPage() {
         title={t("list.title")}
         description={t("list.description")}
         icon={Bell}
-        actions={<NotificationListMarkRead search={search} items={items} />}
+        actions={<NotificationListMarkRead search={search} listLoadedAt={dataUpdatedAt} />}
       >
         <NotificationListFilters search={search} onChange={update} />
       </PageHeader>

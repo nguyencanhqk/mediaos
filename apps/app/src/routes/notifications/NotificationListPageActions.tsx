@@ -8,8 +8,8 @@ import { MarkAllReadButton } from "@/components/notifications/MarkAllReadButton"
 import { NotificationTargetLink } from "@/components/notifications/NotificationTargetLink";
 import { NOTI_ENGINE_PAIRS, NOTI_STATUS } from "./constants";
 import {
+  notificationMarkAllBody,
   notificationMarkAllScope,
-  type NotiListSource,
   type NotificationListSearch,
 } from "./notification-list-search";
 
@@ -64,8 +64,17 @@ export function NotificationRowLink({ item, onView }: NotificationRowLinkProps) 
   );
 }
 
-/** Lọc nguồn: `POST /notifications/mark-all-read` nhận `source_module` ⇒ đánh dấu ĐÚNG bộ lọc. */
-function MarkFilterReadButton({ source }: { source: NotiListSource }) {
+/**
+ * Có lọc nguồn và/hoặc mức ưu tiên: MỘT `POST /notifications/mark-all-read` mang đủ `source_module` +
+ * `priority` + `created_before` (= mốc tải danh sách) ⇒ server đánh dấu ĐÚNG bộ lọc, không loop từng dòng.
+ */
+function MarkFilterReadButton({
+  search,
+  listLoadedAt,
+}: {
+  search: NotificationListSearch;
+  listLoadedAt: number;
+}) {
   const { t } = useTranslation("notifications");
   const queryClient = useQueryClient();
   const canMarkAllRead = useCan(
@@ -73,7 +82,8 @@ function MarkFilterReadButton({ source }: { source: NotiListSource }) {
     NOTI_ENGINE_PAIRS.MARK_ALL_READ.resourceType,
   );
   const mutation = useMutation({
-    mutationFn: () => myNotificationApi.markAllRead({ source_module: source }),
+    mutationFn: () =>
+      myNotificationApi.markAllRead(notificationMarkAllBody(search, new Date(listLoadedAt))),
     onSuccess: () => invalidateAfterBulk(queryClient),
     onError: () => toast.error(t("actions.markReadFailed")),
   });
@@ -84,7 +94,7 @@ function MarkFilterReadButton({ source }: { source: NotiListSource }) {
       variant="outline"
       size="sm"
       onClick={() => mutation.mutate()}
-      disabled={mutation.isPending}
+      disabled={mutation.isPending || listLoadedAt === 0}
     >
       <CheckCheck className="mr-1.5 h-4 w-4" />
       {t("actions.markAllReadInFilter")}
@@ -92,53 +102,16 @@ function MarkFilterReadButton({ source }: { source: NotiListSource }) {
   );
 }
 
-/**
- * Có lọc mức ưu tiên: endpoint mark-all-read KHÔNG lọc `priority` ⇒ chỉ đánh dấu các dòng chưa đọc
- * đang hiện trong trang (mỗi dòng một `POST /notifications/:id/mark-read`, tối đa một trang).
- */
-function MarkPageReadButton({ items }: { items: MyNotificationListItem[] }) {
-  const { t } = useTranslation("notifications");
-  const queryClient = useQueryClient();
-  const canMarkRead = useCan(
-    NOTI_ENGINE_PAIRS.MARK_READ.action,
-    NOTI_ENGINE_PAIRS.MARK_READ.resourceType,
-  );
-  const unreadIds = items.filter(isUnread).map((item) => item.notification_id);
-  const mutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const results = await Promise.allSettled(ids.map((id) => myNotificationApi.markRead(id)));
-      if (results.some((result) => result.status === "rejected")) {
-        throw new Error("mark-read failed for some notifications");
-      }
-    },
-    onError: () => toast.error(t("actions.markReadFailed")),
-    // Một phần có thể đã thành công dù có dòng lỗi ⇒ luôn làm mới.
-    onSettled: () => invalidateAfterBulk(queryClient),
-  });
-
-  if (!canMarkRead) return null;
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => mutation.mutate(unreadIds)}
-      disabled={unreadIds.length === 0 || mutation.isPending}
-    >
-      <CheckCheck className="mr-1.5 h-4 w-4" />
-      {t("actions.markReadInPage")}
-    </Button>
-  );
-}
-
 interface NotificationListMarkReadProps {
   search: NotificationListSearch;
-  items: MyNotificationListItem[];
+  /** Mốc tải danh sách (ms) — `dataUpdatedAt` của truy vấn danh sách. */
+  listLoadedAt: number;
 }
 
 /** Nút «đánh dấu đã đọc» của trang danh sách — phạm vi theo `notificationMarkAllScope`. */
-export function NotificationListMarkRead({ search, items }: NotificationListMarkReadProps) {
-  const scope = notificationMarkAllScope(search);
-  if (scope === "page") return <MarkPageReadButton items={items} />;
-  if (scope === "filter" && search.source) return <MarkFilterReadButton source={search.source} />;
+export function NotificationListMarkRead({ search, listLoadedAt }: NotificationListMarkReadProps) {
+  if (notificationMarkAllScope(search) === "filter") {
+    return <MarkFilterReadButton search={search} listLoadedAt={listLoadedAt} />;
+  }
   return <MarkAllReadButton />;
 }
