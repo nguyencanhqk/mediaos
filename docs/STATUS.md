@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 04:33Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 05:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -150,6 +150,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `75425ecb` | 2026-11-09 | chore(backlog): S19-SEC-FILEPOINTER-1 — L0 paths: thêm attendance.module.ts (import module tệp, 1 dòng additive) · plan một tệp |
 | `e2747a7a` | 2026-11-09 | chore(backlog): paths Đợt 2 (kế hoạch 07/11b) — plan một tệp cho BULKACTIONS · LIVETOAST · PRIORITYFILTER; PRIORITYFILTER thêm contracts my-notification + thu test API về *notification* |
 | `43e25b89` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 1b — S19-QA-FETESTNET-1 đóng dấu từ #667 · gieo S19-QA-FETESTNET-2 (lưới cho apps/console) · regen STATUS + INDEX |
 | `d00faa3b` | 2026-11-09 | test(app): S19-QA-FETESTNET-1 — lưới chặn fetch toàn cục cho suite test FE, vá 12 spec lọt mạng (#667) |
@@ -161,7 +162,6 @@
 | `73e07dfd` | 2026-11-09 | feat(leave): S20-TASK-LEAVEHANDOFF-1 — đơn nghỉ của tôi hiện việc đến hạn trong kỳ nghỉ: dời hạn «Sau kỳ nghỉ», báo người giao, đổi người (#665) |
 | `aab8516a` | 2026-11-08 | chore(backlog): sổ trước Đợt 1 (kế hoạch 07/11b) — tách S7-GOAL-PROJTAB-2 (lát B) · thu hẹp paths LEAVEHANDOFF + FEPOLLRACE · regen STATUS |
 | `575a000d` | 2026-11-07 | chore(backlog): sổ hậu merge đợt 07/11 — 3 WO đóng dấu từ commit merge #661 · #662 · #663 · regen STATUS + INDEX |
-| `5ac49c1f` | 2026-11-07 | feat(dashboard): S20-DASH-TODAY-1 — dashboard Employee thành màn «Hôm nay»: hàng việc/đơn bấm được, khối mục tiêu cần check-in, trang mở đầu theo allowlist (#663) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

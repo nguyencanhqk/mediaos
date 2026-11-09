@@ -23114,6 +23114,8 @@ export const backlog = [
       "apps/api/src/attendance/remote-work-request.service*.ts",
       // L0 09/11/2026: P5/P6 cần import FilesModule (1 dòng additive)
       "apps/api/src/attendance/attendance.module.ts",
+      // L0 09/11/2026 (plan-review): con trỏ tệp trong cấu hình công ty đi qua cùng biên ghi
+      "apps/api/src/foundation/settings/setting.service*.ts",
       "packages/contracts/src/hr/contracts*.ts",
       "packages/contracts/src/settings*.ts",
       "packages/contracts/src/platform*.ts",
