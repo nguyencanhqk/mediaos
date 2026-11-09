@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { hrApi, taskCollabApi, taskCoreApi, useAuthStore } from "@mediaos/web-core";
 import { toast } from "@mediaos/ui";
@@ -184,5 +184,92 @@ describe("TaskBulkActionBar — S20-TASK-BULKACTIONS-1", () => {
     expect(screen.getByTestId("task-bulk-pending")).toHaveTextContent("cột «Đang làm»");
     fireEvent.click(screen.getByTestId("task-bulk-confirm"));
     await waitFor(() => expect(taskCollabApi.moveTaskState).toHaveBeenCalledTimes(2));
+  });
+
+  it("bỏ chọn hết rồi chọn lại ⇒ KHÔNG mở thẳng dòng xác nhận cũ (pending/failedIds bị xoá)", async () => {
+    setCaps({ "assign:task": true, "read:employee": true });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (n: number) => (
+      <QueryClientProvider client={client}>
+        <TaskBulkActionBar selectedTasks={mk(n)} onRetainFailed={vi.fn()} onClear={vi.fn()} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui(3));
+    await pickBob();
+    expect(screen.getByTestId("task-bulk-pending")).toBeInTheDocument();
+    rerender(ui(0));
+    expect(screen.queryByTestId("task-bulk-bar")).not.toBeInTheDocument();
+    rerender(ui(2));
+    expect(screen.queryByTestId("task-bulk-pending")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("task-bulk-confirm")).not.toBeInTheDocument();
+    expect(screen.getByTestId("bulk-assign")).toBeInTheDocument();
+  });
+
+  it("chọn hành động ⇒ tiêu điểm chuyển sang «Xác nhận»; Huỷ ⇒ về vùng thanh (không rơi về body)", async () => {
+    setCaps({ "assign:task": true, "read:employee": true });
+    renderBar();
+    await pickBob();
+    await waitFor(() => expect(screen.getByTestId("task-bulk-confirm")).toHaveFocus());
+    fireEvent.click(screen.getByRole("button", { name: "Huỷ" }));
+    expect(screen.getByTestId("task-bulk-bar")).toHaveFocus();
+  });
+
+  it("menu chọn giá trị KHÔNG tự xưng role=menu/menuitem (không có hợp đồng phím mũi tên) — là nhóm nút", async () => {
+    setCaps({ "update-status:task": true });
+    renderBar({ count: 2 });
+    fireEvent.click(screen.getByTestId("bulk-status"));
+    await screen.findByTestId("bulk-status-Done");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+    expect(screen.getByRole("group")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-status")).not.toHaveAttribute("aria-haspopup");
+  });
+
+  it("vùng role=status bền đọc số việc + câu xác nhận; danh sách lỗi là role=alert", async () => {
+    setCaps({ "assign:task": true, "read:employee": true });
+    vi.mocked(taskCoreApi.assign).mockImplementation(async (id) => {
+      if (id === "t2") throw new Error("403");
+      return reply(id);
+    });
+    renderBar({ count: 3 });
+    const live = screen.getByTestId("task-bulk-live");
+    expect(live).toHaveAttribute("role", "status");
+    expect(live).toHaveTextContent("Đã chọn 3 việc");
+    await pickBob();
+    expect(live).toHaveTextContent("Giao 3 việc cho Bình");
+    fireEvent.click(screen.getByTestId("task-bulk-confirm"));
+    const failed = await screen.findByTestId("task-bulk-failed");
+    expect(failed).toHaveAttribute("role", "alert");
+  });
+
+  it("rời màn giữa lúc lệnh chạy ⇒ không gọi onRetainFailed trên màn đã gỡ", async () => {
+    setCaps({ "assign:task": true, "read:employee": true });
+    let release: () => void = () => undefined;
+    vi.mocked(taskCoreApi.assign).mockImplementation(
+      (id) =>
+        new Promise((resolve) => {
+          release = () => resolve(reply(id));
+        }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onRetainFailed = vi.fn();
+    const { unmount } = render(
+      <QueryClientProvider client={client}>
+        <TaskBulkActionBar
+          selectedTasks={mk(1)}
+          onRetainFailed={onRetainFailed}
+          onClear={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    await pickBob();
+    fireEvent.click(screen.getByTestId("task-bulk-confirm"));
+    await waitFor(() => expect(taskCoreApi.assign).toHaveBeenCalledTimes(1));
+    unmount();
+    await act(async () => {
+      release();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(onRetainFailed).not.toHaveBeenCalled();
   });
 });

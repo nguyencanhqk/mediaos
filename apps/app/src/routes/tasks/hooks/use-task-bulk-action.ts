@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -102,6 +102,13 @@ export async function runTaskBulk(
 export function useTaskBulkAction() {
   const queryClient = useQueryClient();
   const [isRunning, setIsRunning] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const run = useCallback(
     async (taskIds: readonly string[], action: TaskBulkAction): Promise<TaskBulkOutcome> => {
@@ -122,7 +129,7 @@ export function useTaskBulkAction() {
         }
         return outcome;
       } finally {
-        setIsRunning(false);
+        if (mounted.current) setIsRunning(false);
       }
     },
     [queryClient],
@@ -133,7 +140,8 @@ export function useTaskBulkAction() {
 
 /**
  * Trạng thái chọn dòng theo id. Id không còn trong danh sách hiện tại (đổi bộ lọc / sang trang khác)
- * bị tỉa — thanh hành động chỉ bao giờ tác động lên việc ĐANG thấy trên màn.
+ * bị tỉa (đổi trang/lọc trong DataTable cũng tỉa qua `rowSelection.onChange`) — thanh hành động chỉ bao giờ
+ * tác động lên việc ĐANG thấy trên màn.
  */
 export function useTaskRowSelection(items: readonly TaskCoreResponseDto[]) {
   const [selection, setSelection] = useState<RowSelectionState>({});
@@ -156,9 +164,15 @@ export function useTaskRowSelection(items: readonly TaskCoreResponseDto[]) {
     [items, selection],
   );
 
-  /** Chỉ giữ chọn các id này (dòng lỗi vẫn được chọn để thử lại). */
+  /**
+   * Chỉ giữ chọn các id này (dòng lỗi vẫn được chọn để thử lại) — GIAO với lựa chọn HIỆN TẠI: dòng người dùng
+   * vừa bỏ chọn trong lúc lệnh chạy không bị chọn lại, và dòng họ chọn thêm không bị ghi đè bằng tập cũ.
+   */
   const retainOnly = useCallback((ids: readonly string[]) => {
-    setSelection(Object.fromEntries(ids.map((id) => [id, true])));
+    const keep = new Set(ids);
+    setSelection((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([id, on]) => on && keep.has(id))),
+    );
   }, []);
 
   const clear = useCallback(() => setSelection({}), []);

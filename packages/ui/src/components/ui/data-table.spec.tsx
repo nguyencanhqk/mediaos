@@ -208,7 +208,12 @@ describe("DataTable — ghim cột + footer (v1.1)", () => {
 
   it("ghim theo cột ĐANG HIỂN THỊ: ẩn cột cuối thì cột kế mới là cột ghim phải", () => {
     const { container } = render(
-      <DataTable columns={pinCols} data={data} pinLastColumn columnVisibility={{ actions: false }} />,
+      <DataTable
+        columns={pinCols}
+        data={data}
+        pinLastColumn
+        columnVisibility={{ actions: false }}
+      />,
     );
     const th = container.querySelectorAll("thead th");
     expect(th.length).toBe(2);
@@ -255,7 +260,11 @@ describe("DataTable — rowSelection (S20-TASK-BULKACTIONS-1)", () => {
     const [state, setState] = React.useState<RowSelectionState>(initial);
     return (
       <>
-        <output data-testid="selected">{Object.keys(state).filter((k) => state[k]).join(",")}</output>
+        <output data-testid="selected">
+          {Object.keys(state)
+            .filter((k) => state[k])
+            .join(",")}
+        </output>
         <DataTable
           columns={columns}
           data={data}
@@ -306,5 +315,56 @@ describe("DataTable — rowSelection (S20-TASK-BULKACTIONS-1)", () => {
     render(<Harness initial={{ E1: true }} />);
     expect(screen.getByRole("checkbox", { name: "Chọn An" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Chọn Bình" })).not.toBeChecked();
+  });
+});
+
+describe("DataTable — rowSelection × trang / ghim (hậu review BULKACTIONS)", () => {
+  const many: Row[] = Array.from({ length: 5 }, (_, i) => ({ id: `R${i + 1}`, name: `N${i + 1}` }));
+
+  function PagedHarness({ pin = false }: { pin?: boolean }) {
+    const [state, setState] = React.useState<RowSelectionState>({});
+    return (
+      <>
+        <output data-testid="sel">
+          {Object.keys(state)
+            .filter((k) => state[k])
+            .join(",")}
+        </output>
+        <DataTable
+          columns={columns}
+          data={many}
+          pageSize={2}
+          pinFirstColumn={pin}
+          rowSelection={{
+            state,
+            onChange: setState,
+            getRowId: (r) => r.id,
+            selectAllLabel: "Chọn tất cả",
+            rowLabel: (r) => `Chọn ${r.name}`,
+          }}
+        />
+      </>
+    );
+  }
+
+  it("sang trang khác ⇒ dòng đã chọn ở trang trước bị bỏ chọn (không chạy lệnh trên dòng không thấy)", () => {
+    const { container } = render(<PagedHarness />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả" }));
+    expect(screen.getByTestId("sel")).toHaveTextContent("R1,R2");
+    const next = Array.from(container.querySelectorAll("button")).find((b) =>
+      /sau|next|›|»/i.test((b.textContent ?? "") + (b.getAttribute("aria-label") ?? "")),
+    );
+    expect(next).toBeDefined();
+    fireEvent.click(next as HTMLElement);
+    expect(screen.getByTestId("sel")).toHaveTextContent("");
+  });
+
+  it("pinFirstColumn + rowSelection ⇒ ghim cột checkbox VÀ cột tiêu đề kế bên", () => {
+    const { container } = render(<PagedHarness pin />);
+    const th = container.querySelectorAll("thead th");
+    expect(th[0].className).toContain("left-0");
+    expect(th[1].className).toContain("sticky");
+    expect(th[1].className).toContain("left-12");
+    expect(th[2].className).not.toContain("sticky");
   });
 });

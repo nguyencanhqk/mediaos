@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { taskCollabApi, taskCoreApi } from "@mediaos/web-core";
 import type { TaskActionResponseDto, TaskCoreResponseDto } from "@mediaos/contracts";
-import { TASK_BULK_CONCURRENCY, TASK_BULK_MAX, runTaskBulk } from "./use-task-bulk-action";
+import { act, renderHook } from "@testing-library/react";
+import {
+  TASK_BULK_CONCURRENCY,
+  TASK_BULK_MAX,
+  runTaskBulk,
+  useTaskRowSelection,
+} from "./use-task-bulk-action";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -83,5 +89,18 @@ describe("runTaskBulk — S20-TASK-BULKACTIONS-1", () => {
     expect(taskCoreApi.changeDeadline).toHaveBeenCalledWith("a", { dueAt });
     expect(taskCollabApi.moveTaskState).toHaveBeenCalledTimes(2);
     expect(taskCollabApi.moveTaskState).toHaveBeenCalledWith("b", { stateId: BOB });
+  });
+});
+
+describe("useTaskRowSelection.retainOnly — chọn đổi giữa lúc lệnh chạy", () => {
+  const items = ["a", "b", "c"].map((id) => ({ id, title: id }) as TaskCoreResponseDto);
+
+  it("GIAO với lựa chọn hiện tại: dòng vừa bỏ chọn không bị chọn lại, dòng mới chọn không bị ghi đè", () => {
+    const { result } = renderHook(() => useTaskRowSelection(items));
+    act(() => result.current.onChange({ a: true, b: true }));
+    // Trong lúc lệnh chạy: bỏ b, chọn thêm c. Lệnh báo lỗi a và b.
+    act(() => result.current.onChange({ a: true, c: true }));
+    act(() => result.current.retainOnly(["a", "b"]));
+    expect(result.current.selectedTasks.map((task) => task.id)).toEqual(["a"]);
   });
 });

@@ -178,6 +178,21 @@ export function DataTable<TData, TValue>({
   }, [isGrouping, pageSize, table]);
 
   const rows = table.getRowModel().rows;
+
+  // Chọn dòng chỉ tác động lên dòng ĐANG hiện: sang trang khác / đổi lọc-sắp ⇒ bỏ chọn dòng không còn trên
+  // trang (nếu không, thanh hành động hàng loạt vẫn chạy trên dòng người dùng không thấy).
+  const visibleIds = JSON.stringify(rows.map((row) => row.id));
+  const onSelectionChange = rowSelection?.onChange;
+  React.useEffect(() => {
+    if (!onSelectionChange || isLoading || isGrouping) return;
+    const present = new Set<string>(JSON.parse(visibleIds) as string[]);
+    onSelectionChange((prev) =>
+      Object.keys(prev).every((id) => !prev[id] || present.has(id))
+        ? prev
+        : Object.fromEntries(Object.entries(prev).filter(([id, on]) => on && present.has(id))),
+    );
+  }, [visibleIds, onSelectionChange, isLoading, isGrouping]);
+
   // colSpan theo cột ĐANG hiển thị — không dùng columns.length (sai khi có cột bị ẩn).
   const colSpan = table.getVisibleLeafColumns().length;
   const totalRows = table.getFilteredRowModel().rows.length;
@@ -187,10 +202,16 @@ export function DataTable<TData, TValue>({
   // Không hiện phân trang client khi đang gom nhóm (tất cả trên 1 trang) hoặc khi ít hơn 1 trang.
   const showPagination = !isGrouping && totalRows > pageSize && footer === undefined;
 
-  /** Class ghim cho ô ở vị trí `index` trong hàng có `count` ô hiển thị. */
+  /**
+   * Class ghim cho ô ở vị trí `index` trong hàng có `count` ô hiển thị. Có cột chọn dòng ⇒ nó luôn ghim
+   * cùng cột Identity kế bên (rộng cố định `w-12` ⇒ cột kế dính ở `left-12`), không để checkbox chiếm mất chỗ ghim.
+   */
   const pinClass = (index: number, count: number): string | undefined => {
     if (!isPinning) return undefined;
-    if (pinFirstColumn && index === 0) {
+    if (pinFirstColumn && rowSelection) {
+      if (index === 0) return "sticky left-0 z-10 w-12 min-w-12 max-w-12 bg-inherit";
+      if (index === 1) return "sticky left-12 z-10 bg-inherit border-r border-border";
+    } else if (pinFirstColumn && index === 0) {
       return "sticky left-0 z-10 bg-inherit border-r border-border";
     }
     if (pinLastColumn && index === count - 1) {

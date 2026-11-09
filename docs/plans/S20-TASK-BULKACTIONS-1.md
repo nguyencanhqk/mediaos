@@ -41,3 +41,19 @@ Gate LIGHT · FE · US-TASK-QL-03 · nguồn: `docs/plans/S20-WORKUX-STORIES.md`
 - KPI #11 đo trình duyệt thật (agent khác).
 - «Chuyển cột» chỉ ở tab Danh sách của dự án; `/tasks` toàn công ty không có (không biết dự án).
 - Chọn không xuyên trang (id ngoài trang hiện bị tỉa).
+
+## Sổ vết — vá review (09/11)
+
+Mỗi lỗi có ca test đỏ trên mã cũ → xanh (đo: app 6 đỏ, ui 2 đỏ khi trả 3 tệp nguồn về HEAD).
+
+| # | Lỗi | Vá | Test |
+| --- | --- | --- | --- |
+| 1·3·10 | `pending`/`failedIds` sống sót khi chọn về 0 ⇒ chọn lại mở thẳng dòng xác nhận cũ | effect theo `count === 0` xoá cả hai | bar spec «bỏ chọn hết rồi chọn lại» |
+| 2 | `pinFirstColumn` + `rowSelection` ghim checkbox thay vì cột tiêu đề | ghim cả cột chọn (`w-12`) lẫn cột kế (`left-12`) | `data-table.spec` «pinFirstColumn + rowSelection» |
+| 4 | Mất tiêu điểm bàn phím khi vào xác nhận / huỷ / chạy xong / xoá | focus «Xác nhận» khi vào pending; Huỷ ⇒ vùng thanh (`tabIndex=-1`); xong-hết/xoá ⇒ checkbox đầu bảng | bar spec «tiêu điểm chuyển sang Xác nhận» |
+| 5 | `role=menu/menuitem` không có hợp đồng phím | bỏ role menu/menuitem/aria-haspopup, dùng `role=group` + nút thường (`aria-expanded`) | bar spec «không tự xưng role=menu» |
+| 6 | Thanh/số việc/câu xác nhận/danh sách lỗi không được đọc | vùng `role=status` bền (sr-only) chứa số việc + câu xác nhận; `<ul role=alert>`; span hiển thị `aria-hidden` | bar spec «vùng role=status bền» |
+| 7 | Chọn không xuyên trang nhưng dòng trang trước vẫn nằm trong lệnh | `DataTable` tỉa selection khi tập dòng đang hiện đổi (trang/lọc/sắp); bỏ qua khi loading/gom nhóm | `data-table.spec` «sang trang khác ⇒ bỏ chọn» |
+| 8·9 | Chọn đổi giữa lúc chạy bị `retainOnly` ghi đè; setState sau unmount | `retainOnly` GIAO với lựa chọn hiện tại; ref `mounted` chặn setState/callback (bar + hook). Không khoá checkbox (để dễ dùng) | hook spec `retainOnly` · bar spec «rời màn giữa lúc chạy» |
+
+Còn lại: không (không lỗi nào hoãn). Ghi chú: focus khi «xoá» dùng `querySelector` trong phần tử cha của thanh (thanh là anh em của bảng ở cả 2 màn).
