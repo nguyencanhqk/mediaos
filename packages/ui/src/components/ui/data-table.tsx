@@ -147,6 +147,8 @@ export function DataTable<TData, TValue>({
     ...(onSortingChange ? { onSortingChange } : {}),
     // Sắp xếp là việc của SERVER khi có onSortingChange → không sắp lại ở client (chỉ phát sự kiện).
     manualSorting: isManualSort,
+    // Server chỉ nhận MỘT cột sắp ⇒ tắt multi-sort (Shift+bấm) để trạng thái + aria-sort không báo cột bị bỏ qua.
+    ...(isManualSort ? { enableMultiSort: false } : {}),
     ...(rowSelection
       ? {
           enableRowSelection: true,

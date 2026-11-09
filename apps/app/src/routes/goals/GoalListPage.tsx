@@ -549,10 +549,9 @@ function useGoalColumns(
 function withSortableOnly(
   cols: ColumnDef<GoalCoreResponseDto>[],
 ): ColumnDef<GoalCoreResponseDto>[] {
+  // Một cột sắp mỗi lúc: DataTable tự tắt multi-sort ở chế độ sắp server (sortGoalRows chỉ áp sorting[0]).
   return cols.map((c) =>
-    c.id && GOAL_SORTABLE_COLUMNS.has(c.id)
-      ? { ...c, enableMultiSort: false } // sortGoalRows chỉ áp MỘT cột ⇒ không cho Shift+bấm thêm cột thứ hai
-      : { ...c, enableSorting: false },
+    c.id && GOAL_SORTABLE_COLUMNS.has(c.id) ? c : { ...c, enableSorting: false },
   );
 }
 
