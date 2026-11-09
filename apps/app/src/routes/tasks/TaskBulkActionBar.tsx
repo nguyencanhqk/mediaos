@@ -171,6 +171,9 @@ export function TaskBulkActionBar({
   const mounted = useRef(true);
 
   const count = selectedTasks.length;
+  // Lựa chọn HIỆN TẠI (kể cả sau await): lệnh chạy xong mới biết ai còn được chọn.
+  const selectedIdsRef = useRef<readonly string[]>([]);
+  selectedIdsRef.current = selectedTasks.map((task) => task.id);
 
   useEffect(() => {
     mounted.current = true;
@@ -216,7 +219,9 @@ export function TaskBulkActionBar({
     // Rời màn giữa lúc chạy ⇒ không đụng state/callback của màn đã gỡ.
     if (!mounted.current) return;
     setPending(null);
-    setFailedIds(outcome.failedIds);
+    // Chỉ giữ id lỗi còn nằm trong lựa chọn hiện tại (chọn về 0 giữa chừng ⇒ rỗng, không sống lại).
+    const stillSelected = new Set(selectedIdsRef.current);
+    setFailedIds(outcome.failedIds.filter((id) => stillSelected.has(id)));
     if (outcome.failedIds.length === 0) focusTable();
     else regionRef.current?.focus();
     onRetainFailed(outcome.failedIds);
@@ -291,6 +296,7 @@ export function TaskBulkActionBar({
                     showName
                     testId="bulk-assign"
                     emptyLabel={t("bulk.actions.assign")}
+                    labelOnly
                     onSelect={(employeeId, employee) => {
                       if (!employeeId) return;
                       setPending({

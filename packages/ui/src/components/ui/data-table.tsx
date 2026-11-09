@@ -28,6 +28,12 @@ import { cn } from "../../lib/utils";
 // tầng trên; DataTable chỉ nhận 1 trang.)
 const GROUPED_PAGE_SIZE = 100_000;
 const SELECTION_COLUMN_ID = "__select";
+/**
+ * Vùng bấm ≥ 24×24 CSS px (WCAG 2.2 SC 2.5.8) quanh checkbox 16px mà KHÔNG làm dòng cao thêm: khối 24px
+ * có margin âm dọc (-4px) bù lại; `<label>` bọc ⇒ bấm cả vùng 24px đều bật/tắt checkbox native 16px ở giữa.
+ */
+const SELECTION_HIT_AREA =
+  "relative -my-1 inline-flex h-6 w-6 cursor-pointer items-center justify-center";
 
 /**
  * CHỌN NHIỀU DÒNG (controlled, additive) — S20-TASK-BULKACTIONS-1. Truyền prop này ⇒ bảng thêm cột
@@ -367,27 +373,35 @@ function readSelectionMeta(meta: unknown): SelectionMeta {
 function SelectionHeader<TData>({ table }: HeaderContext<TData, unknown>) {
   const some = table.getIsSomePageRowsSelected();
   return (
-    <Checkbox
-      aria-label={readSelectionMeta(table.options.meta).selectAllLabel}
-      data-testid="row-select-all"
-      checked={table.getIsAllPageRowsSelected()}
-      ref={(el) => {
-        if (el) el.indeterminate = some;
-      }}
-      onChange={table.getToggleAllPageRowsSelectedHandler()}
-    />
+    <label className={SELECTION_HIT_AREA} onClick={(e) => e.stopPropagation()}>
+      <Checkbox
+        aria-label={readSelectionMeta(table.options.meta).selectAllLabel}
+        data-testid="row-select-all"
+        checked={table.getIsAllPageRowsSelected()}
+        ref={(el) => {
+          if (el) el.indeterminate = some;
+        }}
+        onChange={table.getToggleAllPageRowsSelectedHandler()}
+      />
+    </label>
   );
 }
 
 function SelectionCell<TData>({ row, table }: CellContext<TData, unknown>) {
   return (
-    <Checkbox
-      aria-label={readSelectionMeta(table.options.meta).rowLabel(row.original)}
-      data-testid={`row-select-${row.id}`}
-      checked={row.getIsSelected()}
+    <label
+      className={SELECTION_HIT_AREA}
       onClick={(e) => e.stopPropagation()}
-      onChange={row.getToggleSelectedHandler()}
-    />
+      data-testid={`row-select-hit-${row.id}`}
+    >
+      <Checkbox
+        aria-label={readSelectionMeta(table.options.meta).rowLabel(row.original)}
+        data-testid={`row-select-${row.id}`}
+        checked={row.getIsSelected()}
+        onClick={(e) => e.stopPropagation()}
+        onChange={row.getToggleSelectedHandler()}
+      />
+    </label>
   );
 }
 

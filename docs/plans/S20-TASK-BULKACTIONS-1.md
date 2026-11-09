@@ -57,3 +57,13 @@ Mỗi lỗi có ca test đỏ trên mã cũ → xanh (đo: app 6 đỏ, ui 2 đ�
 | 8·9 | Chọn đổi giữa lúc chạy bị `retainOnly` ghi đè; setState sau unmount | `retainOnly` GIAO với lựa chọn hiện tại; ref `mounted` chặn setState/callback (bar + hook). Không khoá checkbox (để dễ dùng) | hook spec `retainOnly` · bar spec «rời màn giữa lúc chạy» |
 
 Còn lại: không (không lỗi nào hoãn). Ghi chú: focus khi «xoá» dùng `querySelector` trong phần tử cha của thanh (thanh là anh em của bảng ở cả 2 màn).
+
+## Sổ vết — vá vòng 2 (09/11)
+
+| # | Lỗi | Vá | Test |
+| --- | --- | --- | --- |
+| R1 | `setFailedIds` gán lại failedIds cũ dù lựa chọn đã về 0 giữa lúc chạy | giao failedIds với lựa chọn HIỆN TẠI (ref theo render) | bar spec «race: chọn về 0 giữa lúc chạy» |
+| R2 | Checkbox chọn dòng/tất cả chỉ 16×16px (WCAG 2.2 SC 2.5.8) | bọc `<label>` h-6 w-6 (24px) + `-my-1` bù ⇒ dòng KHÔNG cao thêm; tên trợ năng giữ nguyên | `data-table.spec` «vùng bấm 24px». Đo kích thước/độ cao dòng thật: CHỈ trình duyệt (jsdom không bố cục) — chờ smoke |
+| R3 | «Giao cho…» như ô trống (avatar «?»), tên trợ năng «Đổi người: …» | `EmployeePicker labelOnly`: không avatar, nút viền có nhãn, aria-label = «Giao cho…» | bar spec «nút Giao cho… có nhãn rõ» |
+| R4 | Thành công trọn vẹn khác dạng lỗi một phần | `bulk.result.allOk` = «{{count}}/{{count}} thành công» | bar spec «6/6 thành công» |
+| R5 | Ca «>50 ⇒ khoá» không chạm được trên /tasks (trang < 50) | KHÔNG đổi luồng; trần `TASK_BULK_MAX`=50 vẫn giữ cho tab dự án/tương lai; giữ test đơn vị trần | spec thanh «chọn quá 50» |

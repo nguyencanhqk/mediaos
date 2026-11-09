@@ -110,7 +110,7 @@ describe("TaskBulkActionBar — S20-TASK-BULKACTIONS-1", () => {
     fireEvent.click(screen.getByTestId("task-bulk-confirm"));
     await waitFor(() => expect(taskCoreApi.assign).toHaveBeenCalledTimes(6));
     await waitFor(() => expect(onRetainFailed).toHaveBeenCalledWith([]));
-    expect(success).toHaveBeenCalledWith("Đã thực hiện cho 6 việc", expect.anything());
+    expect(success).toHaveBeenCalledWith("6/6 thành công", expect.anything());
   });
 
   it("2/6 lỗi ⇒ «4/6 thành công», 2 dòng lỗi giữ chọn, ghi «Không thực hiện được»; cảnh báo gộp một câu", async () => {
@@ -203,6 +203,44 @@ describe("TaskBulkActionBar — S20-TASK-BULKACTIONS-1", () => {
     expect(screen.queryByTestId("task-bulk-pending")).not.toBeInTheDocument();
     expect(screen.queryByTestId("task-bulk-confirm")).not.toBeInTheDocument();
     expect(screen.getByTestId("bulk-assign")).toBeInTheDocument();
+  });
+
+  it("nút «Giao cho…» có nhãn rõ, tên trợ năng = «Giao cho…», không avatar rỗng", () => {
+    setCaps({ "assign:task": true, "read:employee": true });
+    renderBar();
+    const btn = screen.getByTestId("bulk-assign");
+    expect(btn).toHaveTextContent("Giao cho…");
+    expect(btn).toHaveAccessibleName("Giao cho…");
+    expect(btn.textContent).not.toContain("?");
+  });
+
+  it("race: chọn về 0 giữa lúc chạy ⇒ failedIds cũ KHÔNG sống lại khi chọn lại", async () => {
+    setCaps({ "assign:task": true, "read:employee": true });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(taskCoreApi.assign).mockImplementation(async () => {
+      await gate;
+      throw new Error("403");
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (n: number) => (
+      <QueryClientProvider client={client}>
+        <TaskBulkActionBar selectedTasks={mk(n)} onRetainFailed={vi.fn()} onClear={vi.fn()} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui(2));
+    await pickBob();
+    fireEvent.click(screen.getByTestId("task-bulk-confirm"));
+    rerender(ui(0));
+    await act(async () => {
+      release();
+      await gate;
+    });
+    rerender(ui(2));
+    await waitFor(() => expect(taskCoreApi.assign).toHaveBeenCalledTimes(2));
+    expect(screen.queryByTestId("task-bulk-failed")).not.toBeInTheDocument();
   });
 
   it("chọn hành động ⇒ tiêu điểm chuyển sang «Xác nhận»; Huỷ ⇒ về vùng thanh (không rơi về body)", async () => {

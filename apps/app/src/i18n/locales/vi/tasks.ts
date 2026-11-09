@@ -990,7 +990,7 @@ export default {
     overLimit:
       "Mỗi lần chỉ làm được tối đa {{max}} việc — bạn đang chọn {{count}}. Hãy bỏ bớt việc đã chọn.",
     result: {
-      allOk: "Đã thực hiện cho {{count}} việc",
+      allOk: "{{count}}/{{count}} thành công",
       partial: "{{ok}}/{{total}} thành công",
       allFailed: "Không thực hiện được cho cả {{total}} việc",
       rowFailed: "Không thực hiện được",

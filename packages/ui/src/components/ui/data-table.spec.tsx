@@ -316,6 +316,19 @@ describe("DataTable — rowSelection (S20-TASK-BULKACTIONS-1)", () => {
     expect(screen.getByRole("checkbox", { name: "Chọn An" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Chọn Bình" })).not.toBeChecked();
   });
+
+  it("checkbox có vùng bấm 24px (label h-6 w-6): bấm vùng bọc bật chọn, KHÔNG kích hoạt onRowClick", () => {
+    const onRowClick = vi.fn();
+    render(<Harness onRowClick={onRowClick} />);
+    const hit = screen.getByRole("checkbox", { name: "Chọn Bình" }).closest("label");
+    expect(hit).not.toBeNull();
+    expect(hit).toHaveClass("h-6", "w-6");
+    fireEvent.click(hit as HTMLElement);
+    expect(screen.getByTestId("selected")).toHaveTextContent("E2");
+    expect(onRowClick).not.toHaveBeenCalled();
+    const all = screen.getByRole("checkbox", { name: /Chọn tất cả/ }).closest("label");
+    expect(all).toHaveClass("h-6", "w-6");
+  });
 });
 
 describe("DataTable — rowSelection × trang / ghim (hậu review BULKACTIONS)", () => {
