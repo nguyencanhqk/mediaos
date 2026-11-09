@@ -433,7 +433,11 @@ interface AssignChoice {
  */
 function useAssignMutation(
   task: TaskCoreResponseDto,
-  { reopenPicker, patchRows = false }: { reopenPicker?: () => void; patchRows?: boolean },
+  {
+    reopenPicker,
+    patchRows = false,
+    onFailed,
+  }: { reopenPicker?: () => void; patchRows?: boolean; onFailed?: (error: unknown) => void },
 ) {
   const notifyAssigneeWarnings = useAssigneeWarningToast();
   return useTaskActionMutation<AssignChoice>({
@@ -458,6 +462,7 @@ function useAssignMutation(
         assigneeName: updated?.assigneeName,
         onChangeAssignee: reopenPicker,
       }),
+    onFailed: onFailed ? (error) => onFailed(error) : undefined,
   });
 }
 
@@ -523,7 +528,14 @@ export function TaskAssigneeField({
  * `assign` với ô chi tiết. Thiếu `assign:task` ⇒ chữ tĩnh, không nút. Lạc quan: dòng đổi tên ngay;
  * server từ chối ⇒ về người cũ + câu giải thích dưới ô.
  */
-export function TaskRowAssigneeControl({ task }: { task: TaskCoreResponseDto }) {
+export function TaskRowAssigneeControl({
+  task,
+  onFailed,
+}: {
+  task: TaskCoreResponseDto;
+  /** Có truyền ⇒ lỗi do phía bao hiện (dòng có thể đã rời danh sách); không hiện lỗi cục bộ. */
+  onFailed?: (error: unknown) => void;
+}) {
   const { t } = useTranslation("tasks");
   const canAssign = useCan(
     TASK_CORE_ENGINE_PAIRS.ASSIGN.action,
@@ -533,6 +545,7 @@ export function TaskRowAssigneeControl({ task }: { task: TaskCoreResponseDto }) 
   const mutation = useAssignMutation(task, {
     reopenPicker: () => setPickerOpen(true),
     patchRows: true,
+    onFailed,
   });
 
   if (!canAssign) return <span className="text-sm">{task.assigneeName ?? "—"}</span>;
@@ -556,7 +569,7 @@ export function TaskRowAssigneeControl({ task }: { task: TaskCoreResponseDto }) 
           if (employeeId) mutation.mutate({ employeeId, employee });
         }}
       />
-      {mutation.isError && (
+      {mutation.isError && !onFailed && (
         <p role="alert" className="text-xs text-destructive">
           {t(taskQuickEditErrorKey("assignee", mutation.error))}
         </p>

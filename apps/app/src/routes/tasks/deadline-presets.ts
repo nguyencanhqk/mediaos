@@ -140,6 +140,34 @@ export const NEXT_MONDAY_PRESET: DeadlinePresetDefinition = {
   }),
 };
 
+/** Thứ ISO của Thứ Bảy — từ đây trở đi là cuối tuần. */
+const ISO_SATURDAY = 6;
+
+/**
+ * Ngày làm việc KẾ TIẾP sau `localDate` (`YYYY-MM-DD`): bỏ Thứ Bảy/Chủ Nhật, KHÔNG tính ngày lễ.
+ * Thuần chuỗi ngày — không đụng múi giờ.
+ */
+export function nextWorkingDay(localDate: string): string {
+  let next = addDaysToLocalDate(localDate, 1);
+  while (isoWeekdayOf(next) >= ISO_SATURDAY) next = addDaysToLocalDate(next, 1);
+  return next;
+}
+
+/**
+ * S20-TASK-LEAVEHANDOFF-1 — chip «Sau kỳ nghỉ»: ngày làm việc kế tiếp sau `endDate` kỳ nghỉ, 17:00 giờ
+ * công ty. Định nghĩa nối thêm cho `DeadlineQuickPicker.presets` (không đổi bộ mặc định).
+ */
+export function afterLeavePreset(endDate: string): DeadlinePresetDefinition {
+  return {
+    id: "afterLeave",
+    resolve: () => ({
+      localDate: nextWorkingDay(endDate),
+      time: DEFAULT_DEADLINE_TIME,
+      labelKey: "afterLeave",
+    }),
+  };
+}
+
 export const DEFAULT_DEADLINE_PRESETS: readonly DeadlinePresetDefinition[] = [
   TODAY_PRESET,
   TOMORROW_PRESET,

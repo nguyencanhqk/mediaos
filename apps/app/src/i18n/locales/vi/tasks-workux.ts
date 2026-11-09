@@ -129,6 +129,8 @@ export default {
       plusOneDay: "+1 ngày {{time}}",
       plusThreeDays: "+3 ngày {{time}}",
       custom: "{{time}}",
+      // S20-TASK-LEAVEHANDOFF-1 — mốc riêng của khối bàn giao trên đơn nghỉ.
+      afterLeave: "Sau kỳ nghỉ {{time}}",
     },
     clear: "Xoá hạn",
     custom: "Tuỳ chỉnh",

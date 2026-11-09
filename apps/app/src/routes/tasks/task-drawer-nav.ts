@@ -22,10 +22,10 @@ export const TASK_DRAWER_PARAM = "task";
 
 /**
  * S20-TASK-QUICKEDIT-1 — tab mở sẵn trong drawer (`?taskTab=checklist`): lỗi «Cần hoàn tất checklist»
- * trên dòng dẫn thẳng tới tab Checklist. Chỉ nhận giá trị trong danh sách trắng; đóng drawer bỏ luôn.
+ * trên dòng dẫn thẳng tới tab Checklist. S20-TASK-LEAVEHANDOFF-1: `comment` = tab Bình luận, ô soạn có focus. Chỉ nhận giá trị trong danh sách trắng; đóng drawer bỏ luôn.
  */
 export const TASK_DRAWER_TAB_PARAM = "taskTab";
-export const TASK_DRAWER_TABS = ["checklist"] as const;
+export const TASK_DRAWER_TABS = ["checklist", "comment"] as const;
 export type TaskDrawerTab = (typeof TASK_DRAWER_TABS)[number];
 
 /** Tab hợp lệ của `?taskTab=` hoặc `null` (thiếu / giá trị lạ). */
@@ -33,6 +33,25 @@ export function readTaskDrawerTab(search: unknown): TaskDrawerTab | null {
   if (typeof search !== "object" || search === null) return null;
   const raw = (search as Record<string, unknown>)[TASK_DRAWER_TAB_PARAM];
   return (TASK_DRAWER_TABS as readonly unknown[]).includes(raw) ? (raw as TaskDrawerTab) : null;
+}
+
+/**
+ * Bộ đếm «yêu cầu focus ô soạn bình luận». Bấm «Báo người giao» khi drawer ĐÃ mở đúng việc ở tab Bình
+ * luận thì URL không đổi (`?taskTab=comment` y hệt) ⇒ chỉ một tín hiệu tường minh như thế này mới làm
+ * ô soạn focus lại. Mỗi lần `openTask(.., {tab:"comment"})` tăng 1.
+ */
+let commentFocusRequests = 0;
+const commentFocusListeners = new Set<() => void>();
+export function subscribeCommentFocusRequests(listener: () => void): () => void {
+  commentFocusListeners.add(listener);
+  return () => void commentFocusListeners.delete(listener);
+}
+export function getCommentFocusRequests(): number {
+  return commentFocusRequests;
+}
+function requestCommentFocus(): void {
+  commentFocusRequests += 1;
+  commentFocusListeners.forEach((listener) => listener());
 }
 
 /** Trang chi tiết mở ở tab mới (không có lịch sử trong app) ⇒ «Quay lại» về đây. */
@@ -100,8 +119,10 @@ export function useTaskDrawer(): TaskDrawerControls {
         resetScroll: false,
       });
     return {
-      openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) =>
-        go(taskId, false, opts?.tab ?? null),
+      openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) => {
+        if (opts?.tab === "comment") requestCommentFocus();
+        go(taskId, false, opts?.tab ?? null);
+      },
       closeTask: () => go(null, true),
     };
   }, [navigate]);

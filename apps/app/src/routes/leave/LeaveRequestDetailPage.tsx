@@ -6,6 +6,7 @@ import { ArrowLeft, RefreshCw, CheckCircle2, Clock, XCircle, Ban, RotateCcw } fr
 import type { LeaveRequestDetailView, LeaveRequestApprovalView } from "@mediaos/contracts";
 import { leaveApi, leaveKeys, useCan, ApiError } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent, Badge } from "@mediaos/ui";
+import { LeaveTaskHandoff } from "./LeaveTaskHandoff";
 import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS, LEAVE_STATUS, type LeaveStatus } from "./constants";
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -392,6 +393,9 @@ export function LeaveRequestDetailPage({ requestId }: LeaveRequestDetailPageProp
           />
         </CardContent>
       </Card>
+
+      {/* S20-TASK-LEAVEHANDOFF-1 — đơn của tôi: việc đến hạn trong kỳ nghỉ (tự ẩn khi không đủ điều kiện) */}
+      <LeaveTaskHandoff request={req} />
 
       {/* Approval history */}
       <Card>

@@ -232,6 +232,15 @@ export default {
   },
 
   // ── Chi tiết đơn nghỉ (LEAVE-SCREEN-004) ─────────────────────────────────
+  // S20-TASK-LEAVEHANDOFF-1 — khối bàn giao việc trên đơn nghỉ của tôi.
+  handoff: {
+    title: "Việc đến hạn trong kỳ nghỉ",
+    empty: "Không có việc nào của bạn đến hạn trong kỳ nghỉ",
+    error: "Không tải được danh sách việc của bạn.",
+    retry: "Thử lại",
+    notifyReporter: "Báo người giao",
+    count: "Còn {{count}} việc đến hạn trong kỳ nghỉ",
+  },
   detail: {
     title: "Chi tiết đơn nghỉ",
     backToList: "Quay lại danh sách",

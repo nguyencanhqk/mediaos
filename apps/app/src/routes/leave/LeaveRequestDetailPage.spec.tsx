@@ -14,7 +14,8 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 // Synchronous factory — MockApiError defined INSIDE factory (vi.mock is hoisted, class is not)
-vi.mock("@mediaos/web-core", () => {
+vi.mock("@mediaos/web-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   class MockApiError extends Error {
     status: number;
     code: string;
@@ -26,7 +27,9 @@ vi.mock("@mediaos/web-core", () => {
     }
   }
   return {
+    ...actual,
     useCan: vi.fn(() => true),
+    taskCoreApi: { getMyTasks: vi.fn() },
     leaveApi: {
       getMyRequest: vi.fn(),
       cancelRequest: vi.fn(),
@@ -56,7 +59,15 @@ vi.mock("@mediaos/ui", async (importOriginal) => {
   };
 });
 
-import { useCan, leaveApi, ApiError } from "@mediaos/web-core";
+import {
+  useCan,
+  leaveApi,
+  taskCoreApi,
+  ApiError,
+  addDaysToLocalDate,
+  companyTimeZone,
+  todayLocal,
+} from "@mediaos/web-core";
 import { LeaveRequestDetailPage } from "./LeaveRequestDetailPage";
 
 const mockUseCan = useCan as ReturnType<typeof vi.fn>;
@@ -220,5 +231,51 @@ describe("LeaveRequestDetailPage — cancel action", () => {
     await waitFor(() => {
       expect(mockCancelRequest).toHaveBeenCalledWith("req-1", "");
     });
+  });
+});
+
+// S20-TASK-LEAVEHANDOFF-1 — khối «Việc đến hạn trong kỳ nghỉ» trên đơn CỦA TÔI.
+describe("LeaveRequestDetailPage — khối bàn giao việc", () => {
+  const mockGetMyTasks = taskCoreApi.getMyTasks as ReturnType<typeof vi.fn>;
+  const today = todayLocal(new Date(), companyTimeZone());
+  const FUTURE = {
+    ...MOCK_REQUEST,
+    status: "Approved",
+    startDate: today,
+    endDate: addDaysToLocalDate(today, 3),
+  };
+
+  it("đơn Approved chưa qua ngày: có khối, thông tin đơn vẫn đủ", async () => {
+    mockGetMyRequest.mockResolvedValue(FUTURE);
+    mockGetMyTasks.mockResolvedValue([]);
+    renderPage(buildQC());
+    expect(await screen.findByTestId("leave-task-handoff")).toBeTruthy();
+    expect(screen.getByText("Nghỉ phép năm")).toBeTruthy();
+  });
+
+  it("/tasks/my lỗi: chỉ khối báo lỗi, đơn nghỉ vẫn hiển thị", async () => {
+    mockGetMyRequest.mockResolvedValue(FUTURE);
+    mockGetMyTasks.mockRejectedValue(new Error("boom"));
+    renderPage(buildQC());
+    expect(await screen.findByText("Không tải được danh sách việc của bạn.")).toBeTruthy();
+    expect(screen.getByText("Nghỉ phép năm")).toBeTruthy();
+    expect(screen.getByText("Việc gia đình")).toBeTruthy();
+  });
+
+  it("kỳ nghỉ đã qua: không có khối và không gọi /tasks/my", async () => {
+    mockGetMyRequest.mockResolvedValue({ ...MOCK_REQUEST, status: "Approved" });
+    renderPage(buildQC());
+    await screen.findByText("Nghỉ phép năm");
+    expect(screen.queryByTestId("leave-task-handoff")).toBeNull();
+    expect(mockGetMyTasks).not.toHaveBeenCalled();
+  });
+
+  it("deny: thiếu read:task thì không có khối", async () => {
+    mockUseCan.mockImplementation((action: string) => action !== "read");
+    mockGetMyRequest.mockResolvedValue(FUTURE);
+    renderPage(buildQC());
+    await screen.findByText("Nghỉ phép năm");
+    expect(screen.queryByTestId("leave-task-handoff")).toBeNull();
+    expect(mockGetMyTasks).not.toHaveBeenCalled();
   });
 });
