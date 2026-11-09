@@ -1,14 +1,41 @@
 import { useTranslation } from "react-i18next";
+import type { TaskCoreResponseDto } from "@mediaos/contracts";
+import { taskLockReason } from "./task-patch-field-locks";
 
 /**
  * S20-SEC-TASKPATCHGATE-1 — dòng gợi ý dưới ô bị khoá vì thiếu cặp quyền chuyên trách của trường
  * (xem `task-patch-field-locks.ts`). Gắn vào ô qua `aria-describedby={id}`.
  */
-export function TaskFieldLockedHint({ id }: { id: string }) {
+export function TaskFieldLockedHint({
+  id,
+  reason,
+}: {
+  id: string;
+  /** S20-TASK-ALLOWEDACTIONS-1 — `"watcher"` ⇒ «Bạn chỉ theo dõi việc này»; vắng ⇒ lời chung. */
+  reason?: "watcher" | null;
+}) {
   const { t } = useTranslation("tasks");
   return (
     <p id={id} className="text-xs text-muted-foreground">
-      {t("fieldGate.locked")}
+      {reason === "watcher" ? t("fieldGate.watcherOnly") : t("fieldGate.locked")}
     </p>
   );
+}
+
+/**
+ * Lý do khoá của ô CHI TIẾT việc theo `allowedActions.lockReason` của server. Chỉ hiện khi ô đang khoá
+ * VÀ server nêu lý do (người chỉ theo dõi); không lý do ⇒ giữ nguyên hành vi cũ (không thêm chữ).
+ */
+export function TaskLockedReasonHint({
+  task,
+  locked,
+  id,
+}: {
+  task: Pick<TaskCoreResponseDto, "allowedActions">;
+  locked: boolean;
+  id: string;
+}) {
+  const reason = taskLockReason(task);
+  if (!locked || !reason) return null;
+  return <TaskFieldLockedHint id={id} reason={reason} />;
 }

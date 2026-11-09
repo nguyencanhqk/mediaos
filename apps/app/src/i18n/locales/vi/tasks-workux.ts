@@ -90,6 +90,8 @@ export default {
   // S20-SEC-TASKPATCHGATE-1 — ô của form Sửa bị khoá vì thiếu cặp quyền chuyên trách của trường đó.
   fieldGate: {
     locked: "Bạn không có quyền đổi mục này.",
+    // S20-TASK-ALLOWEDACTIONS-1 — người chỉ theo dõi: server trả lockReason "watcher".
+    watcherOnly: "Bạn chỉ theo dõi việc này.",
   },
   // S20-SEC-GOALNAMEDTO-1 — việc gắn mục tiêu mà người xem không có quyền xem (server chỉ trả cờ).
   goalRef: {

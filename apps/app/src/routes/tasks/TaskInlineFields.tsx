@@ -25,6 +25,8 @@ import {
 } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge } from "./TaskStatusBadge";
 import { useTaskActionMutation } from "./hooks/use-task-action-mutation";
+import { useInvalidateTaskDetail, useTaskActionAllowed } from "./task-patch-field-locks";
+import { TaskLockedReasonHint } from "./TaskFieldLockedHint";
 import { EmployeePicker, type PickedEmployee } from "./EmployeePicker";
 import { useAssigneeWarningToast } from "./AssigneeWarning";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
@@ -169,14 +171,14 @@ export function BadgeSelect<T extends string>({
 // ── Trạng thái ───────────────────────────────────────────────────────────────
 export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
-  const canStatus = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.resourceType,
-  );
+  const canStatus = useTaskActionAllowed(task, "changeStatus");
+  const refreshDetail = useInvalidateTaskDetail(task.id);
   const mutation = useTaskActionMutation<TaskCoreStatusDto>({
     taskId: task.id,
     mutationFn: (status) => taskCoreApi.changeStatus(task.id, { status }),
     toPatch: (status) => ({ status }),
+    // Đổi trạng thái (huỷ/khôi phục) đổi allowedActions ⇒ làm mới chi tiết, không giữ bản chụp cũ.
+    onSaved: () => refreshDetail(),
   });
 
   const control = canStatus ? (
@@ -199,6 +201,7 @@ export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
   return (
     <Field label={t("tasks.statusSelect.statusLabel")} htmlFor="task-status-select">
       {control}
+      <TaskLockedReasonHint task={task} locked={!canStatus} id="task-status-locked" />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );
@@ -218,10 +221,8 @@ const STATE_CHIP_FALLBACK_COLOR = "#94a3b8";
 export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
-  const canMoveState = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.resourceType,
-  );
+  const canMoveState = useTaskActionAllowed(task, "changeState");
+  const refreshDetail = useInvalidateTaskDetail(task.id);
   const projectId = task.projectId ?? null;
   const statesQuery = useQuery({
     queryKey: taskKeys.states(projectId ?? ""),
@@ -239,6 +240,8 @@ export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
       queryClient.setQueryData<TaskCoreResponseDto>(taskKeys.detail(task.id), (prev) =>
         prev ? { ...prev, ...updated } : updated,
       );
+      // Auto-map nhóm→status có thể đổi vòng đời ⇒ allowedActions trong cache là bản cũ.
+      refreshDetail();
     },
     onSettled: () => {
       for (const key of taskCoreInvalidation.list())
@@ -283,6 +286,7 @@ export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
   return (
     <Field label={t("tasks.statusSelect.stateLabel")} htmlFor="task-state-select">
       {control}
+      <TaskLockedReasonHint task={task} locked={!canMoveState} id="task-state-locked" />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );
@@ -291,10 +295,7 @@ export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
 // ── Ưu tiên ──────────────────────────────────────────────────────────────────
 export function TaskPriorityField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
-  const canPriority = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE_PRIORITY.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE_PRIORITY.resourceType,
-  );
+  const canPriority = useTaskActionAllowed(task, "changePriority");
   const mutation = useTaskActionMutation<TaskCorePriorityDto>({
     taskId: task.id,
     mutationFn: (priority) => taskCoreApi.changePriority(task.id, { priority }),
@@ -320,6 +321,7 @@ export function TaskPriorityField({ task }: { task: TaskCoreResponseDto }) {
   return (
     <Field label={t("tasks.statusSelect.priorityLabel")} htmlFor="task-priority-select">
       {control}
+      <TaskLockedReasonHint task={task} locked={!canPriority} id="task-priority-locked" />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );
@@ -338,14 +340,8 @@ export function TaskDeadlineField({
   onChangeAssignee?: () => void;
 }) {
   const { t } = useTranslation("tasks");
-  const canDeadline = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE_DEADLINE.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE_DEADLINE.resourceType,
-  );
-  const canAssign = useCan(
-    TASK_CORE_ENGINE_PAIRS.ASSIGN.action,
-    TASK_CORE_ENGINE_PAIRS.ASSIGN.resourceType,
-  );
+  const canDeadline = useTaskActionAllowed(task, "changeDeadline");
+  const canAssign = useTaskActionAllowed(task, "assign");
   const [draft, setDraft] = useState(() => isoToLocalDatetime(task.dueAt));
   const notifyAssigneeWarnings = useAssigneeWarningToast();
   const mutation = useTaskActionMutation<string | null>({
@@ -405,6 +401,7 @@ export function TaskDeadlineField({
           {task.dueAt ? new Date(task.dueAt).toLocaleString("vi-VN") : "—"}
         </p>
       )}
+      <TaskLockedReasonHint task={task} locked={!canDeadline} id="task-deadline-locked" />
       {dateRangeError ? (
         <p role="alert" className="text-xs text-destructive">
           {t(taskQuickEditErrorKey("deadline", mutation.error))}
@@ -440,8 +437,11 @@ function useAssignMutation(
   }: { reopenPicker?: () => void; patchRows?: boolean; onFailed?: (error: unknown) => void },
 ) {
   const notifyAssigneeWarnings = useAssigneeWarningToast();
+  // /assign đổi phạm vi ghi của người nhận (assign@Own) ⇒ làm mới chi tiết sau khi giao.
+  const refreshDetail = useInvalidateTaskDetail(task.id);
   return useTaskActionMutation<AssignChoice>({
     taskId: task.id,
+    onSaved: () => refreshDetail(),
     mutationFn: ({ employeeId }) => taskCoreApi.assign(task.id, { assigneeEmployeeId: employeeId }),
     // Cache CHI TIẾT: optimistic chỉ đổi id, tên/ảnh về đúng theo response (như trước).
     toPatch: ({ employeeId }) => ({ mainAssigneeEmployeeId: employeeId }),
@@ -486,10 +486,7 @@ export function TaskAssigneeField({
   onPickerOpenChange?: (open: boolean) => void;
 }) {
   const { t } = useTranslation("tasks");
-  const canAssign = useCan(
-    TASK_CORE_ENGINE_PAIRS.ASSIGN.action,
-    TASK_CORE_ENGINE_PAIRS.ASSIGN.resourceType,
-  );
+  const canAssign = useTaskActionAllowed(task, "assign");
 
   // S20-TASK-ASSIGNWARN-1 — picker điều khiển từ ngoài để «Đổi người» trên cảnh báo mở lại ĐÚNG nó.
   const [ownPickerOpen, setOwnPickerOpen] = useState(false);
@@ -518,6 +515,7 @@ export function TaskAssigneeField({
           if (employeeId) mutation.mutate({ employeeId });
         }}
       />
+      <TaskLockedReasonHint task={task} locked={!canAssign} id="task-assignee-locked" />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );
@@ -537,10 +535,7 @@ export function TaskRowAssigneeControl({
   onFailed?: (error: unknown) => void;
 }) {
   const { t } = useTranslation("tasks");
-  const canAssign = useCan(
-    TASK_CORE_ENGINE_PAIRS.ASSIGN.action,
-    TASK_CORE_ENGINE_PAIRS.ASSIGN.resourceType,
-  );
+  const canAssign = useTaskActionAllowed(task, "assign");
   const [pickerOpen, setPickerOpen] = useState(false);
   const mutation = useAssignMutation(task, {
     reopenPicker: () => setPickerOpen(true),

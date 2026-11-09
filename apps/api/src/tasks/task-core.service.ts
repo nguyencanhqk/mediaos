@@ -59,6 +59,13 @@ import {
 } from "./task-core.mapper";
 import { decorateTaskRows, reloadTaskDtoTx, type GoalRefSource } from "./task-row-decorations";
 import { TaskGoalRefPolicy, type GoalRefUser, type GoalRefViewer } from "./task-goal-ref.policy";
+import {
+  allowedActionRequests,
+  computeTaskAllowedActions,
+  type AllowedActionsDeps,
+} from "./task-allowed-actions";
+import { TaskActionsRepository } from "./task-actions.repository";
+
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
@@ -167,6 +174,8 @@ export class TaskCoreService {
     private readonly goalRefs: TaskGoalRefPolicy,
     // S20-TASK-ASSIGNNOTI-1 — nhật ký tạo/sửa + sự kiện người/hạn/ưu tiên dùng chung với `/assign`. CUỐI.
     private readonly assignEvents: TaskAssignEvents,
+    // S20-TASK-ALLOWEDACTIONS-1 — tra «đang theo dõi» cho lockReason (chỉ khi 3 khoá chính đều false). CUỐI.
+    private readonly actionsRepo: TaskActionsRepository,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -208,6 +217,12 @@ export class TaskCoreService {
   }
 
   async getTask(user: RequestUser, id: string): Promise<TaskCoreResponseDto> {
+    // S20-TASK-ALLOWEDACTIONS-1 — cặp của từng route chuyên trách resolve TRƯỚC tx (một lượt đọc grant).
+    const actionScopes = await this.dataScope.resolveManyOrNull(
+      user.id,
+      user.companyId,
+      allowedActionRequests(),
+    );
     const result = await this.db.withTenant(user.companyId, async (tx) => {
       const scopeExists = await this.resolveReadScopeExists(tx, user);
       const row = await this.repo.findScopedByIdTx(tx, user.companyId, id, scopeExists);
@@ -218,7 +233,14 @@ export class TaskCoreService {
       // Gắn thẻ — nhãn của task cho màn chi tiết (biến thể Tx: đang Ở TRONG withTenant, mở lồng sẽ
       // treo trên PgBouncer). AWAIT TUẦN TỰ sau progress (cùng tx — không Promise.all, bẫy đã ghi).
       const labelRows = await this.tasksRepo.listLabelsForTaskIdsTx(tx, user.companyId, [id]);
-      return { row, progress: progress.get(id), labelRows };
+      const allowedActions = await computeTaskAllowedActions(
+        this.allowedActionDeps,
+        tx,
+        user,
+        { ...row, isWorkflow: WORKFLOW_TASK_TYPES.has(row.taskType) },
+        actionScopes,
+      );
+      return { row, progress: progress.get(id), labelRows, allowedActions };
     });
     if (!result) throw new NotFoundException(ERR.NOT_FOUND);
     const deco = await this.resolveSignedUrls(user.companyId, [result.row], { user });
@@ -227,6 +249,20 @@ export class TaskCoreService {
       subtaskTotal: result.progress?.total ?? 0,
       subtaskDone: result.progress?.done ?? 0,
       labels: toLabelChipsByTask(result.labelRows).get(id) ?? [],
+      ...(result.allowedActions ? { allowedActions: result.allowedActions } : {}),
+    };
+  }
+
+  private get allowedActionDeps(): AllowedActionsDeps {
+    return {
+      projectAccess: this.projectAccess,
+      isWatcher: async (tx, u, taskId) => {
+        const me = await this.repo.findActiveEmployeeByUserTx(tx, u.companyId, u.id);
+        if (!me) return false;
+        return (
+          (await this.actionsRepo.findActiveWatcherTx(tx, u.companyId, taskId, me.id)) !== undefined
+        );
+      },
     };
   }
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { taskGoalRefShape } from "./task-goal-ref";
+import { taskAllowedActionsSchema } from "./task-allowed-actions";
 import { idSchema } from "./common/id";
 
 // ─── Task type (G9-1: unified hub — BẤT BIẾN #4) ──────────────────────────────
@@ -736,6 +737,8 @@ export const taskCoreResponseSchema = z.object({
   labels: z.array(taskLabelChipSchema).optional(),
   // ── Mục tiêu đang gắn (S5-GOAL-BE-2) + cờ trung tính (S20-SEC-GOALNAMEDTO-1) — xem task-goal-ref.ts.
   ...taskGoalRefShape,
+  // S20-TASK-ALLOWEDACTIONS-1 — chỉ GET /tasks/:id điền; vắng ⇒ FE dùng useCan.
+  allowedActions: taskAllowedActionsSchema.optional(),
 });
 export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
 
