@@ -44,3 +44,4 @@ Gộp hai WO (cùng một nguồn tập khoá). Gate LIGHT, FE thuần. Nhánh `
 - Hạn chờ huỷ `signal` chỉ chạy được trên `moderatePost`; các lượt ghi `useGuardedMutation` khác đã nối từ trước.
 - Chưa nhìn trên trình duyệt thật (thay đổi thuần cache-key, không đổi bố cục).
 - `harness/backlog.mjs` KHÔNG sửa ở chuỗi này (đóng WO do điều phối).
+- Vá review: [LOW] glob `post-list-invalidation*.ts` không khớp `.surfaces.spec.tsx` (và IdeaReviewDialog.tsx chỉ nằm trong paths của FESTALELISTS ⇒ hai WO dính nhau). XÁC NHẬN đúng (`*.ts` không khớp `.tsx`). KHÔNG vá ở đây: sửa nằm ở `harness/backlog.mjs` (cấm sửa trong chuỗi này, không có ca test cho dữ liệu sổ). Việc chốt khi đóng WO: nới thành `post-list-invalidation*.ts*` (dòng 19353/21809/21834) và thêm IdeaReviewDialog.tsx vào paths FEMODINVAL.
