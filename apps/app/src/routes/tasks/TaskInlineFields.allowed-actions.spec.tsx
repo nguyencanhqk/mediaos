@@ -128,6 +128,37 @@ describe("allowedActions — khoá ô theo server", () => {
     expect(container.textContent).toContain("Bạn chỉ theo dõi việc này");
   });
 
+  it("F2b · ô khoá nối lý do bằng aria-describedby tới phần tử CÓ THẬT; id không trùng khi hai chi tiết cùng hiện", () => {
+    setCapabilities({});
+    const task = withActions(WATCHER_ACTIONS);
+    const { container } = renderWithQuery(
+      <>
+        <TaskStatusField task={task} />
+        <TaskPriorityField task={task} />
+        <TaskAssigneeDeadlineFields task={task} />
+        <TaskStatusField task={task} />
+      </>,
+    );
+    const groups = Array.from(container.querySelectorAll("[role=group][aria-describedby]"));
+    expect(groups).toHaveLength(5);
+    const ids = groups.map((g) => g.getAttribute("aria-describedby") as string);
+    expect(new Set(ids).size).toBe(5);
+    for (const id of ids) {
+      const hint = document.getElementById(id);
+      expect(hint).not.toBeNull();
+      expect(hint?.textContent).toContain("Bạn chỉ theo dõi việc này");
+    }
+    for (const g of groups) expect(g.getAttribute("aria-label")).toBe("Chỉ đọc");
+  });
+
+  it("F2c · khoá nhưng server không nêu lý do ⇒ không có aria-describedby treo", () => {
+    setCapabilities({});
+    const { container } = renderWithQuery(
+      <TaskStatusField task={withActions({ changeStatus: false })} />,
+    );
+    expect(container.querySelector("[aria-describedby]")).toBeNull();
+  });
+
   it("F3 · không có trường allowedActions ⇒ hành vi useCan cũ, không thêm lời lý do", () => {
     setCapabilities({});
     const { container } = renderWithQuery(<TaskStatusField task={BASE} />);

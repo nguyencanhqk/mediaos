@@ -26,7 +26,7 @@ import {
 import { TaskStatusBadge, TaskPriorityBadge } from "./TaskStatusBadge";
 import { useTaskActionMutation } from "./hooks/use-task-action-mutation";
 import { useInvalidateTaskDetail, useTaskActionAllowed } from "./task-patch-field-locks";
-import { TaskLockedReasonHint } from "./TaskFieldLockedHint";
+import { TaskLockedReasonHint, useLockedFieldA11y } from "./TaskFieldLockedHint";
 import { EmployeePicker, type PickedEmployee } from "./EmployeePicker";
 import { useAssigneeWarningToast } from "./AssigneeWarning";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
@@ -172,6 +172,7 @@ export function BadgeSelect<T extends string>({
 export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
   const canStatus = useTaskActionAllowed(task, "changeStatus");
+  const a11y = useLockedFieldA11y(task, !canStatus);
   const refreshDetail = useInvalidateTaskDetail(task.id);
   const mutation = useTaskActionMutation<TaskCoreStatusDto>({
     taskId: task.id,
@@ -193,7 +194,7 @@ export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
       renderBadge={(s) => <TaskStatusBadge status={s} />}
     />
   ) : (
-    <div>
+    <div {...a11y.groupProps}>
       <TaskStatusBadge status={task.status} />
     </div>
   );
@@ -201,7 +202,7 @@ export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
   return (
     <Field label={t("tasks.statusSelect.statusLabel")} htmlFor="task-status-select">
       {control}
-      <TaskLockedReasonHint task={task} locked={!canStatus} id="task-status-locked" />
+      <TaskLockedReasonHint task={task} locked={!canStatus} id={a11y.hintId} />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );
@@ -222,6 +223,7 @@ export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
   const canMoveState = useTaskActionAllowed(task, "changeState");
+  const a11y = useLockedFieldA11y(task, !canMoveState);
   const refreshDetail = useInvalidateTaskDetail(task.id);
   const projectId = task.projectId ?? null;
   const statesQuery = useQuery({
@@ -280,13 +282,13 @@ export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
       renderBadge={chip}
     />
   ) : (
-    <div>{chip(task.stateId ?? null)}</div>
+    <div {...a11y.groupProps}>{chip(task.stateId ?? null)}</div>
   );
 
   return (
     <Field label={t("tasks.statusSelect.stateLabel")} htmlFor="task-state-select">
       {control}
-      <TaskLockedReasonHint task={task} locked={!canMoveState} id="task-state-locked" />
+      <TaskLockedReasonHint task={task} locked={!canMoveState} id={a11y.hintId} />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );
@@ -296,6 +298,7 @@ export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
 export function TaskPriorityField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
   const canPriority = useTaskActionAllowed(task, "changePriority");
+  const a11y = useLockedFieldA11y(task, !canPriority);
   const mutation = useTaskActionMutation<TaskCorePriorityDto>({
     taskId: task.id,
     mutationFn: (priority) => taskCoreApi.changePriority(task.id, { priority }),
@@ -313,7 +316,7 @@ export function TaskPriorityField({ task }: { task: TaskCoreResponseDto }) {
       renderBadge={(p) => <TaskPriorityBadge priority={p} />}
     />
   ) : (
-    <div>
+    <div {...a11y.groupProps}>
       <TaskPriorityBadge priority={task.priority} />
     </div>
   );
@@ -321,7 +324,7 @@ export function TaskPriorityField({ task }: { task: TaskCoreResponseDto }) {
   return (
     <Field label={t("tasks.statusSelect.priorityLabel")} htmlFor="task-priority-select">
       {control}
-      <TaskLockedReasonHint task={task} locked={!canPriority} id="task-priority-locked" />
+      <TaskLockedReasonHint task={task} locked={!canPriority} id={a11y.hintId} />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );
@@ -342,6 +345,7 @@ export function TaskDeadlineField({
   const { t } = useTranslation("tasks");
   const canDeadline = useTaskActionAllowed(task, "changeDeadline");
   const canAssign = useTaskActionAllowed(task, "assign");
+  const a11y = useLockedFieldA11y(task, !canDeadline);
   const [draft, setDraft] = useState(() => isoToLocalDatetime(task.dueAt));
   const notifyAssigneeWarnings = useAssigneeWarningToast();
   const mutation = useTaskActionMutation<string | null>({
@@ -397,11 +401,13 @@ export function TaskDeadlineField({
           />
         </div>
       ) : (
-        <p className="text-sm text-foreground">
-          {task.dueAt ? new Date(task.dueAt).toLocaleString("vi-VN") : "—"}
-        </p>
+        <div {...a11y.groupProps}>
+          <p className="text-sm text-foreground">
+            {task.dueAt ? new Date(task.dueAt).toLocaleString("vi-VN") : "—"}
+          </p>
+        </div>
       )}
-      <TaskLockedReasonHint task={task} locked={!canDeadline} id="task-deadline-locked" />
+      <TaskLockedReasonHint task={task} locked={!canDeadline} id={a11y.hintId} />
       {dateRangeError ? (
         <p role="alert" className="text-xs text-destructive">
           {t(taskQuickEditErrorKey("deadline", mutation.error))}
@@ -487,6 +493,7 @@ export function TaskAssigneeField({
 }) {
   const { t } = useTranslation("tasks");
   const canAssign = useTaskActionAllowed(task, "assign");
+  const a11y = useLockedFieldA11y(task, !canAssign);
 
   // S20-TASK-ASSIGNWARN-1 — picker điều khiển từ ngoài để «Đổi người» trên cảnh báo mở lại ĐÚNG nó.
   const [ownPickerOpen, setOwnPickerOpen] = useState(false);
@@ -498,24 +505,26 @@ export function TaskAssigneeField({
 
   return (
     <Field label={t("tasks.assign.label")}>
-      <EmployeePicker
-        employeeId={task.mainAssigneeEmployeeId}
-        name={task.assigneeName}
-        avatarUrl={task.assigneeAvatarUrl}
-        canEdit={canAssign}
-        // KHÔNG cho gỡ: `assignTaskSchema` đòi uuid nên route assign không nhận giá trị rỗng.
-        allowClear={false}
-        showName
-        pending={mutation.isPending}
-        testId="task-assignee-picker"
-        emptyLabel={t("tasks.detail.subtasks.unassigned")}
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        onSelect={(employeeId) => {
-          if (employeeId) mutation.mutate({ employeeId });
-        }}
-      />
-      <TaskLockedReasonHint task={task} locked={!canAssign} id="task-assignee-locked" />
+      <div {...a11y.groupProps}>
+        <EmployeePicker
+          employeeId={task.mainAssigneeEmployeeId}
+          name={task.assigneeName}
+          avatarUrl={task.assigneeAvatarUrl}
+          canEdit={canAssign}
+          // KHÔNG cho gỡ: `assignTaskSchema` đòi uuid nên route assign không nhận giá trị rỗng.
+          allowClear={false}
+          showName
+          pending={mutation.isPending}
+          testId="task-assignee-picker"
+          emptyLabel={t("tasks.detail.subtasks.unassigned")}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onSelect={(employeeId) => {
+            if (employeeId) mutation.mutate({ employeeId });
+          }}
+        />
+      </div>
+      <TaskLockedReasonHint task={task} locked={!canAssign} id={a11y.hintId} />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
   );

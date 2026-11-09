@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { taskLockReason } from "./task-patch-field-locks";
@@ -38,4 +39,30 @@ export function TaskLockedReasonHint({
   const reason = taskLockReason(task);
   if (!locked || !reason) return null;
   return <TaskFieldLockedHint id={id} reason={reason} />;
+}
+
+/**
+ * a11y của ô CHI TIẾT bị khoá: id lời lý do sinh bằng `useId` (không trùng khi hai chi tiết cùng hiện,
+ * vd ngăn kéo đè trang) + thuộc tính cho khung giá trị chỉ-đọc — `role="group"`, nhãn «Chỉ đọc»,
+ * `aria-describedby` trỏ lời lý do CHỈ KHI lời đó thật sự được vẽ (tham chiếu id không tồn tại là rác).
+ */
+export function useLockedFieldA11y(
+  task: Pick<TaskCoreResponseDto, "allowedActions">,
+  locked: boolean,
+): {
+  hintId: string;
+  groupProps: { role?: "group"; "aria-label"?: string; "aria-describedby"?: string };
+} {
+  const { t } = useTranslation("tasks");
+  const hintId = useId();
+  if (!locked) return { hintId, groupProps: {} };
+  const hasHint = taskLockReason(task) !== null;
+  return {
+    hintId,
+    groupProps: {
+      role: "group",
+      "aria-label": t("fieldGate.readOnly"),
+      ...(hasHint ? { "aria-describedby": hintId } : {}),
+    },
+  };
 }
