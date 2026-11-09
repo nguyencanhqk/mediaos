@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ClipboardList, List, ListTree, Plus, RefreshCw, Target, UserRound } from "lucide-react";
 import {
   companyTimeZone,
@@ -41,6 +41,7 @@ import {
 } from "./goal-list-search";
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
 import { GoalCheckinCell, GoalNeedsCheckinBadge } from "./components/GoalCheckinCell";
+import { GOAL_SORTABLE_COLUMNS, sortGoalRows } from "./goal-checkin-freshness";
 import { GoalProgressBar } from "./components/GoalProgressBar";
 import { GoalTreeView } from "./components/GoalTreeView";
 import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
@@ -170,6 +171,9 @@ export function GoalListPage() {
     [mine, mineQuery.data, listRows],
   );
   const selection = useGoalRowSelection(tableRows);
+  // «Phụ trách» + «Check-in cuối» sắp TẠI CHỖ trên tập đã tải (≤ limit của danh sách) — không gọi lại API.
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const sortedRows = useMemo(() => sortGoalRows(tableRows, sorting), [tableRows, sorting]);
 
   const openDetail = (goalId: string) =>
     void navigate({ to: "/goals/$goalId", params: { goalId } });
@@ -397,7 +401,9 @@ export function GoalListPage() {
           )}
           <DataTable
             columns={columns}
-            data={tableRows}
+            data={sortedRows as GoalCoreResponseDto[]}
+            sorting={sorting}
+            onSortingChange={setSorting}
             isLoading={activeQuery.isLoading}
             onRowClick={(row) => openDetail(row.id)}
             pageSize={20}
@@ -434,104 +440,117 @@ function useGoalColumns(
 ): ColumnDef<GoalCoreResponseDto>[] {
   const { t } = useTranslation("goals");
   return useMemo<ColumnDef<GoalCoreResponseDto>[]>(
-    () => [
-      ...(selection
-        ? [
-            {
-              id: "select",
-              header: () => (
-                <GoalSelectCheckbox
-                  label={t("bulkActivate.selectAll")}
-                  checked={selection.allSelected}
-                  indeterminate={selection.someSelected && !selection.allSelected}
-                  onToggle={selection.toggleAll}
-                />
-              ),
-              cell: ({ row }) => (
-                <GoalSelectCheckbox
-                  label={t("bulkActivate.selectRow", { name: row.original.name })}
-                  checked={selection.selectedIds.has(row.original.id)}
-                  onToggle={() => selection.toggle(row.original.id)}
-                />
-              ),
-            } satisfies ColumnDef<GoalCoreResponseDto>,
-          ]
-        : []),
-      {
-        accessorKey: "name",
-        header: t("list.columns.name"),
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="font-medium text-foreground">{row.original.name}</span>
-            <span className="text-xs text-muted-foreground">{row.original.goalCode}</span>
-          </div>
-        ),
-      },
-      {
-        accessorKey: "level",
-        header: t("list.columns.level"),
-        cell: ({ row }) => <GoalLevelBadge level={row.original.level} />,
-      },
-      {
-        id: "period",
-        header: t("list.columns.period"),
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm text-muted-foreground">
-            {formatPeriod(row.original.periodStart, row.original.periodEnd)}
-          </span>
-        ),
-      },
-      {
-        id: "owner",
-        header: t("list.columns.owner"),
-        accessorFn: (g) => g.ownerName ?? "",
-        cell: ({ row }) => (
-          <span className="text-sm text-foreground">{row.original.ownerName ?? "—"}</span>
-        ),
-      },
-      {
-        id: "lastCheckin",
-        header: t("list.columns.lastCheckin"),
-        accessorFn: (g) => g.lastCheckinAt ?? "",
-        cell: ({ row }) => (
-          <div className="flex flex-col items-start gap-0.5">
-            <GoalCheckinCell goal={row.original} />
-            <GoalNeedsCheckinBadge goal={row.original} />
-          </div>
-        ),
-      },
-      {
-        id: "progress",
-        header: t("list.columns.progress"),
-        cell: ({ row }) => (
-          <div className="w-44">
-            <GoalProgressBar progressPercent={row.original.progressPercent} compact />
-          </div>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: t("list.columns.status"),
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1.5">
-            <GoalStatusBadge status={row.original.status} />
-            {row.original.finalizedAt && <GoalFinalizedBadge />}
-          </div>
-        ),
-      },
-      ...(onCheckin
-        ? [
-            {
-              id: "checkin",
-              header: () => <span className="sr-only">{t("list.columns.checkin")}</span>,
-              cell: ({ row }) => (
-                <GoalCheckinDialogTrigger goal={row.original} onCheckin={onCheckin} />
-              ),
-            } satisfies ColumnDef<GoalCoreResponseDto>,
-          ]
-        : []),
-    ],
+    () =>
+      withSortableOnly([
+        ...(selection
+          ? [
+              {
+                id: "select",
+                header: () => (
+                  <GoalSelectCheckbox
+                    label={t("bulkActivate.selectAll")}
+                    checked={selection.allSelected}
+                    indeterminate={selection.someSelected && !selection.allSelected}
+                    onToggle={selection.toggleAll}
+                  />
+                ),
+                cell: ({ row }) => (
+                  <GoalSelectCheckbox
+                    label={t("bulkActivate.selectRow", { name: row.original.name })}
+                    checked={selection.selectedIds.has(row.original.id)}
+                    onToggle={() => selection.toggle(row.original.id)}
+                  />
+                ),
+              } satisfies ColumnDef<GoalCoreResponseDto>,
+            ]
+          : []),
+        {
+          accessorKey: "name",
+          header: t("list.columns.name"),
+          cell: ({ row }) => (
+            <div className="flex flex-col">
+              <span className="font-medium text-foreground">{row.original.name}</span>
+              <span className="text-xs text-muted-foreground">{row.original.goalCode}</span>
+            </div>
+          ),
+        },
+        {
+          accessorKey: "level",
+          header: t("list.columns.level"),
+          cell: ({ row }) => <GoalLevelBadge level={row.original.level} />,
+        },
+        {
+          id: "period",
+          header: t("list.columns.period"),
+          cell: ({ row }) => (
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              {formatPeriod(row.original.periodStart, row.original.periodEnd)}
+            </span>
+          ),
+        },
+        {
+          id: "owner",
+          header: t("list.columns.owner"),
+          accessorFn: (g) => g.ownerName ?? "",
+          cell: ({ row }) => (
+            <span className="text-sm text-foreground">{row.original.ownerName ?? "—"}</span>
+          ),
+        },
+        {
+          id: "lastCheckin",
+          header: t("list.columns.lastCheckin"),
+          accessorFn: (g) => g.lastCheckinAt ?? "",
+          cell: ({ row }) => (
+            <div className="flex flex-col items-start gap-0.5">
+              <GoalCheckinCell goal={row.original} />
+              <GoalNeedsCheckinBadge goal={row.original} />
+            </div>
+          ),
+        },
+        {
+          id: "progress",
+          header: t("list.columns.progress"),
+          cell: ({ row }) => (
+            <div className="w-44">
+              <GoalProgressBar progressPercent={row.original.progressPercent} compact />
+            </div>
+          ),
+        },
+        {
+          accessorKey: "status",
+          header: t("list.columns.status"),
+          cell: ({ row }) => (
+            <div className="flex items-center gap-1.5">
+              <GoalStatusBadge status={row.original.status} />
+              {row.original.finalizedAt && <GoalFinalizedBadge />}
+            </div>
+          ),
+        },
+        ...(onCheckin
+          ? [
+              {
+                id: "checkin",
+                header: () => <span className="sr-only">{t("list.columns.checkin")}</span>,
+                cell: ({ row }) => (
+                  <GoalCheckinDialogTrigger goal={row.original} onCheckin={onCheckin} />
+                ),
+              } satisfies ColumnDef<GoalCoreResponseDto>,
+            ]
+          : []),
+      ]),
     [t, onCheckin, selection],
+  );
+}
+
+/**
+ * DataTable ở chế độ có `onSortingChange` coi MỌI cột là sắp được ⇒ chỉ giữ nút sắp cho cột trong
+ * `GOAL_SORTABLE_COLUMNS` (sắp tại chỗ bằng `sortGoalRows`); cột khác tắt để không có nút bấm vô tác dụng.
+ */
+function withSortableOnly(
+  cols: ColumnDef<GoalCoreResponseDto>[],
+): ColumnDef<GoalCoreResponseDto>[] {
+  return cols.map((c) =>
+    c.id && GOAL_SORTABLE_COLUMNS.has(c.id) ? c : { ...c, enableSorting: false },
   );
 }
 

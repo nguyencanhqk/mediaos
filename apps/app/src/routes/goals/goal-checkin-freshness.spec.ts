@@ -4,6 +4,7 @@ import {
   floatNeedingCheckin,
   formatCompanyDateTime,
   needsCheckin,
+  sortGoalRows,
 } from "./goal-checkin-freshness";
 
 const TZ = "Asia/Ho_Chi_Minh";
@@ -58,5 +59,42 @@ describe("goal-checkin-freshness", () => {
     const { lastCheckinAt: _omit, ...absent } = base;
     expect(needsCheckin(absent, NOW, TZ)).toBe(false);
     expect(needsCheckin({ ...base, lastCheckinAt: null }, NOW, TZ)).toBe(true);
+  });
+});
+
+describe("sortGoalRows — cột «Phụ trách» + «Check-in cuối» sắp tại chỗ (smoke 09/11)", () => {
+  const rows = [
+    { id: "b", ownerName: "Bùi Văn Bình", lastCheckinAt: "2026-11-01T02:00:00.000Z" },
+    { id: "n", ownerName: null, lastCheckinAt: null },
+    { id: "a", ownerName: "An Thị Ánh", lastCheckinAt: "2026-11-08T02:00:00.000Z" },
+    { id: "u", ownerName: "Đặng Văn Đức", lastCheckinAt: undefined },
+  ];
+  const ids = (xs: readonly { id: string }[]) => xs.map((x) => x.id);
+
+  it("không có cột sắp ⇒ giữ nguyên thứ tự server (cùng tham chiếu)", () => {
+    expect(sortGoalRows(rows, [])).toBe(rows);
+  });
+  it("cột khác owner/lastCheckin ⇒ giữ nguyên", () => {
+    expect(ids(sortGoalRows(rows, [{ id: "name", desc: false }]))).toEqual(["b", "n", "a", "u"]);
+  });
+  it("Phụ trách tăng dần theo tiếng Việt, không tên xuống cuối; giảm dần vẫn để không tên ở cuối", () => {
+    expect(ids(sortGoalRows(rows, [{ id: "owner", desc: false }]))).toEqual(["a", "b", "u", "n"]);
+    expect(ids(sortGoalRows(rows, [{ id: "owner", desc: true }]))).toEqual(["u", "b", "a", "n"]);
+  });
+  it("Check-in cuối: tăng dần = cũ nhất trước; chưa check-in / không biết luôn ở cuối; không đổi mảng gốc", () => {
+    const before = ids(rows);
+    expect(ids(sortGoalRows(rows, [{ id: "lastCheckin", desc: false }]))).toEqual([
+      "b",
+      "a",
+      "n",
+      "u",
+    ]);
+    expect(ids(sortGoalRows(rows, [{ id: "lastCheckin", desc: true }]))).toEqual([
+      "a",
+      "b",
+      "n",
+      "u",
+    ]);
+    expect(ids(rows)).toEqual(before);
   });
 });

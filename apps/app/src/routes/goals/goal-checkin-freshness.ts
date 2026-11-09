@@ -72,3 +72,32 @@ export function floatNeedingCheckin<T extends FreshnessFacts>(
   const rest = goals.filter((g) => !needsCheckin(g, now, timeZone));
   return [...needs, ...rest];
 }
+
+/** Cột sắp được tại chỗ ở chế độ Danh sách — phần còn lại giữ thứ tự server. */
+export const GOAL_SORTABLE_COLUMNS: ReadonlySet<string> = new Set(["owner", "lastCheckin"]);
+
+type SortableGoal = { ownerName?: string | null; lastCheckinAt?: string | null };
+
+/**
+ * Sắp tại chỗ (client) theo «Phụ trách» (tên, collation tiếng Việt) hoặc «Check-in cuối» (ISO UTC).
+ * Không tên / chưa check-in / khoá vắng LUÔN xuống cuối ở cả hai chiều (ổn định — giữ thứ tự server
+ * giữa chúng). Không có cột sắp hợp lệ ⇒ trả lại CHÍNH mảng vào (cùng tham chiếu, không render thừa).
+ */
+export function sortGoalRows<T extends SortableGoal>(
+  rows: readonly T[],
+  sorting: readonly { id: string; desc: boolean }[],
+): readonly T[] {
+  const s = sorting[0];
+  if (!s || !GOAL_SORTABLE_COLUMNS.has(s.id)) return rows;
+  const keyOf = (g: T) => (s.id === "owner" ? g.ownerName : g.lastCheckinAt) ?? null;
+  const dir = s.desc ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const ka = keyOf(a);
+    const kb = keyOf(b);
+    if (ka === kb) return 0;
+    if (ka === null) return 1;
+    if (kb === null) return -1;
+    const cmp = s.id === "owner" ? ka.localeCompare(kb, "vi") : ka < kb ? -1 : 1;
+    return cmp * dir;
+  });
+}

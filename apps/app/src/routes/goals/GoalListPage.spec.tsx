@@ -564,3 +564,52 @@ describe("GoalListPage — kích hoạt hàng loạt mục tiêu Nháp (US-GOAL-
     expect(mockUpdateGoal).toHaveBeenCalledWith("d-1", { status: "Active" });
   });
 });
+
+describe("GoalListPage — cột «Phụ trách» + «Check-in cuối» sắp tại chỗ (S20-GOAL-OWNERCHECKIN-1)", () => {
+  const LIST_HREF = `/goals?period=${Q4}&view=list`;
+  const ROWS = [
+    {
+      ...GOAL_ROW,
+      id: "g-new",
+      name: "Mục tiêu mới check-in",
+      ownerName: "Bùi Văn Bình",
+      lastCheckinAt: "2026-11-08T02:00:00.000Z",
+    },
+    {
+      ...GOAL_ROW,
+      id: "g-old",
+      name: "Mục tiêu check-in cũ",
+      ownerName: "An Thị Ánh",
+      lastCheckinAt: "2026-10-01T02:00:00.000Z",
+    },
+  ];
+  const rowNames = () =>
+    screen
+      .getAllByRole("row")
+      .map((r) => r.textContent ?? "")
+      .filter((txt) => txt.includes("Mục tiêu"))
+      .map((txt) => (txt.includes("cũ") ? "old" : "new"));
+
+  it("bấm tiêu đề «Check-in cuối» ⇒ cũ nhất lên đầu; bấm lại ⇒ đảo; cột khác không có nút sắp", async () => {
+    login({ "view:goal": true });
+    mockListGoals.mockResolvedValue(ROWS);
+    mountAt(LIST_HREF);
+    await screen.findByText("Mục tiêu check-in cũ");
+    expect(rowNames()).toEqual(["new", "old"]);
+    fireEvent.click(screen.getByTestId("sort-lastCheckin"));
+    await waitFor(() => expect(rowNames()).toEqual(["old", "new"]));
+    fireEvent.click(screen.getByTestId("sort-lastCheckin"));
+    await waitFor(() => expect(rowNames()).toEqual(["new", "old"]));
+    expect(screen.queryByTestId("sort-name")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sort-status")).not.toBeInTheDocument();
+  });
+
+  it("bấm tiêu đề «Phụ trách» ⇒ sắp theo tên người phụ trách", async () => {
+    login({ "view:goal": true });
+    mockListGoals.mockResolvedValue(ROWS);
+    mountAt(LIST_HREF);
+    await screen.findByText("Mục tiêu check-in cũ");
+    fireEvent.click(screen.getByTestId("sort-owner"));
+    await waitFor(() => expect(rowNames()).toEqual(["old", "new"]));
+  });
+});

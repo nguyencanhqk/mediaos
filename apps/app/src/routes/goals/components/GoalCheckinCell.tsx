@@ -60,7 +60,7 @@ export function GoalCheckinCell({ goal, now }: { goal: CellGoal; now?: Date }) {
       data-stale={stale ? "true" : undefined}
       className={
         stale
-          ? "whitespace-nowrap text-sm font-medium text-warning-foreground"
+          ? "whitespace-nowrap text-sm font-medium text-warning"
           : "whitespace-nowrap text-sm text-muted-foreground"
       }
     >

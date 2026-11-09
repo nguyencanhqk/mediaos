@@ -68,3 +68,30 @@ describe("GoalCheckinCell", () => {
     expect(screen.queryByTestId("goal-needs-checkin-g1")).toBeNull();
   });
 });
+
+describe("GoalCheckinCell — màu cảnh báo phải là token CÓ THẬT (smoke 09/11: text-warning-foreground không sinh CSS)", () => {
+  it("mọi lớp text-<màu> của ô quá hạn khớp một --color-<màu> trong theme.css", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    // vitest chạy với cwd = apps/app (pnpm --filter … exec).
+    const theme = readFileSync(
+      resolve(process.cwd(), "../../packages/ui/src/styles/theme.css"),
+      "utf8",
+    );
+    render(
+      <I18nextProvider i18n={i18n}>
+        <GoalCheckinCell goal={goal({ lastCheckinAt: "2026-10-20T05:00:00.000Z" })} now={NOW} />
+      </I18nextProvider>,
+    );
+    const cell = screen.getByTestId("goal-lastcheckin-g1");
+    expect(cell).toHaveAttribute("data-stale", "true");
+    const colors = cell.className
+      .split(/\s+/)
+      .filter(
+        (c) => c.startsWith("text-") && !/^text-(xs|sm|base|lg|xl|\dxl|left|right|center)$/.test(c),
+      )
+      .map((c) => c.slice("text-".length));
+    expect(colors.length).toBeGreaterThan(0);
+    for (const c of colors) expect(theme).toContain(`--color-${c}:`);
+  });
+});
