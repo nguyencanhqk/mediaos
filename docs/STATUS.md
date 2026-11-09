@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 00:40Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 00:43Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -140,7 +140,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -149,6 +149,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `dbee55d9` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 1 (08/11) — 3 WO đóng dấu từ commit merge #664 · #665 · #666 · gieo S20-TASK-DEADLINEPOLISH-1 · regen STATUS + INDEX |
 | `e0a335d3` | 2026-11-09 | fix(social): S16-SOCIAL-FEPOLLRACE-1 — PollBlock huỷ 043 đang bay trước khi ghi kết quả bỏ/rút phiếu/đóng (#664) |
 | `c587fdaf` | 2026-11-09 | feat(goals): S7-GOAL-PROJTAB-1 — tab «Mục tiêu» trong workspace dự án (lát A) (#666) |
 | `73e07dfd` | 2026-11-09 | feat(leave): S20-TASK-LEAVEHANDOFF-1 — đơn nghỉ của tôi hiện việc đến hạn trong kỳ nghỉ: dời hạn «Sau kỳ nghỉ», báo người giao, đổi người (#665) |
@@ -160,7 +161,6 @@
 | `e597298c` | 2026-11-06 | chore(backlog): sổ hậu merge đợt 06/11 chiều — 2 WO đóng dấu từ commit merge #659 · #660 · regen STATUS |
 | `75c3beb1` | 2026-11-06 | feat(chat): S20-CHAT-MSGTOTASK-1 — tạo việc từ một tin nhắn ngay trong phòng chat (#660) |
 | `783b07af` | 2026-11-06 | fix(fe): S20-FE-TOAST-2 — thông báo nổi cho apps/auth + apps/console, dọn thông báo khi đổi người dùng (#659) |
-| `e559fa12` | 2026-11-06 | chore(backlog): sổ hậu merge — S19-OPS-SCADEVDEPS-1 đóng dấu từ commit merge #658 · regen STATUS |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
