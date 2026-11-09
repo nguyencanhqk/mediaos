@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 07:00Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-09 07:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -139,7 +139,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 3
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -148,6 +148,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `08542d18` | 2026-11-09 | fix(notifications): S20-NOTI-PRIORITYFILTER-1 (2/2 FE) — «đánh dấu đã đọc theo bộ lọc» một lời gọi, mốc theo thời điểm server (#672) |
+| `03bad02e` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 2 — 4 WO đóng dấu từ #671 · #668 · #669 · #670 · gieo S20-FE-WAVE2POLISH-1 + S20-NOTI-WSPAYLOAD-1 · regen STATUS + INDEX |
 | `af1520f1` | 2026-11-09 | feat(notifications): S20-NOTI-LIVETOAST-1 — toast realtime thông báo + tin nhắn, «(N)» trên tiêu đề tab, tuỳ chọn toast theo trình duyệt (#670) |
 | `8abee6a9` | 2026-11-09 | feat(tasks): S20-TASK-BULKACTIONS-1 — chọn nhiều việc rồi giao người / dời hạn / đổi trạng thái / chuyển cột một lần, báo kết quả từng dòng (#669) |
 | `728b6afe` | 2026-11-09 | fix(notifications): S20-NOTI-PRIORITYFILTER-1 — lọc priority=Normal gồm hàng NULL; mark-all-read nhận priority, created_before idempotent dưới pipe kép (BE + contracts + docs) (#668) |
@@ -158,8 +160,6 @@
 | `43e25b89` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 1b — S19-QA-FETESTNET-1 đóng dấu từ #667 · gieo S19-QA-FETESTNET-2 (lưới cho apps/console) · regen STATUS + INDEX |
 | `d00faa3b` | 2026-11-09 | test(app): S19-QA-FETESTNET-1 — lưới chặn fetch toàn cục cho suite test FE, vá 12 spec lọt mạng (#667) |
 | `fbc295ab` | 2026-11-09 | chore(backlog): S19-LMS-AUTHCENSUS-1 lên PROD (LMS 1dcd1d3) · gieo S19-LMS-MATACCESS-1 + S19-LMS-UPLOADOWNER-1 · regen STATUS + INDEX |
-| `f8aaac2a` | 2026-11-09 | chore(backlog): S19-QA-FETESTNET-1 — paths theo thực tế trước Đợt 1b: spec toàn apps/app + setup test auth/console, plan một tệp |
-| `dbee55d9` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 1 (08/11) — 3 WO đóng dấu từ commit merge #664 · #665 · #666 · gieo S20-TASK-DEADLINEPOLISH-1 · regen STATUS + INDEX |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
