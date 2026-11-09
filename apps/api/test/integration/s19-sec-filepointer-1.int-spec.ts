@@ -33,6 +33,7 @@ type PairGrant = readonly [string, string, Scope?];
 const ADMIN_PAIRS: readonly PairGrant[] = [
   ["configure-company", "company"],
   ["update", "foundation-company"],
+  ["update", "foundation-setting"],
   ["manage", "contract"],
   ["read", "employee"],
 ];
@@ -42,6 +43,8 @@ const ATT_OWN_PAIRS: readonly PairGrant[] = [
 ];
 
 const LOGO_REF = "FOUNDATION-BRAND-ERR-LOGO-REF";
+const FAVICON_REF = "FOUNDATION-BRAND-ERR-FAVICON-REF";
+const FAVICON_KEY = "branding.favicon_file_id";
 const FILE_FORBIDDEN = "FOUNDATION-FILE-ERR-FORBIDDEN";
 const FILE_LINK = "FOUNDATION-FILE-ERR-LINK";
 const FILE_INFECTED = "FOUNDATION-FILE-ERR-INFECTED";
@@ -348,6 +351,56 @@ describe.skipIf(!hasLaneDb)(
       const res = await w.put(tok("adm"), "/foundation/company/branding/logo").send({ fileId: f });
       expectOk(res, "PUT branding/logo");
       expect(await logoOf()).toBe(f);
+    });
+
+    // ─── P3f · favicon ngoài endpoint branding ───────────────────────────────────
+
+    describe("P3f · favicon qua PATCH /foundation/company-settings/:key", () => {
+      const faviconOf = () =>
+        scalar(
+          `SELECT setting_value #>> '{}' AS v FROM company_settings
+           WHERE company_id = $1 AND setting_key = $2 AND deleted_at IS NULL`,
+          [w.A.companyId, FAVICON_KEY],
+        );
+      const setFavicon = (v: string) =>
+        w.direct.query(
+          `INSERT INTO company_settings (company_id, setting_key, setting_value, value_type, category)
+           VALUES ($1,$2,to_jsonb($3::text),'String','Branding')
+           ON CONFLICT (company_id, setting_key) WHERE deleted_at IS NULL AND status = 'Active'
+           DO UPDATE SET setting_value = EXCLUDED.setting_value`,
+          [w.A.companyId, FAVICON_KEY, v],
+        );
+      const patchFav = (v: unknown) =>
+        w
+          .patch(tok("adm"), `/foundation/company-settings/${FAVICON_KEY}`)
+          .send({ settingValue: v, valueType: "String" });
+
+      it("mã tệp khác giá trị hiện có ⇒ 400, giá trị không đổi, 0 audit mới", async () => {
+        await setFavicon("https://seed.test/f.ico");
+        const f = await seedFile(uid("adm"));
+        const before = await auditCount("COMPANY_SETTING_UPDATED");
+        expectStatusCode(await patchFav(f), 400, FAVICON_REF, "mã tệp");
+        expect(await faviconOf()).toBe("https://seed.test/f.ico");
+        expect(await auditCount("COMPANY_SETTING_UPDATED")).toBe(before);
+      });
+
+      it("rỗng / http(s) / trùng giá trị hiện có ⇒ 200", async () => {
+        expectOk(await patchFav(""), "rỗng");
+        expect(await faviconOf()).toBe("");
+        expectOk(await patchFav("https://x.test/f.ico"), "http(s)");
+        expect(await faviconOf()).toBe("https://x.test/f.ico");
+        const same = randomUUID();
+        await setFavicon(same);
+        expectOk(await patchFav(same.toUpperCase()), "trùng");
+        expect(await faviconOf()).toBe(same);
+      });
+
+      it("endpoint branding vẫn đặt được favicon bằng mã tệp", async () => {
+        const f = await seedFile(uid("adm"));
+        const res = await w.put(tok("adm"), "/foundation/company/branding/favicon").send({ fileId: f });
+        expectOk(res, "PUT branding/favicon");
+        expect(await faviconOf()).toBe(f);
+      });
     });
 
     // ─── P4 · hợp đồng ───────────────────────────────────────────────────────────

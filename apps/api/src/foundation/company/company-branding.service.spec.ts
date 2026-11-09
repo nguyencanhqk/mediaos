@@ -18,7 +18,7 @@ import { CompanyBrandingService } from "./company-branding.service";
  *   - confirm/set: owner-check (IDOR) + state Uploaded + MIME THẬT chạy TRƯỚC mọi side-effect.
  *   - getBranding: FAIL-SOFT narrow-by-type (Forbidden/NotFound/Conflict → null); lỗi hạ tầng KHÁC propagate.
  *   - logo dạng URL cũ (không phải UUID) → source='external', KHÔNG gọi presign (tương thích ngược).
- *   - đường ghi: logo qua CompanyService.setBrandingLogo · favicon qua SettingService.updateCompanySetting
+ *   - đường ghi: logo qua CompanyService.setBrandingLogo · favicon qua SettingService.setBrandingFavicon
  *     (audit in-tx tái dùng — service KHÔNG tự mở đường audit thứ hai).
  * Deny-path HTTP thật (403 thiếu update:foundation-company, cross-tenant) ở int-spec (DB cô lập).
  */
@@ -99,7 +99,7 @@ function makeService(over: Partial<Deps> = {}): { svc: CompanyBrandingService; d
   };
   const settings = {
     resolveSetting: deps.resolveSetting,
-    updateCompanySetting: deps.updateCompanySetting,
+    setBrandingFavicon: deps.updateCompanySetting,
   };
   const company = { getCurrent: deps.getCurrent, setBrandingLogo: deps.updateCompany };
 
@@ -248,14 +248,10 @@ describe("CompanyBrandingService — setAsset ghi qua service có audit sẵn", 
     expect(asset).toMatchObject({ source: "file", fileId: FILE_ID });
   });
 
-  it("favicon → SettingService.updateCompanySetting(branding.favicon_file_id)", async () => {
+  it("favicon → SettingService.setBrandingFavicon(fileId)", async () => {
     const { svc, deps } = makeService();
     await svc.setAsset(ACTOR, "favicon", FILE_ID);
-    expect(deps.updateCompanySetting).toHaveBeenCalledWith(
-      ACTOR,
-      FAVICON_SETTING_KEY,
-      expect.objectContaining({ settingValue: FILE_ID, valueType: "String" }),
-    );
+    expect(deps.updateCompanySetting).toHaveBeenCalledWith(ACTOR, FILE_ID);
     expect(deps.updateCompany).not.toHaveBeenCalled();
   });
 
@@ -404,11 +400,7 @@ describe("CompanyBrandingService — setAsset kiểm gắn TRƯỚC khi gỡ (S1
     await svc.setAsset(ACTOR, "favicon", FILE_ID);
     expect(deps.unlink, "liên kết sống đang trỏ đúng tệp phải giữ nguyên").not.toHaveBeenCalled();
     expect(deps.link, "không tạo liên kết thứ hai cho cùng tệp").not.toHaveBeenCalled();
-    expect(deps.updateCompanySetting).toHaveBeenCalledWith(
-      ACTOR,
-      FAVICON_SETTING_KEY,
-      expect.objectContaining({ settingValue: FILE_ID }),
-    );
+    expect(deps.updateCompanySetting).toHaveBeenCalledWith(ACTOR, FILE_ID);
   });
 
   it("tệp không qua kiểm gắn ⇒ ném lỗi đó; liên kết hiện hành còn, không gắn, không ghi con trỏ", async () => {

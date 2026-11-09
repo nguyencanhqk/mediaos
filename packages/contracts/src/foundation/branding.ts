@@ -110,4 +110,6 @@ export const BRANDING_ERROR_CODES = {
   UNKNOWN_KIND: "FOUNDATION-BRAND-ERR-UNKNOWN-KIND",
   /** Con trỏ logo công ty ngoài endpoint branding chỉ nhận rỗng / http(s) / giữ giá trị hiện có. */
   LOGO_REF: "FOUNDATION-BRAND-ERR-LOGO-REF",
+  /** Con trỏ favicon ngoài endpoint branding chỉ nhận rỗng / http(s) / giữ giá trị hiện có. */
+  FAVICON_REF: "FOUNDATION-BRAND-ERR-FAVICON-REF",
 } as const;

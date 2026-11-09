@@ -367,19 +367,13 @@ export class CompanyBrandingService {
   /**
    * Ghi con trỏ qua service ĐÃ CÓ audit in-tx (KHÔNG ghi DB thẳng — tránh đường audit thứ hai):
    *   logo    → CompanyService.setBrandingLogo ⇒ COMPANY_UPDATED (changed_fields tự tính = ['logoUrl']).
-   *   favicon → SettingService.updateCompanySetting ⇒ COMPANY_SETTING_UPDATED.
+   *   favicon → SettingService.setBrandingFavicon ⇒ COMPANY_SETTING_UPDATED.
    */
   private async persistRef(actor: Actor, kind: BrandingKind, fileId: string | null): Promise<void> {
     if (kind === "logo") {
       await this.company.setBrandingLogo(actor, fileId);
       return;
     }
-    await this.settings.updateCompanySetting(actor, FAVICON_SETTING_KEY, {
-      settingValue: fileId ?? "",
-      valueType: "String",
-      category: "Branding",
-      moduleCode: "FOUNDATION",
-      description: "fileId của favicon công ty (S5-BRAND-BE-1).",
-    });
+    await this.settings.setBrandingFavicon(actor, fileId);
   }
 }

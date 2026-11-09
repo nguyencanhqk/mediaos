@@ -35,6 +35,6 @@ Hồi quy: avatar-presign · social-avatarpresign-1 · hr-employee-avatar · com
 
 ## Nợ
 
-- Đường ghi cấu hình công ty chung cho khoá thương hiệu còn lại: WO riêng `S19-SEC-FAVICONREF-1`.
+- Con trỏ favicon trên đường cấu hình công ty chung: đóng cùng bất biến (chỉ rỗng / http(s) / giữ nguyên ngoài endpoint thương hiệu).
 - Ngưỡng scan avatar `≠Infected` so với phòng chat `Clean|NotRequired`: căn lại khi có WO phù hợp.
 - Người duyệt đơn ATT chưa mở được đính kèm: thuộc `S19-SEC-FILEATTLINK-1`.
