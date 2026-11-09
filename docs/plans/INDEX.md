@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**740 WO** · có micro-plan: **380/740** · ⬜ 105 chờ · 🔵 2 đang làm · ✅ 632 xong · 🔴 1 chặn
+**741 WO** · có micro-plan: **381/741** · ⬜ 105 chờ · 🔵 2 đang làm · ✅ 633 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -720,7 +720,8 @@
 | --- | --- | --- | --- | --- | --- |
 | `S19-UI-DIALOGINERT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | `Dialog` (`packages/ui`) khai `aria-modal` nhưng KHÔNG làm phần nền `i |
 | `S19-SEC-FECACHELOGOUT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Vòng đời cache phía FE khi phiên kết thúc: dọn `QueryClient` + auth st |
-| `S19-QA-FETESTNET-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Suite test của `apps/app` không chặn mạng: `src/test/setup.ts` để nguy |
+| `S19-QA-FETESTNET-1` | 🟡 | ✅ xong | [📄](S19-QA-FETESTNET-1.md) | ✅S16-SOCIAL-FE-3C | Suite test của `apps/app` không chặn mạng: `src/test/setup.ts` để nguy |
+| `S19-QA-FETESTNET-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S19-QA-FETESTNET-1 | Lưới chặn fetch của suite test cho cả `apps/console`: vá spec còn gọi  |
 | `S19-QA-FEHOOKSLINT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Luật lint `react-hooks` + `react-refresh` KHÔNG áp cho app FE nào: khố |
 | `S19-OPS-MINIOSRC-1` | 🟡 | ✅ xong | — *(chưa)* | — | GỠ CHẶN CI: nguồn image MinIO sụp HẲN (quay.io nay đòi auth — đường vá |
 | `S19-OPS-MINIOMIRROR-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-MINIOSRC-1 | Mirror image MinIO đúng digest PROD (`sha256:14cea493…` = RELEASE.2025 |

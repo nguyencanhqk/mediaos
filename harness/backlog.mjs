@@ -19693,6 +19693,35 @@ export const backlog = [
     ],
   },
   {
+    id: "S19-QA-FETESTNET-2",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Lưới chặn fetch của suite test cho cả `apps/console`: vá spec còn gọi mạng thật rồi cài cùng lưới như `apps/app` và `apps/auth`",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/console/src/test/**",
+      "apps/console/src/**/*.spec.ts",
+      "apps/console/src/**/*.spec.tsx",
+      "docs/plans/S19-QA-FETESTNET-2.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-QA-FETESTNET-1"],
+    src: [
+      "Nợ PR #667 (S19-QA-FETESTNET-1): đo chỉ-ghi trên apps/console thấy `src/routes/root-layout.spec.tsx` gọi `foundation/company/branding` thật 3 lần ⇒ chưa cài lưới ở console",
+    ],
+    done_when: [
+      "ĐO lại bằng chế độ chỉ ghi trên cả suite `@mediaos/console` ⇒ danh sách spec lọt kèm URL ghi vào plan",
+      "Vá từng spec lọt bằng mock đúng hàm API (trước hết `root-layout.spec.tsx`: `brandingApi.getBranding`), KHÔNG nới lưới, KHÔNG allowlist theo tệp",
+      "Cài lưới vào `apps/console/src/test/setup.ts` theo đúng khuôn `apps/auth/src/test/` (module + ca thử-ngược DENY/ALLOW + mutant gỡ dòng cài lưới ⇒ đỏ «TỰ KIỂM HỎNG»); chunk-test `@mediaos/console` xanh",
+    ],
+    notes: [
+      "🟡 Seed 09/11/2026 ở sổ hậu merge #667. Nhỏ, chỉ hạ tầng test, ước 30–50 USD. Nợ cùng họ chưa gieo: ba bản chép module lưới (app · auth · console) phải đồng bộ tay — gom về một chỗ dùng chung khi có WO đụng `packages/`; `SocialPortalShell.hr-widget.spec.tsx` còn `fetchMock` riêng; lưới chưa phủ XMLHttpRequest/WebSocket.",
+    ],
+  },
+  {
     id: "S19-QA-FEHOOKSLINT-1",
     module: "QA",
     layer: "QA",
