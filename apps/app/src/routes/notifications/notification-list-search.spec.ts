@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest";
 import {
   clearNotificationListFilters,
   hasActiveNotificationListFilters,
+  listWatermark,
   notificationMarkAllBody,
   notificationMarkAllScope,
   patchNotificationListSearch,
@@ -148,5 +149,20 @@ describe("notificationMarkAllBody", () => {
       priority: "High",
       created_before: at,
     });
+  });
+});
+
+describe("listWatermark — mốc từ created_at của server, không từ đồng hồ client", () => {
+  it("lấy created_at mới nhất +1ms (so <= với cột micro-giây)", () => {
+    const w = listWatermark([
+      { created_at: "2026-07-01T09:00:00.000Z" },
+      { created_at: "2026-07-01T10:00:00.123Z" },
+    ]);
+    expect(w?.toISOString()).toBe("2026-07-01T10:00:00.124Z");
+  });
+  it("rỗng/undefined/ngày rác ⇒ null", () => {
+    expect(listWatermark([])).toBeNull();
+    expect(listWatermark(undefined)).toBeNull();
+    expect(listWatermark([{ created_at: "rác" }])).toBeNull();
   });
 });

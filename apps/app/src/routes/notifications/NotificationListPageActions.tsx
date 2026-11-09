@@ -66,14 +66,14 @@ export function NotificationRowLink({ item, onView }: NotificationRowLinkProps) 
 
 /**
  * Có lọc nguồn và/hoặc mức ưu tiên: MỘT `POST /notifications/mark-all-read` mang đủ `source_module` +
- * `priority` + `created_before` (= mốc tải danh sách) ⇒ server đánh dấu ĐÚNG bộ lọc, không loop từng dòng.
+ * `priority` + `created_before` (= `created_at` mới nhất đang hiện, đồng hồ server) ⇒ server đánh dấu ĐÚNG bộ lọc, không loop từng dòng.
  */
 function MarkFilterReadButton({
   search,
-  listLoadedAt,
+  watermark,
 }: {
   search: NotificationListSearch;
-  listLoadedAt: number;
+  watermark: Date | null;
 }) {
   const { t } = useTranslation("notifications");
   const queryClient = useQueryClient();
@@ -83,7 +83,7 @@ function MarkFilterReadButton({
   );
   const mutation = useMutation({
     mutationFn: () =>
-      myNotificationApi.markAllRead(notificationMarkAllBody(search, new Date(listLoadedAt))),
+      watermark ? myNotificationApi.markAllRead(notificationMarkAllBody(search, watermark)) : Promise.resolve(null),
     onSuccess: () => invalidateAfterBulk(queryClient),
     onError: () => toast.error(t("actions.markReadFailed")),
   });
@@ -94,7 +94,7 @@ function MarkFilterReadButton({
       variant="outline"
       size="sm"
       onClick={() => mutation.mutate()}
-      disabled={mutation.isPending || listLoadedAt === 0}
+      disabled={mutation.isPending || watermark === null}
     >
       <CheckCheck className="mr-1.5 h-4 w-4" />
       {t("actions.markAllReadInFilter")}
@@ -104,14 +104,14 @@ function MarkFilterReadButton({
 
 interface NotificationListMarkReadProps {
   search: NotificationListSearch;
-  /** Mốc tải danh sách (ms) — `dataUpdatedAt` của truy vấn danh sách. */
-  listLoadedAt: number;
+  /** Mốc `created_at` mới nhất đang hiện (server) — `listWatermark`; null ⇒ chưa có dòng. */
+  watermark: Date | null;
 }
 
 /** Nút «đánh dấu đã đọc» của trang danh sách — phạm vi theo `notificationMarkAllScope`. */
-export function NotificationListMarkRead({ search, listLoadedAt }: NotificationListMarkReadProps) {
+export function NotificationListMarkRead({ search, watermark }: NotificationListMarkReadProps) {
   if (notificationMarkAllScope(search) === "filter") {
-    return <MarkFilterReadButton search={search} listLoadedAt={listLoadedAt} />;
+    return <MarkFilterReadButton search={search} watermark={watermark} />;
   }
   return <MarkAllReadButton />;
 }

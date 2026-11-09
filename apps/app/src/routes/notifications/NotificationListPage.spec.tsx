@@ -421,7 +421,7 @@ describe("NotificationListPage — đánh dấu đã đọc theo bộ lọc (S20
     const body = mockMarkAllRead.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(body.source_module).toBe("TASK");
     expect(body.priority).toBeUndefined();
-    expect(body.created_before).toBeInstanceOf(Date);
+    expect((body.created_before as Date).toISOString()).toBe("2026-07-01T09:00:00.001Z");
     expect(screen.queryByRole("button", { name: "Đánh dấu tất cả đã đọc" })).toBeNull();
   });
 
@@ -434,7 +434,6 @@ describe("NotificationListPage — đánh dấu đã đọc theo bộ lọc (S20
     ]);
     renderPage();
     await screen.findByRole("button", { name: /^Việc C/ });
-    const before = Date.now();
     fireEvent.click(
       await screen.findByRole("button", { name: "Đánh dấu đã đọc tất cả trong bộ lọc này" }),
     );
@@ -442,8 +441,8 @@ describe("NotificationListPage — đánh dấu đã đọc theo bộ lọc (S20
     await waitFor(() => expect(mockMarkAllRead).toHaveBeenCalledTimes(1));
     const body = mockMarkAllRead.mock.calls[0]?.[0] as { priority?: string; created_before: Date };
     expect(body.priority).toBe("High");
-    expect(body.created_before.getTime()).toBeLessThanOrEqual(before);
-    expect(body.created_before.getTime()).toBeGreaterThan(0);
+    // mốc = created_at server mới nhất (+1ms), KHÔNG phải đồng hồ client
+    expect(body.created_before.toISOString()).toBe("2026-07-01T09:00:00.001Z");
     expect(mockMarkRead).not.toHaveBeenCalled();
   });
 });

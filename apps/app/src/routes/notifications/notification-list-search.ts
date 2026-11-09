@@ -131,8 +131,19 @@ export function notificationMarkAllScope(search: NotificationListSearch): Notifi
 }
 
 /**
- * Body mark-all-read theo bộ lọc URL. `createdBefore` = mốc thời điểm TẢI danh sách: thông báo đến SAU
- * mốc (chưa hiện cho người dùng) không bị đánh dấu nhầm. Mốc theo đồng hồ client (độ lệch đồng hồ ⇒ nợ).
+ * Mốc «đã thấy» lấy từ SERVER: `created_at` mới nhất của các dòng đang hiện (+1ms vì ISO cắt về mili-giây
+ * còn cột DB có micro-giây, `created_before` so `<=` ⇒ không cộng thì dòng mới nhất bị bỏ sót). Không
+ * dùng đồng hồ client (lệch đồng hồ ⇒ dòng đang thấy vẫn Unread / dòng đến sau bị đánh dấu nhầm).
+ * Danh sách rỗng hoặc ngày rác ⇒ null (nút bị khoá).
+ */
+export function listWatermark(items: readonly { created_at: string }[] | undefined): Date | null {
+  const times = (items ?? []).map((i) => Date.parse(i.created_at)).filter(Number.isFinite);
+  return times.length > 0 ? new Date(Math.max(...times) + 1) : null;
+}
+
+/**
+ * Body mark-all-read theo bộ lọc URL. `createdBefore` = `listWatermark` (mốc theo đồng hồ SERVER): thông
+ * báo đến SAU mốc (chưa hiện cho người dùng) không bị đánh dấu nhầm.
  */
 export function notificationMarkAllBody(
   search: NotificationListSearch,

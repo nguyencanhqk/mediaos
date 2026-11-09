@@ -13,6 +13,7 @@ import { NotificationListFilters } from "./NotificationListPageFilters";
 import { NotificationListMarkRead, NotificationRowLink } from "./NotificationListPageActions";
 import {
   hasActiveNotificationListFilters,
+  listWatermark,
   toNotificationListQuery,
   useNotificationListSearch,
 } from "./notification-list-search";
@@ -99,7 +100,7 @@ export function NotificationListPage() {
   const query = toNotificationListQuery(search, NOTI_LIST_PAGE_SIZE);
   const isFiltered = hasActiveNotificationListFilters(search);
 
-  const { data, dataUpdatedAt, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: notificationKeys.list(query),
     queryFn: () => myNotificationApi.list(query),
     enabled: canView,
@@ -159,7 +160,7 @@ export function NotificationListPage() {
         title={t("list.title")}
         description={t("list.description")}
         icon={Bell}
-        actions={<NotificationListMarkRead search={search} listLoadedAt={dataUpdatedAt} />}
+        actions={<NotificationListMarkRead search={search} watermark={listWatermark(data)} />}
       >
         <NotificationListFilters search={search} onChange={update} />
       </PageHeader>

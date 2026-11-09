@@ -37,3 +37,7 @@ mốc; nhưng ca chỉ-priority mà không mốc sẽ bị strip — vì vậy F
 ## Nợ
 - Index priority (nếu bảng lớn) ⇒ WO db-migration.
 - GET list `created_from/created_to` dùng `coerceDate()` ⇒ cùng nguy cơ pipe kép (chưa đo trên PROD; ngoài phạm vi).
+
+## Sổ vết (vá review)
+- [LOW] `created_before` theo đồng hồ client + `lte` ⇒ VÁ: mốc = `created_at` mới nhất của các dòng đang hiện (+1ms vì ISO cắt mili-giây, cột DB micro-giây) qua `listWatermark`; rỗng ⇒ nút khoá. Test: `notification-list-search.spec.ts` (listWatermark) + `NotificationListPage.spec.tsx` (created_before = created_at server +1ms; đỏ trên mã cũ vì gửi Date.now()).
+- [LOW] mark-all theo bộ lọc không phản hồi khi bỏ sót dòng ⇒ nguyên nhân gốc (đồng hồ client) đã vá như trên. LÝ DO ĐỂ LẠI: toast khi `updated_count = 0` cần khoá i18n mới trong `vi/notifications.ts` (thuộc chuỗi L, bị cấm sửa ở đợt này) ⇒ nợ nhỏ cho WO sau. Trang >1: mốc là dòng mới nhất của TRANG đó (dòng mới hơn ở trang trước không bị đánh dấu — bảo thủ, không đánh dấu nhầm).
