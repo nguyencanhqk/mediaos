@@ -136,6 +136,7 @@ export class MyNotificationsService {
       this.repo.markAllReadTx(tx, companyId, userId, {
         sourceModule: body.source_module ?? undefined,
         notificationType: body.notification_type ?? undefined,
+        priority: body.priority ?? undefined,
         createdBefore: body.created_before ?? undefined,
       }),
     );

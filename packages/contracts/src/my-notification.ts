@@ -171,10 +171,22 @@ export type MyNotificationMarkReadResponse = z.infer<typeof myNotificationMarkRe
 
 // ─── NOTI-API-103: POST /notifications/mark-all-read ──────────────────────────
 
+/**
+ * `coerceDate()` giải mã chuỗi ⇒ Date; ZodValidationPipe KÉP (toàn cục + `@UsePipes` của controller) parse
+ * LẠI body đã là Date ⇒ `invalid_union` (400 trên PROD, không lộ ở test không có pipe toàn cục). Đưa Date về
+ * ISO trước khi giải mã để IDEMPOTENT. Chỉ dùng cho body mark-all-read (không đụng `coerceDate` dùng chung).
+ */
+const idempotentDateInput = () =>
+  z
+    .preprocess((v) => (v instanceof Date ? v.toISOString() : v), coerceDate())
+    .meta({ type: "string", format: "date-time" });
+
 export const markAllNotificationsReadRequestSchema = z.object({
   source_module: z.string().trim().min(1).max(50).nullable().optional(),
   notification_type: z.string().trim().min(1).max(50).nullable().optional(),
-  created_before: coerceDate().nullable().optional(),
+  /** S20-NOTI-PRIORITYFILTER-1 — cùng quy tắc với GET list: `Normal` gồm cả hàng priority NULL. */
+  priority: myNotificationPrioritySchema.nullable().optional(),
+  created_before: idempotentDateInput().nullable().optional(),
 });
 export type MarkAllNotificationsReadRequest = z.infer<typeof markAllNotificationsReadRequestSchema>;
 
