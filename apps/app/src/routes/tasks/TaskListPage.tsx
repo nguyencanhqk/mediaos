@@ -13,6 +13,8 @@ import { hasActiveTaskListFilters, toTaskListQuery } from "./task-list-search";
 import { useTaskListSearch } from "./use-task-list-search";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { DeleteTaskDialog } from "./DeleteTaskDialog";
+import { TaskBulkActionBar } from "./TaskBulkActionBar";
+import { useTaskBulkPermissions, useTaskRowSelection } from "./hooks/use-task-bulk-action";
 
 /**
  * TaskListPage — S4-FE-TASK-2 (SPEC-06 §13.5, TASK-SCREEN-005).
@@ -59,6 +61,12 @@ export function TaskListPage() {
     enabled: canView,
     staleTime: 30_000,
   });
+
+  const items = data ?? [];
+  // S20-TASK-BULKACTIONS-1 — cột chọn chỉ có khi người dùng làm được ÍT NHẤT một hành động hàng loạt.
+  const bulkPerms = useTaskBulkPermissions();
+  const canBulk = bulkPerms.canAssign || bulkPerms.canDeadline || bulkPerms.canStatus;
+  const bulk = useTaskRowSelection(items);
 
   const readColumns = useTaskReadColumns();
   const columns: ColumnDef<TaskCoreResponseDto>[] = [
@@ -128,7 +136,6 @@ export function TaskListPage() {
     );
   }
 
-  const items = data ?? [];
   const hasNext = items.length === PAGE_SIZE;
 
   return (
@@ -175,6 +182,23 @@ export function TaskListPage() {
           )
         }
         pageSize={PAGE_SIZE}
+        rowSelection={
+          canBulk
+            ? {
+                state: bulk.selection,
+                onChange: bulk.onChange,
+                getRowId: (task) => task.id,
+                selectAllLabel: t("bulk.selectAll"),
+                rowLabel: (task) => t("bulk.selectRow", { title: task.title }),
+              }
+            : undefined
+        }
+      />
+
+      <TaskBulkActionBar
+        selectedTasks={bulk.selectedTasks}
+        onRetainFailed={bulk.retainOnly}
+        onClear={bulk.clear}
       />
 
       {!isLoading && (page > 1 || hasNext) && (

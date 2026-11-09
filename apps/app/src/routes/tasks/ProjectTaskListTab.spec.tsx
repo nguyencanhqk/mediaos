@@ -2,7 +2,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
+import { useAuthStore, taskCoreApi, taskStatesApi } from "@mediaos/web-core";
 import { ProjectTaskListTab } from "./ProjectTaskListTab";
 import { DEFAULT_WORKSPACE_FILTERS, type WorkspaceTaskFilters } from "./workspace-constants";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
@@ -21,7 +21,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     ...actual,
     taskCoreApi: {
       listTasks: vi.fn(),
+      assign: vi.fn(),
     },
+    taskStatesApi: { listStates: vi.fn() },
   };
 });
 
@@ -227,5 +229,59 @@ describe("ProjectTaskListTab", () => {
     vi.mocked(taskCoreApi.listTasks).mockResolvedValueOnce(TASKS);
     fireEvent.click(screen.getByRole("button", { name: /thử lại/i }));
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+  });
+
+  // ── S20-TASK-BULKACTIONS-1 — chọn nhiều việc + thanh hành động ─────────────
+  describe("chọn nhiều việc (S20-TASK-BULKACTIONS-1)", () => {
+    const STATE_ID = "22222222-2222-4222-8222-222222222222";
+
+    beforeEach(() => {
+      vi.mocked(taskCoreApi.listTasks).mockResolvedValue(TASKS);
+      vi.mocked(taskStatesApi.listStates).mockResolvedValue([
+        { id: STATE_ID, name: "Đang làm" } as never,
+      ]);
+    });
+
+    it("không có quyền hành động nào ⇒ không có cột chọn, không có thanh", async () => {
+      setCapabilities({ "read:task": true });
+      renderWithQuery(<ListHarness />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+      expect(screen.queryAllByRole("checkbox", { name: /chọn việc/i })).toHaveLength(0);
+      expect(screen.queryByTestId("task-bulk-bar")).not.toBeInTheDocument();
+    });
+
+    it("chưa chọn ⇒ thanh ẩn; chọn 2 dòng ⇒ thanh hiện «Đã chọn 2 việc» + Chuyển cột (dự án pipeline)", async () => {
+      setCapabilities({ "read:task": true, "update-state:task": true });
+      renderWithQuery(<ListHarness />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+      expect(screen.queryByTestId("task-bulk-bar")).not.toBeInTheDocument();
+      await waitFor(() => expect(taskStatesApi.listStates).toHaveBeenCalledWith("proj-001"));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Chọn việc Soạn thảo hợp đồng" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Chọn việc Chuẩn bị báo cáo tuần" }));
+      expect(screen.getByTestId("task-bulk-count")).toHaveTextContent("Đã chọn 2 việc");
+      expect(await screen.findByTestId("bulk-move-state")).toBeInTheDocument();
+      expect(screen.queryByTestId("bulk-assign")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("task-bulk-clear"));
+      expect(screen.queryByTestId("task-bulk-bar")).not.toBeInTheDocument();
+    });
+
+    it("dự án không có cột pipeline ⇒ không có «Chuyển cột»", async () => {
+      setCapabilities({ "read:task": true, "update-state:task": true, "update-status:task": true });
+      vi.mocked(taskStatesApi.listStates).mockResolvedValue([]);
+      renderWithQuery(<ListHarness />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+      await waitFor(() => expect(taskStatesApi.listStates).toHaveBeenCalled());
+      fireEvent.click(screen.getByRole("checkbox", { name: "Chọn việc Soạn thảo hợp đồng" }));
+      expect(screen.getByTestId("bulk-status")).toBeInTheDocument();
+      expect(screen.queryByTestId("bulk-move-state")).not.toBeInTheDocument();
+    });
+
+    it("chọn tất cả (đầu bảng) ⇒ đếm đủ số việc đang hiện", async () => {
+      setCapabilities({ "read:task": true, "update-status:task": true });
+      renderWithQuery(<ListHarness />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả việc đang hiện" }));
+      expect(screen.getByTestId("task-bulk-count")).toHaveTextContent("Đã chọn 3 việc");
+    });
   });
 });

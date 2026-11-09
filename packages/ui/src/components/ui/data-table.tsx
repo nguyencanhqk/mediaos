@@ -1,10 +1,13 @@
 import {
+  type CellContext,
   type ColumnDef,
+  type HeaderContext,
   type VisibilityState,
   type GroupingState,
   type SortingState,
   type OnChangeFn,
   type Row,
+  type RowSelectionState,
   flexRender,
   getCoreRowModel,
   getExpandedRowModel,
@@ -16,6 +19,7 @@ import {
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronsUpDown, ChevronUp } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { Checkbox } from "./checkbox";
 import { Skeleton } from "./skeleton";
 import { cn } from "../../lib/utils";
 
@@ -23,6 +27,27 @@ import { cn } from "../../lib/utils";
 // trang server ĐÃ tải, KHÔNG để phân trang client cắt ngang một nhóm. (Server-pagination giữ nguyên ở
 // tầng trên; DataTable chỉ nhận 1 trang.)
 const GROUPED_PAGE_SIZE = 100_000;
+const SELECTION_COLUMN_ID = "__select";
+/**
+ * Vùng bấm ≥ 24×24 CSS px (WCAG 2.2 SC 2.5.8) quanh checkbox 16px mà KHÔNG làm dòng cao thêm: khối 24px
+ * có margin âm dọc (-4px) bù lại; `<label>` bọc ⇒ bấm cả vùng 24px đều bật/tắt checkbox native 16px ở giữa.
+ */
+const SELECTION_HIT_AREA =
+  "relative -my-1 inline-flex h-6 w-6 cursor-pointer items-center justify-center";
+
+/**
+ * CHỌN NHIỀU DÒNG (controlled, additive) — S20-TASK-BULKACTIONS-1. Truyền prop này ⇒ bảng thêm cột
+ * checkbox ĐẦU TIÊN (header = chọn/bỏ chọn cả trang đang hiện) và khoá dòng theo `getRowId` (chọn
+ * theo id, không theo vị trí ⇒ giữ nguyên khi sắp xếp/lọc/đổi trang). KHÔNG truyền = không có cột
+ * nào thêm, hành vi cũ nguyên vẹn. Nhãn trợ năng do phía gọi cấp (i18n ở màn, không ở primitive).
+ */
+export interface DataTableRowSelection<TData> {
+  state: RowSelectionState;
+  onChange: OnChangeFn<RowSelectionState>;
+  getRowId: (row: TData) => string;
+  selectAllLabel: string;
+  rowLabel: (row: TData) => string;
+}
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -70,6 +95,7 @@ interface DataTableProps<TData, TValue> {
    * truyền thì phân trang CLIENT sẵn có không render (hai bộ điều khiển trang chồng nhau là lỗi).
    */
   footer?: React.ReactNode;
+  rowSelection?: DataTableRowSelection<TData>;
 }
 
 /**
@@ -94,6 +120,7 @@ export function DataTable<TData, TValue>({
   pinFirstColumn = false,
   pinLastColumn = false,
   footer,
+  rowSelection,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation("common");
   const isGrouping = (grouping?.length ?? 0) > 0;
@@ -101,10 +128,16 @@ export function DataTable<TData, TValue>({
   // Gom nhóm trải hàng group-header qua MỌI cột ⇒ không còn "cột đầu/cuối" để ghim. Tắt ghim khi gom.
   const isPinning = (pinFirstColumn || pinLastColumn) && !isGrouping;
 
+  // Có chọn dòng ⇒ chèn cột checkbox ĐẦU; không ⇒ dùng nguyên `columns` (tham chiếu cũ).
+  const allColumns: ColumnDef<TData, TValue>[] = rowSelection
+    ? [buildSelectionColumn<TData, TValue>(), ...columns]
+    : columns;
+
   const table = useReactTable({
     data,
-    columns,
+    columns: allColumns,
     state: {
+      ...(rowSelection ? { rowSelection: rowSelection.state } : {}),
       globalFilter,
       ...(columnVisibility ? { columnVisibility } : {}),
       ...(grouping ? { grouping } : {}),
@@ -114,6 +147,19 @@ export function DataTable<TData, TValue>({
     ...(onSortingChange ? { onSortingChange } : {}),
     // Sắp xếp là việc của SERVER khi có onSortingChange → không sắp lại ở client (chỉ phát sự kiện).
     manualSorting: isManualSort,
+    ...(rowSelection
+      ? {
+          enableRowSelection: true,
+          getRowId: rowSelection.getRowId,
+          meta: {
+            selection: {
+              selectAllLabel: rowSelection.selectAllLabel,
+              rowLabel: (row: unknown) => rowSelection.rowLabel(row as TData),
+            },
+          },
+          onRowSelectionChange: rowSelection.onChange,
+        }
+      : {}),
     globalFilterFn: "includesString",
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -138,6 +184,21 @@ export function DataTable<TData, TValue>({
   }, [isGrouping, pageSize, table]);
 
   const rows = table.getRowModel().rows;
+
+  // Chọn dòng chỉ tác động lên dòng ĐANG hiện: sang trang khác / đổi lọc-sắp ⇒ bỏ chọn dòng không còn trên
+  // trang (nếu không, thanh hành động hàng loạt vẫn chạy trên dòng người dùng không thấy).
+  const visibleIds = JSON.stringify(rows.map((row) => row.id));
+  const onSelectionChange = rowSelection?.onChange;
+  React.useEffect(() => {
+    if (!onSelectionChange || isLoading || isGrouping) return;
+    const present = new Set<string>(JSON.parse(visibleIds) as string[]);
+    onSelectionChange((prev) =>
+      Object.keys(prev).every((id) => !prev[id] || present.has(id))
+        ? prev
+        : Object.fromEntries(Object.entries(prev).filter(([id, on]) => on && present.has(id))),
+    );
+  }, [visibleIds, onSelectionChange, isLoading, isGrouping]);
+
   // colSpan theo cột ĐANG hiển thị — không dùng columns.length (sai khi có cột bị ẩn).
   const colSpan = table.getVisibleLeafColumns().length;
   const totalRows = table.getFilteredRowModel().rows.length;
@@ -147,10 +208,16 @@ export function DataTable<TData, TValue>({
   // Không hiện phân trang client khi đang gom nhóm (tất cả trên 1 trang) hoặc khi ít hơn 1 trang.
   const showPagination = !isGrouping && totalRows > pageSize && footer === undefined;
 
-  /** Class ghim cho ô ở vị trí `index` trong hàng có `count` ô hiển thị. */
+  /**
+   * Class ghim cho ô ở vị trí `index` trong hàng có `count` ô hiển thị. Có cột chọn dòng ⇒ nó luôn ghim
+   * cùng cột Identity kế bên (rộng cố định `w-12` ⇒ cột kế dính ở `left-12`), không để checkbox chiếm mất chỗ ghim.
+   */
   const pinClass = (index: number, count: number): string | undefined => {
     if (!isPinning) return undefined;
-    if (pinFirstColumn && index === 0) {
+    if (pinFirstColumn && rowSelection) {
+      if (index === 0) return "sticky left-0 z-10 w-12 min-w-12 max-w-12 bg-inherit";
+      if (index === 1) return "sticky left-12 z-10 bg-inherit border-r border-border";
+    } else if (pinFirstColumn && index === 0) {
       return "sticky left-0 z-10 bg-inherit border-r border-border";
     }
     if (pinLastColumn && index === count - 1) {
@@ -207,7 +274,7 @@ export function DataTable<TData, TValue>({
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-border last:border-0">
-                  {columns.map((_col, j) => (
+                  {allColumns.map((_col, j) => (
                     <td key={j} className="px-4 py-3.5">
                       <Skeleton className="h-4 w-full max-w-[160px]" />
                     </td>
@@ -285,6 +352,68 @@ export function DataTable<TData, TValue>({
       {footer !== undefined && <div className="border-t border-border px-4 py-2.5">{footer}</div>}
     </div>
   );
+}
+
+/** Nhãn trợ năng của cột chọn — đi qua `table.options.meta` để header/cell giữ danh tính ỔN ĐỊNH. */
+interface SelectionMeta {
+  readonly selectAllLabel: string;
+  readonly rowLabel: (row: unknown) => string;
+}
+
+function readSelectionMeta(meta: unknown): SelectionMeta {
+  const m = meta as Partial<{ selection: SelectionMeta }> | undefined;
+  return m?.selection ?? { selectAllLabel: "", rowLabel: () => "" };
+}
+
+/**
+ * Header/cell của cột chọn là hàm CẤP MODULE (danh tính cố định giữa các lần render): nếu dựng lại
+ * mỗi render, TanStack `flexRender` coi là component mới ⇒ checkbox bị gắn lại và MẤT tiêu điểm bàn
+ * phím ngay sau khi bấm Space.
+ */
+function SelectionHeader<TData>({ table }: HeaderContext<TData, unknown>) {
+  const some = table.getIsSomePageRowsSelected();
+  return (
+    <label className={SELECTION_HIT_AREA} onClick={(e) => e.stopPropagation()}>
+      <Checkbox
+        aria-label={readSelectionMeta(table.options.meta).selectAllLabel}
+        data-testid="row-select-all"
+        checked={table.getIsAllPageRowsSelected()}
+        ref={(el) => {
+          if (el) el.indeterminate = some;
+        }}
+        onChange={table.getToggleAllPageRowsSelectedHandler()}
+      />
+    </label>
+  );
+}
+
+function SelectionCell<TData>({ row, table }: CellContext<TData, unknown>) {
+  return (
+    <label
+      className={SELECTION_HIT_AREA}
+      onClick={(e) => e.stopPropagation()}
+      data-testid={`row-select-hit-${row.id}`}
+    >
+      <Checkbox
+        aria-label={readSelectionMeta(table.options.meta).rowLabel(row.original)}
+        data-testid={`row-select-${row.id}`}
+        checked={row.getIsSelected()}
+        onClick={(e) => e.stopPropagation()}
+        onChange={row.getToggleSelectedHandler()}
+      />
+    </label>
+  );
+}
+
+/** Cột checkbox chọn dòng — header chọn cả TRANG đang hiện; bấm ô không kích hoạt `onRowClick`. */
+function buildSelectionColumn<TData, TValue>(): ColumnDef<TData, TValue> {
+  return {
+    id: SELECTION_COLUMN_ID,
+    enableSorting: false,
+    enableGrouping: false,
+    header: SelectionHeader,
+    cell: SelectionCell,
+  };
 }
 
 /** Mũi tên chỉ chiều sắp xếp: không sắp → 2 chiều mờ; asc → lên; desc → xuống. */

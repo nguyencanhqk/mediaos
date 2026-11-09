@@ -42,6 +42,7 @@ export function EmployeePicker({
   pending = false,
   testId,
   emptyLabel,
+  labelOnly = false,
   open: openProp,
   onOpenChange,
   preferred,
@@ -65,6 +66,11 @@ export function EmployeePicker({
   pending?: boolean;
   testId: string;
   emptyLabel: string;
+  /**
+   * Nút hành động có nhãn rõ (vd «Giao cho…» trên thanh hàng loạt): không avatar rỗng, tên trợ năng
+   * = chính nhãn (không «Đổi người: …»).
+   */
+  labelOnly?: boolean;
   /**
    * Mở/đóng do phía gọi điều khiển (tuỳ chọn) — vd «Đổi người» trên cảnh báo sau khi giao
    * (S20-TASK-ASSIGNWARN-1) mở lại đúng picker này. Không truyền ⇒ tự quản như cũ.
@@ -118,7 +124,7 @@ export function EmployeePicker({
       disabled={!canEdit || pending}
       onClick={() => setOpen(!open)}
       title={label}
-      aria-label={t("tasks.picker.change", { name: label })}
+      aria-label={labelOnly ? label : t("tasks.picker.change", { name: label })}
       data-testid={testId}
       className={cn(
         "flex items-center gap-2 rounded-md text-left transition-colors",
@@ -126,13 +132,17 @@ export function EmployeePicker({
         canEdit && showName && "hover:bg-muted",
         canEdit && !showName && "hover:opacity-80",
         !canEdit && "cursor-default",
+        labelOnly && "border border-border bg-background px-3 py-1.5",
         pending && "opacity-50",
       )}
     >
-      <Avatar size="sm" name={name} src={avatarUrl} />
+      {!labelOnly && <Avatar size="sm" name={name} src={avatarUrl} />}
       {showName && (
         <span
-          className={cn("truncate text-sm", name ? "text-foreground" : "text-muted-foreground")}
+          className={cn(
+            "truncate text-sm",
+            name || labelOnly ? "text-foreground" : "text-muted-foreground",
+          )}
         >
           {label}
         </span>

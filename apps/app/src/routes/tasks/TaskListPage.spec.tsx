@@ -30,6 +30,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     ...actual,
     taskCoreApi: {
       listTasks: vi.fn(),
+      assign: vi.fn(),
       deleteTask: vi.fn(),
       createTask: vi.fn(),
     },
@@ -147,6 +148,31 @@ describe("TaskListPage", () => {
     expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument();
     expect(screen.getByText(/tạo công việc/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/xóa công việc/i)).toBeInTheDocument();
+  });
+
+  // ── S20-TASK-BULKACTIONS-1 — chọn nhiều việc ───────────────────────────────
+  it("không có quyền hành động hàng loạt ⇒ không có cột chọn, không có thanh", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.listTasks).mockResolvedValue(MOCK_TASKS);
+    renderWithQuery(<TaskListPage />);
+    await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+    expect(screen.queryAllByRole("checkbox", { name: /chọn/i })).toHaveLength(0);
+    expect(screen.queryByTestId("task-bulk-bar")).not.toBeInTheDocument();
+  });
+
+  it("có assign:task: chọn một dòng ⇒ thanh hiện «Giao cho…»; bỏ chọn ⇒ thanh ẩn", async () => {
+    setCapabilities({ "read:task": true, "assign:task": true });
+    vi.mocked(taskCoreApi.listTasks).mockResolvedValue(MOCK_TASKS);
+    renderWithQuery(<TaskListPage />);
+    await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+    expect(screen.queryByTestId("task-bulk-bar")).not.toBeInTheDocument();
+    const box = screen.getByRole("checkbox", { name: "Chọn việc Chuẩn bị báo cáo tuần" });
+    fireEvent.click(box);
+    expect(screen.getByTestId("task-bulk-count")).toHaveTextContent("Đã chọn 1 việc");
+    expect(screen.getByTestId("bulk-assign")).toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-status")).not.toBeInTheDocument();
+    fireEvent.click(box);
+    expect(screen.queryByTestId("task-bulk-bar")).not.toBeInTheDocument();
   });
 
   // ── LOADING state ──────────────────────────────────────────────────────────

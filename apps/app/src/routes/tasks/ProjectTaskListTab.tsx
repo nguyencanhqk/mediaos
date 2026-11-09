@@ -3,12 +3,14 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import type { VisibilityState } from "@tanstack/react-table";
 import { RefreshCw, Settings2 } from "lucide-react";
-import { taskCoreApi, taskKeys, useCan } from "@mediaos/web-core";
+import { taskCoreApi, taskKeys, taskStatesApi, useCan } from "@mediaos/web-core";
 import { Button, Checkbox, DataTable, EmptyState, Popover } from "@mediaos/ui";
 import { TASK_CORE_PAGE_LIMIT_MAX } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { useTaskReadColumns } from "./task-columns";
 import { AssigneeRail } from "./AssigneeRail";
+import { TaskBulkActionBar } from "./TaskBulkActionBar";
+import { useTaskBulkPermissions, useTaskRowSelection } from "./hooks/use-task-bulk-action";
 import {
   buildAssigneeSummary,
   matchesAssigneeSelection,
@@ -90,6 +92,26 @@ export function ProjectTaskListTab({
       ),
     [toolbarFiltered, assigneeSelection, filters.sort],
   );
+
+  // S20-TASK-BULKACTIONS-1 — chọn nhiều việc: chỉ chọn được việc ĐANG hiện (sau lọc). «Chuyển cột»
+  // chỉ có ở dự án pipeline (có cột) + khi có update-state:task.
+  const bulkPerms = useTaskBulkPermissions();
+  const bulk = useTaskRowSelection(visibleTasks);
+  const { data: states } = useQuery({
+    queryKey: taskKeys.states(projectId),
+    queryFn: () => taskStatesApi.listStates(projectId),
+    enabled: canView && bulkPerms.canMoveState,
+    staleTime: 30_000,
+  });
+  const moveTargets = useMemo(
+    () => (states ?? []).map((state) => ({ id: state.id, label: state.name })),
+    [states],
+  );
+  const canBulk =
+    bulkPerms.canAssign ||
+    bulkPerms.canDeadline ||
+    bulkPerms.canStatus ||
+    (bulkPerms.canMoveState && moveTargets.length > 0);
 
   const columns = useTaskReadColumns();
   const columnVisibility: VisibilityState = Object.fromEntries(
@@ -188,6 +210,23 @@ export function ProjectTaskListTab({
             />
           }
           pageSize={PAGE_SIZE}
+          rowSelection={
+            canBulk
+              ? {
+                  state: bulk.selection,
+                  onChange: bulk.onChange,
+                  getRowId: (task) => task.id,
+                  selectAllLabel: t("bulk.selectAll"),
+                  rowLabel: (task) => t("bulk.selectRow", { title: task.title }),
+                }
+              : undefined
+          }
+        />
+        <TaskBulkActionBar
+          selectedTasks={bulk.selectedTasks}
+          onRetainFailed={bulk.retainOnly}
+          onClear={bulk.clear}
+          moveTargets={moveTargets}
         />
         {/* Chạm trần 1-trang-lớn: nói THẲNG là đang cắt (không im lặng như thể đã đủ). */}
         {items.length === TASK_CORE_PAGE_LIMIT_MAX && (

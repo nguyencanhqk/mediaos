@@ -1,6 +1,7 @@
+import * as React from "react";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { DataTable } from "./data-table";
 
 /**
@@ -207,7 +208,12 @@ describe("DataTable — ghim cột + footer (v1.1)", () => {
 
   it("ghim theo cột ĐANG HIỂN THỊ: ẩn cột cuối thì cột kế mới là cột ghim phải", () => {
     const { container } = render(
-      <DataTable columns={pinCols} data={data} pinLastColumn columnVisibility={{ actions: false }} />,
+      <DataTable
+        columns={pinCols}
+        data={data}
+        pinLastColumn
+        columnVisibility={{ actions: false }}
+      />,
     );
     const th = container.querySelectorAll("thead th");
     expect(th.length).toBe(2);
@@ -240,5 +246,138 @@ describe("DataTable — ghim cột + footer (v1.1)", () => {
     );
     expect(screen.queryByLabelText("Trang sau")).not.toBeInTheDocument();
     expect(screen.getByText("footer riêng")).toBeInTheDocument();
+  });
+});
+
+describe("DataTable — rowSelection (S20-TASK-BULKACTIONS-1)", () => {
+  function Harness({
+    onRowClick,
+    initial = {},
+  }: {
+    onRowClick?: (row: Row) => void;
+    initial?: RowSelectionState;
+  }) {
+    const [state, setState] = React.useState<RowSelectionState>(initial);
+    return (
+      <>
+        <output data-testid="selected">
+          {Object.keys(state)
+            .filter((k) => state[k])
+            .join(",")}
+        </output>
+        <DataTable
+          columns={columns}
+          data={data}
+          onRowClick={onRowClick}
+          rowSelection={{
+            state,
+            onChange: setState,
+            getRowId: (r) => r.id,
+            selectAllLabel: "Chọn tất cả",
+            rowLabel: (r) => `Chọn ${r.name}`,
+          }}
+        />
+      </>
+    );
+  }
+
+  it("không truyền rowSelection ⇒ không có checkbox nào (hành vi cũ)", () => {
+    render(<DataTable columns={columns} data={data} />);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("chọn một dòng theo id; bấm checkbox KHÔNG kích hoạt onRowClick", () => {
+    const onRowClick = vi.fn();
+    render(<Harness onRowClick={onRowClick} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn Bình" }));
+    expect(screen.getByTestId("selected")).toHaveTextContent("E2");
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("checkbox đầu bảng chọn rồi bỏ chọn cả trang", () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả" }));
+    expect(screen.getByTestId("selected")).toHaveTextContent("E1,E2");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả" }));
+    expect(screen.getByTestId("selected")).toHaveTextContent("");
+  });
+
+  it("bấm chọn KHÔNG gắn lại checkbox (giữ tiêu điểm bàn phím) dù cột của màn gọi dựng lại mỗi render", () => {
+    render(<Harness />);
+    const box = screen.getByRole("checkbox", { name: "Chọn An" });
+    box.focus();
+    fireEvent.click(box);
+    expect(screen.getByRole("checkbox", { name: "Chọn An" })).toBe(box);
+    expect(document.activeElement).toBe(box);
+  });
+
+  it("trạng thái truyền vào được phản ánh (dòng đã chọn hiện tích)", () => {
+    render(<Harness initial={{ E1: true }} />);
+    expect(screen.getByRole("checkbox", { name: "Chọn An" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Chọn Bình" })).not.toBeChecked();
+  });
+
+  it("checkbox có vùng bấm 24px (label h-6 w-6): bấm vùng bọc bật chọn, KHÔNG kích hoạt onRowClick", () => {
+    const onRowClick = vi.fn();
+    render(<Harness onRowClick={onRowClick} />);
+    const hit = screen.getByRole("checkbox", { name: "Chọn Bình" }).closest("label");
+    expect(hit).not.toBeNull();
+    expect(hit).toHaveClass("h-6", "w-6");
+    fireEvent.click(hit as HTMLElement);
+    expect(screen.getByTestId("selected")).toHaveTextContent("E2");
+    expect(onRowClick).not.toHaveBeenCalled();
+    const all = screen.getByRole("checkbox", { name: /Chọn tất cả/ }).closest("label");
+    expect(all).toHaveClass("h-6", "w-6");
+  });
+});
+
+describe("DataTable — rowSelection × trang / ghim (hậu review BULKACTIONS)", () => {
+  const many: Row[] = Array.from({ length: 5 }, (_, i) => ({ id: `R${i + 1}`, name: `N${i + 1}` }));
+
+  function PagedHarness({ pin = false }: { pin?: boolean }) {
+    const [state, setState] = React.useState<RowSelectionState>({});
+    return (
+      <>
+        <output data-testid="sel">
+          {Object.keys(state)
+            .filter((k) => state[k])
+            .join(",")}
+        </output>
+        <DataTable
+          columns={columns}
+          data={many}
+          pageSize={2}
+          pinFirstColumn={pin}
+          rowSelection={{
+            state,
+            onChange: setState,
+            getRowId: (r) => r.id,
+            selectAllLabel: "Chọn tất cả",
+            rowLabel: (r) => `Chọn ${r.name}`,
+          }}
+        />
+      </>
+    );
+  }
+
+  it("sang trang khác ⇒ dòng đã chọn ở trang trước bị bỏ chọn (không chạy lệnh trên dòng không thấy)", () => {
+    const { container } = render(<PagedHarness />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả" }));
+    expect(screen.getByTestId("sel")).toHaveTextContent("R1,R2");
+    const next = Array.from(container.querySelectorAll("button")).find((b) =>
+      /sau|next|›|»/i.test((b.textContent ?? "") + (b.getAttribute("aria-label") ?? "")),
+    );
+    expect(next).toBeDefined();
+    fireEvent.click(next as HTMLElement);
+    expect(screen.getByTestId("sel")).toHaveTextContent("");
+  });
+
+  it("pinFirstColumn + rowSelection ⇒ ghim cột checkbox VÀ cột tiêu đề kế bên", () => {
+    const { container } = render(<PagedHarness pin />);
+    const th = container.querySelectorAll("thead th");
+    expect(th[0].className).toContain("left-0");
+    expect(th[1].className).toContain("sticky");
+    expect(th[1].className).toContain("left-12");
+    expect(th[2].className).not.toContain("sticky");
   });
 });
