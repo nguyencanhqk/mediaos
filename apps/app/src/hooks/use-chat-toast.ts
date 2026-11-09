@@ -27,10 +27,18 @@ import { readToastPrefs } from "@/lib/toast-prefs";
 export const CHAT_TOAST_MERGE_MS = 15_000;
 const CHAT_TOAST_KEY_PREFIX = "chat-room:";
 
-interface RoomToast {
+interface RoomToastInfo {
+  roomId: string;
+  sender: string;
+  isDirect: boolean;
+  roomName: string | null;
+  preview: boolean;
+}
+interface RoomToast extends RoomToastInfo {
   toastId: string;
   lastAt: number;
-  messageIds: Set<string>;
+  /** id tin còn hiệu lực → thân tin đã nhận (chỉ để dựng lại toast sau thu hồi). */
+  bodies: Map<string, string | null>;
 }
 
 /** Đang xem đúng phòng này: trang `/chat/<id>` hoặc drawer đang mở đúng phòng. */
@@ -57,6 +65,26 @@ export function useChatToast(): void {
     if (!socket) return;
     const byRoom = new Map<string, RoomToast>();
 
+    const showRoomToast = (info: RoomToastInfo, bodies: Map<string, string | null>): string => {
+      const { t: tr, openChatRoom: open } = latest.current;
+      const { roomId, sender } = info;
+      const lastBody = [...bodies.values()].at(-1) ?? null;
+      let message: string;
+      if (bodies.size > 1) {
+        message = tr("liveToast.multi", { count: bodies.size, sender });
+      } else if (info.preview && lastBody) {
+        message = `${sender}: ${lastBody}`;
+      } else if (info.isDirect) {
+        message = tr("liveToast.direct", { sender });
+      } else {
+        message = tr("liveToast.mention", { sender, room: info.roomName ?? tr("liveToast.unknownRoom") });
+      }
+      return toast.success(message, {
+        key: `${CHAT_TOAST_KEY_PREFIX}${roomId}`,
+        action: { label: tr("liveToast.reply"), onClick: () => open({ roomId, messageId: null }) },
+      });
+    };
+
     const onMessage = (payload: unknown): void => {
       const parsed = wsChatMessageEventSchema.safeParse(payload);
       if (!parsed.success) return; // `useChatRealtime` đã báo payload sai — không lặp lại ở đây
@@ -72,49 +100,30 @@ export function useChatToast(): void {
       if (!isDirect && !mentionsMe) return;
       if (isRoomOnScreen(m.roomId)) return;
 
-      const { t: tr, openChatRoom: open } = latest.current;
-      const sender = m.senderName ?? tr("liveToast.unknownSender");
+      const sender = m.senderName ?? latest.current.t("liveToast.unknownSender");
       const now = Date.now();
       const prev = byRoom.get(m.roomId);
       const merge = prev !== undefined && now - prev.lastAt <= CHAT_TOAST_MERGE_MS;
-      const messageIds = merge ? new Set(prev.messageIds).add(m.id) : new Set([m.id]);
+      const bodies = new Map(merge ? prev.bodies : []).set(m.id, m.body);
       if (prev) toast.dismiss(prev.toastId); // thay thế — không để số lần của toast tự cộng thêm lần nữa
-
-      let message: string;
-      if (messageIds.size > 1) {
-        message = tr("liveToast.multi", { count: messageIds.size, sender });
-      } else if (prefs.preview && m.body) {
-        message = `${sender}: ${m.body}`;
-      } else if (isDirect) {
-        message = tr("liveToast.direct", { sender });
-      } else {
-        message = tr("liveToast.mention", {
-          sender,
-          room: room?.name ?? tr("liveToast.unknownRoom"),
-        });
-      }
-      const toastId = toast.success(message, {
-        key: `${CHAT_TOAST_KEY_PREFIX}${m.roomId}`,
-        action: {
-          label: tr("liveToast.reply"),
-          onClick: () => open({ roomId: m.roomId, messageId: null }),
-        },
-      });
-      byRoom.set(m.roomId, { toastId, lastAt: now, messageIds });
+      const info = { roomId: m.roomId, sender, isDirect, roomName: room?.name ?? null, preview: prefs.preview };
+      byRoom.set(m.roomId, { ...info, toastId: showRoomToast(info, bodies), lastAt: now, bodies });
     };
 
     const onRecalled = (payload: unknown): void => {
       const parsed = wsChatMessageRecalledEventSchema.safeParse(payload);
       if (!parsed.success) return;
       const entry = byRoom.get(parsed.data.roomId);
-      if (!entry?.messageIds.has(parsed.data.messageId)) return;
-      const ids = new Set(entry.messageIds);
-      ids.delete(parsed.data.messageId);
-      if (ids.size === 0) {
+      if (!entry?.bodies.has(parsed.data.messageId)) return;
+      const bodies = new Map(entry.bodies);
+      bodies.delete(parsed.data.messageId);
+      if (bodies.size === 0) {
         toast.dismiss(entry.toastId);
         byRoom.delete(parsed.data.roomId);
       } else {
-        byRoom.set(parsed.data.roomId, { ...entry, messageIds: ids });
+        // Dựng lại toast với số đếm mới (hoặc về dạng đơn) — chữ «N tin» cũ không được lệch thực tế.
+        toast.dismiss(entry.toastId);
+        byRoom.set(parsed.data.roomId, { ...entry, toastId: showRoomToast(entry, bodies), bodies });
       }
     };
 

@@ -54,3 +54,6 @@ Gate LIGHT · chỉ FE (`apps/app`). Không đổi contracts/API/schema.
 - N tiêu đề tab chưa cộng thông báo chuông (đúng chữ done_when).
 
 Sổ vết KPI: (điền sau)
+
+Sổ vết review:
+- [LOW] use-chat-toast: thu hồi 1 tin trong toast gộp không cập nhật «N tin» ⇒ đã vá: dựng lại toast với số đếm mới (về dạng đơn khi còn 1); ca test mới trong `use-chat-toast.spec` (đỏ trên mã cũ).

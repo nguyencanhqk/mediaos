@@ -220,6 +220,26 @@ describe("useChatToast", () => {
     expect(toastDismiss).toHaveBeenCalledWith("toast-1");
   });
 
+  it("thu hồi một tin trong toast gộp ⇒ dựng lại toast với số đếm mới, về dạng đơn khi còn 1", () => {
+    renderHook(() => useChatToast());
+    const [m1, m2, m3] = [msg(DM), msg(DM), msg(DM)];
+    [m1, m2, m3].forEach(fire);
+    expect(lastToast()[0]).toBe("3 tin nhắn mới từ Lan");
+    const recall = (id: string) =>
+      act(() =>
+        socket.fire(WS_EVENTS.CHAT_MESSAGE_RECALLED, {
+          messageId: id,
+          roomId: DM,
+          recalledAt: "2026-11-09T01:00:05.000Z",
+        }),
+      );
+    recall(m2.id);
+    expect(lastToast()[0]).toBe("2 tin nhắn mới từ Lan");
+    recall(m3.id);
+    expect(lastToast()[0]).toBe("Lan vừa nhắn cho bạn");
+    expect(toastDismiss).toHaveBeenLastCalledWith(`toast-${toastSuccess.mock.calls.length - 1}`);
+  });
+
   it("unmount gỡ đúng handler của mình, không disconnect", () => {
     const { unmount } = renderHook(() => useChatToast());
     expect(socket.totalHandlers()).toBe(2);
