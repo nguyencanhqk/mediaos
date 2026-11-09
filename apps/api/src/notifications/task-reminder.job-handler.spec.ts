@@ -161,8 +161,11 @@ describe("TaskReminderJobHandler.run", () => {
     expect(soonDto?.eventCode).toBe(q.TASK_DUE_SOON_EVENT);
     expect(soonDto?.recipient).toEqual({ mode: "UserIds", userIds: [a], employeeIds: [] });
     expect(soonDto?.dedupeKey).toBe(`${soon.id}:${DUE}`);
+    // S20-NOTI-TARGETURL-1: template đích `/tasks/{taskId}` cần khoá `taskId` — thiếu ⇒ engine 422.
+    expect(soonDto?.payload).toMatchObject({ taskId: soon.id });
     const [lateDto] = intakeFor(engine, late.id);
     expect(lateDto?.eventCode).toBe(q.TASK_OVERDUE_EVENT);
+    expect(lateDto?.payload).toMatchObject({ taskId: late.id });
     expect(lateDto?.recipient.mode === "UserIds" && lateDto.recipient.userIds).toEqual([a, r]);
     expect(intakeFor(engine, self.id)[0]?.recipient).toMatchObject({ userIds: [a] });
     expect(q.queryReminderCandidates).toHaveBeenCalledWith(FAKE_TX, COMPANY, expect.any(Date));

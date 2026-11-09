@@ -54,6 +54,41 @@ function requestCommentFocus(): void {
   commentFocusListeners.forEach((listener) => listener());
 }
 
+/**
+ * S20-NOTI-TARGETURL-1 — yêu cầu LÀM NỔI một bình luận khi mở việc từ thông báo (`/tasks/<uuid>?comment_id=<uuid>`).
+ * KHÔNG đưa `comment_id` lên URL của drawer (`withTask` không đổi, `comment_id` của trang toàn màn giữ nguyên):
+ * chỉ phát tín hiệu `{seq, taskId, commentId}` qua mô-đun, mỗi `TaskCommentThread` (đúng `taskId`) tự ghi nhận
+ * THEO TỪNG INSTANCE (ref `handledSeq` riêng) — không có «tiêu thụ độc quyền» nên thread nền ở trang toàn màn không
+ * cướp tín hiệu của thread trong drawer. Vòng đời: `openTask(id)` không `commentId` và `closeTask()` xoá yêu cầu.
+ */
+export interface CommentHighlightRequest {
+  seq: number;
+  taskId: string;
+  commentId: string;
+}
+let commentHighlight: CommentHighlightRequest | null = null;
+let commentHighlightSeq = 0;
+const commentHighlightListeners = new Set<() => void>();
+export function subscribeCommentHighlight(listener: () => void): () => void {
+  commentHighlightListeners.add(listener);
+  return () => void commentHighlightListeners.delete(listener);
+}
+/** Snapshot ỔN ĐỊNH (cùng tham chiếu tới khi có yêu cầu mới) cho `useSyncExternalStore`. */
+export function getCommentHighlight(): CommentHighlightRequest | null {
+  return commentHighlight;
+}
+function setCommentHighlight(next: CommentHighlightRequest | null): void {
+  commentHighlight = next;
+  commentHighlightListeners.forEach((listener) => listener());
+}
+export function requestCommentHighlight(taskId: string, commentId: string): void {
+  commentHighlightSeq += 1;
+  setCommentHighlight({ seq: commentHighlightSeq, taskId, commentId });
+}
+export function clearCommentHighlight(): void {
+  if (commentHighlight !== null) setCommentHighlight(null);
+}
+
 /** Trang chi tiết mở ở tab mới (không có lịch sử trong app) ⇒ «Quay lại» về đây. */
 export const TASK_DETAIL_BACK_FALLBACK = "/tasks/my-tasks";
 
@@ -75,11 +110,31 @@ export function readTaskDrawerParam(search: unknown): string | null {
   return typeof raw === "string" ? raw : JSON.stringify(raw);
 }
 
-/** `/tasks/<uuid>` (đích thông báo) ⇒ id việc; đường khác (kể cả `/tasks/my-tasks`) ⇒ null. */
-export function taskIdFromPath(path: string): string | null {
+/** Đích thông báo của một việc: id việc + (tuỳ chọn) bình luận cần làm nổi. */
+export interface TaskTarget {
+  taskId: string;
+  commentId: string | null;
+}
+
+/**
+ * `/tasks/<uuid>[?comment_id=<uuid>]` ⇒ đích việc; đường khác (kể cả `/tasks/my-tasks`, `/tasks/<uuid>/x`, có
+ * `#`) ⇒ null. QUY TẮC DƯƠNG: path phải đúng `/tasks/<uuid>`; query chỉ xét `comment_id` và chỉ nhận khi là
+ * UUID (rác ⇒ `commentId = null` nhưng vẫn mở drawer).
+ */
+export function taskTargetFromUrl(url: string): TaskTarget | null {
+  const queryAt = url.indexOf("?");
+  const path = queryAt === -1 ? url : url.slice(0, queryAt);
+  const query = queryAt === -1 ? "" : url.slice(queryAt + 1);
   const match = TASK_PATH_RE.exec(path);
   const id = match?.[1];
-  return isTaskUuid(id) ? id : null;
+  if (!isTaskUuid(id) || query.includes("#")) return null;
+  const raw = new URLSearchParams(query).get("comment_id");
+  return { taskId: id, commentId: isTaskUuid(raw) ? raw : null };
+}
+
+/** `/tasks/<uuid>` (đích thông báo) ⇒ id việc; đường khác (kể cả `/tasks/my-tasks`) ⇒ null. */
+export function taskIdFromPath(path: string): string | null {
+  return taskTargetFromUrl(path)?.taskId ?? null;
 }
 
 type SearchRecord = Record<string, unknown>;
@@ -101,8 +156,11 @@ function withTask(
 }
 
 export interface TaskDrawerControls {
-  /** Thêm/đổi `?task=` trên URL hiện tại (push); `tab` mở sẵn một tab của drawer. */
-  openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) => void;
+  /**
+   * Thêm/đổi `?task=` trên URL hiện tại (push); `tab` mở sẵn một tab của drawer; `commentId` (UUID) ⇒ phát yêu
+   * cầu làm nổi bình luận đó (KHÔNG thêm gì vào URL).
+   */
+  openTask: (taskId: string, opts?: { tab?: TaskDrawerTab; commentId?: string }) => void;
   /** Bỏ `?task=` khỏi URL hiện tại (replace). */
   closeTask: () => void;
 }
@@ -119,11 +177,16 @@ export function useTaskDrawer(): TaskDrawerControls {
         resetScroll: false,
       });
     return {
-      openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) => {
+      openTask: (taskId: string, opts?: { tab?: TaskDrawerTab; commentId?: string }) => {
+        if (isTaskUuid(opts?.commentId)) requestCommentHighlight(taskId, opts.commentId);
+        else clearCommentHighlight();
         if (opts?.tab === "comment") requestCommentFocus();
         go(taskId, false, opts?.tab ?? null);
       },
-      closeTask: () => go(null, true),
+      closeTask: () => {
+        clearCommentHighlight();
+        go(null, true);
+      },
     };
   }, [navigate]);
 }

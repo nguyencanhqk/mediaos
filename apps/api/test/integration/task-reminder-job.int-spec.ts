@@ -76,6 +76,7 @@ interface NotiRow {
   recipient: string;
   dedupeKey: string | null;
   deleted: boolean;
+  targetUrl: string | null;
 }
 
 function fromNow(ms: number): string {
@@ -169,7 +170,7 @@ describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", 
   async function rows(companyId: string, eventCode: string, taskId: string): Promise<NotiRow[]> {
     const r = await direct.query(
       `SELECT id, recipient_user_id AS recipient, dedupe_key AS "dedupeKey",
-              (deleted_at IS NOT NULL) AS deleted
+              (deleted_at IS NOT NULL) AS deleted, target_url AS "targetUrl"
          FROM notifications
         WHERE company_id = $1 AND event_code = $2 AND source_entity_id = $3
         ORDER BY created_at`,
@@ -283,6 +284,8 @@ describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", 
     const first = await run(A.companyId);
     const list = await rows(A.companyId, DUE_SOON, t.dueSoon);
     expect(list.map((r) => r.recipient)).toEqual([uid.nv]);
+    // S20-NOTI-TARGETURL-1 (0593): đích = đúng việc, không còn placeholder.
+    expect(list.map((r) => r.targetUrl)).toEqual([`/tasks/${t.dueSoon}`]);
     expect(first.failed).toBe(0);
     expect(meta(first, "dueSoonCount")).toBe(1);
     expect(meta(first, "overdueSkippedByLookback")).toBe(0);
@@ -294,6 +297,7 @@ describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", 
     expect(of(list, "nv")).toHaveLength(1);
     expect(of(list, "rep")).toHaveLength(1);
     expect(list).toHaveLength(2);
+    expect(list.map((r) => r.targetUrl)).toEqual([`/tasks/${t.overdue}`, `/tasks/${t.overdue}`]);
   });
 
   it("R8 · người phụ trách = reporter ⇒ đúng 1 bản", async () => {

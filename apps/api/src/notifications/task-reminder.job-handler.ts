@@ -204,7 +204,8 @@ export class TaskReminderJobHandler implements JobHandler {
         dedupeKey: item.dedupeKey,
         occurredAt: now.toISOString(),
         recipient: { mode: "UserIds", userIds: item.recipients, employeeIds: [] },
-        payload: { task_title: task.title, due_at: task.dueAt },
+        // S20-NOTI-TARGETURL-1: `taskId` cho placeholder `/tasks/{taskId}` của template nhắc hạn (0593).
+        payload: { taskId: task.id, task_title: task.title, due_at: task.dueAt },
       });
       return true;
     } catch (err) {

@@ -17,6 +17,7 @@ import { toast } from "@mediaos/ui";
 import { useChatStore } from "@/stores/chat.store";
 import { useChatDockStore } from "@/components/chat/chat-dock.store";
 import { NotificationTargetLink, isSafeInternalTarget } from "./NotificationTargetLink";
+import { clearCommentHighlight, getCommentHighlight } from "@/routes/tasks/task-drawer-nav";
 
 beforeEach(() => {
   mockNavigate.mockReset();
@@ -27,6 +28,11 @@ describe("isSafeInternalTarget — whitelist đường dẫn nội bộ", () => 
     ["/leave/me/requests/req-1", true],
     ["/hr/employees/emp-1", true],
     ["/", true],
+    [
+      "/tasks/0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b?comment_id=7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      true,
+    ],
+    ["/leave/approvals?request=0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b", true],
     [null, false],
     [undefined, false],
     ["", false],
@@ -105,6 +111,41 @@ describe("NotificationTargetLink — đích việc mở drawer tại chỗ", () 
     expect(arg.to).toBe(".");
     expect(arg.replace).not.toBe(true);
     expect(arg.search({ tab: "tasks" })).toEqual({ tab: "tasks", task: TASK_UUID });
+  });
+
+  // S20-NOTI-TARGETURL-1 — bình luận: cùng drawer + yêu cầu làm nổi, KHÔNG thêm comment_id vào URL.
+  it("/tasks/<uuid>?comment_id=<uuid> ⇒ mở drawer kèm yêu cầu làm nổi, không navigate({href})", () => {
+    const commentId = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
+    clearCommentHighlight();
+    render(
+      <NotificationTargetLink targetUrl={`/tasks/${TASK_UUID}?comment_id=${commentId}`}>
+        Bình luận mới
+      </NotificationTargetLink>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Bình luận mới" }));
+    expect(getCommentHighlight()).toMatchObject({ taskId: TASK_UUID, commentId });
+    const arg = mockNavigate.mock.calls[0]?.[0] as { href?: string; search: (p: object) => object };
+    expect(arg.href).toBeUndefined();
+    expect(arg.search({})).toEqual({ task: TASK_UUID });
+  });
+
+  it("comment_id rác ⇒ vẫn mở drawer, KHÔNG phát yêu cầu làm nổi", () => {
+    clearCommentHighlight();
+    render(
+      <NotificationTargetLink targetUrl={`/tasks/${TASK_UUID}?comment_id=rac`}>
+        Mở
+      </NotificationTargetLink>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mở" }));
+    expect(getCommentHighlight()).toBeNull();
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("đích người duyệt /leave/approvals?request=<uuid> ⇒ navigate({href})", () => {
+    const href = "/leave/approvals?request=0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b";
+    render(<NotificationTargetLink targetUrl={href}>Duyệt</NotificationTargetLink>);
+    fireEvent.click(screen.getByRole("button", { name: "Duyệt" }));
+    expect(mockNavigate).toHaveBeenCalledWith({ href });
   });
 
   it.each([["/tasks/my-tasks"], ["/tasks/overdue"], ["/tasks/not-a-uuid"], ["/tasks/projects/p1"]])(

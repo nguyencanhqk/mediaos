@@ -14,8 +14,9 @@
  *        TASK_ASSIGNED / TASK_COMMENT_CREATED → `/tasks/{taskId}` (payload commonPayload/commentPayload có taskId).
  *        LEAVE_REQUEST_APPROVED / LEAVE_REQUEST_REJECTED → `/leave/me/requests/{requestId}` (payload có requestId).
  *        ATT_ADJUSTMENT_APPROVED → `/attendance/adjustment-requests/{requestId}` (payload có requestId).
- *   (c) route TĨNH: template TASK_DUE_SOON = `/tasks/my-tasks` (KHÔNG placeholder → KHÔNG rò `{}` → tránh
- *        bẫy assertInternalTargetUrl 422 khi payload job thiếu taskId).
+ *   (c) TASK_DUE_SOON/OVERDUE template = `/tasks/{taskId}` (job nhắc hạn có `taskId` trong payload từ 0593;
+ *        trước đó route tĩnh `/tasks/my-tasks`). S20-NOTI-TARGETURL-1 đổi thêm COMMENT_CREATED (+`?comment_id`)
+ *        và LEAVE_REQUEST_SUBMITTED (+`?request`) — chi tiết ở s20-noti-targeturl1.int-spec.
  *
  * GATE CỨNG `hasDb && LANE_DB` (memory integration-test-lane-db-gate): CHỈ DB cô lập lane
  * (scripts/lane-db-setup.sh notifix1 + export LANE_DB=mediaos_notifix1). KHÔNG biểu thức ngược (false-green).
@@ -171,7 +172,7 @@ describe.skipIf(!hasLaneDb)(
     it("(a) sample-map target_url_template khớp bảng §4 (placeholder + tĩnh)", async () => {
       expect(await globalTemplateUrl("TASK_ASSIGNED__IN_APP__vi-VN")).toBe("/tasks/{taskId}");
       expect(await globalTemplateUrl("TASK_COMMENT_CREATED__IN_APP__vi-VN")).toBe(
-        "/tasks/{taskId}",
+        "/tasks/{taskId}?comment_id={commentId}",
       );
       expect(await globalTemplateUrl("PROJECT_MEMBER_ADDED__IN_APP__vi-VN")).toBe(
         "/tasks/projects/{projectId}",
@@ -180,7 +181,7 @@ describe.skipIf(!hasLaneDb)(
         "/leave/me/requests/{requestId}",
       );
       expect(await globalTemplateUrl("LEAVE_REQUEST_SUBMITTED__IN_APP__vi-VN")).toBe(
-        "/leave/approvals",
+        "/leave/approvals?request={requestId}",
       );
       expect(await globalTemplateUrl("ATT_ADJUSTMENT_APPROVED__IN_APP__vi-VN")).toBe(
         "/attendance/adjustment-requests/{requestId}",
@@ -190,11 +191,10 @@ describe.skipIf(!hasLaneDb)(
       );
     });
 
-    // ── (c) route TĨNH — TASK_DUE_SOON KHÔNG có placeholder (tránh bẫy 422 vì job payload thiếu taskId) ──
-    it("(c) TASK_DUE_SOON template = /tasks/my-tasks (tĩnh, KHÔNG rò `{}` — job payload không có taskId)", async () => {
-      const url = await globalTemplateUrl("TASK_DUE_SOON__IN_APP__vi-VN");
-      expect(url).toBe("/tasks/my-tasks");
-      expect(url).not.toContain("{");
+    // ── (c) nhắc hạn — job payload có taskId từ 0593 ⇒ template trỏ thẳng việc ──
+    it("(c) TASK_DUE_SOON/OVERDUE template = /tasks/{taskId} (job payload có taskId từ 0593)", async () => {
+      expect(await globalTemplateUrl("TASK_DUE_SOON__IN_APP__vi-VN")).toBe("/tasks/{taskId}");
+      expect(await globalTemplateUrl("TASK_OVERDUE__IN_APP__vi-VN")).toBe("/tasks/{taskId}");
     });
 
     // ── (b) P0 render deep-link THẬT qua bridge ─────────────────────────────────────────────────────
@@ -214,21 +214,22 @@ describe.skipIf(!hasLaneDb)(
       expect(await targetUrlOf(employeeUser, "TASK_ASSIGNED", taskId)).toBe(`/tasks/${taskId}`);
     });
 
-    it("(b) TASK_COMMENT_CREATED → notification.target_url = /tasks/{taskId} (render THẬT)", async () => {
+    it("(b) TASK_COMMENT_CREATED → notification.target_url = /tasks/{taskId}?comment_id={commentId} (render THẬT)", async () => {
       const taskId = await mkAssignedTask("Việc deep-link comment", "TSK-NFX1-C");
+      const commentId = randomUUID();
       await enqueue("task.comment_created", {
         eventCode: "TASK_COMMENT_CREATED",
         taskId,
         taskCode: "TSK-NFX1-C",
         taskTitle: "Việc deep-link comment",
-        commentId: randomUUID(),
+        commentId,
         projectId: null,
         actorUserId: managerUser, // recipient = assignee (employee), creator=manager bị loại (actor)
       });
       await processOutbox();
 
       expect(await targetUrlOf(employeeUser, "TASK_COMMENT_CREATED", taskId)).toBe(
-        `/tasks/${taskId}`,
+        `/tasks/${taskId}?comment_id=${commentId}`,
       );
     });
 

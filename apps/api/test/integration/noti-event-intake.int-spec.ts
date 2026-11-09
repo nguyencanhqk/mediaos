@@ -213,7 +213,8 @@ describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine
     eventCode: "TASK_ASSIGNED",
     sourceModule: "TASK",
     recipient: { mode: "UserIds", userIds: [recipient] },
-    payload: { taskId: randomUUID(), taskTitle: "Test task" },
+    // S20-NOTI-TARGETURL-1 (0593): TASK_COMMENT_CREATED/MENTIONED cần thêm `commentId` (đích `?comment_id={commentId}`).
+    payload: { taskId: randomUUID(), commentId: randomUUID(), taskTitle: "Test task" },
     ...over,
   });
 

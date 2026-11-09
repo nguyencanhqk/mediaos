@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Send, Pencil, Trash2, X } from "lucide-react";
@@ -20,6 +27,53 @@ import {
   type MentionCandidate,
 } from "./task-mention-candidates";
 import { MentionSuggestions, useMentionListbox } from "./MentionSuggestions";
+import { getCommentHighlight, isTaskUuid, subscribeCommentHighlight } from "./task-drawer-nav";
+
+/**
+ * S20-NOTI-TARGETURL-1 — bình luận cần làm nổi của MỘT thread. Nguồn: yêu cầu từ `openTask(.., {commentId})`
+ * (chỉ khi `taskId` khớp) ?? `comment_id` trên URL lúc mount (trang toàn màn). Chỉ nhận UUID.
+ *
+ * Trạng thái nằm trong state/ref của INSTANCE và được đặt ngay lần chạy effect đầu — cleanup không xoá, nên
+ * StrictMode (mount→cleanup→mount) không làm mất làm nổi cũng không tải lại hai lần. Mỗi instance giữ
+ * `handledSeq` riêng ⇒ không cướp tín hiệu của thread khác. Cache cũ (`staleTime` 30 s) chưa có bình luận
+ * mới ⇒ tải lại danh sách ĐÚNG MỘT LẦN cho mỗi nguồn; vẫn không thấy ⇒ không làm nổi, không báo gì.
+ */
+function useCommentHighlight(
+  taskId: string,
+  comments: readonly TaskCommentResponseDto[] | undefined,
+  isFetching: boolean,
+): string | null {
+  const queryClient = useQueryClient();
+  const request = useSyncExternalStore(
+    subscribeCommentHighlight,
+    getCommentHighlight,
+    getCommentHighlight,
+  );
+  const handledSeq = useRef(0);
+  const refetchedKey = useRef<string | null>(null);
+  const [target, setTarget] = useState<{ id: string; key: string } | null>(() => {
+    const raw =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("comment_id");
+    return isTaskUuid(raw) ? { id: raw, key: `url:${raw}` } : null;
+  });
+
+  useEffect(() => {
+    if (!request || request.taskId !== taskId || request.seq <= handledSeq.current) return;
+    handledSeq.current = request.seq;
+    setTarget({ id: request.commentId, key: `seq:${request.seq}` });
+  }, [request, taskId]);
+
+  useEffect(() => {
+    if (!target || !comments || isFetching) return;
+    if (comments.some((c) => c.id === target.id) || refetchedKey.current === target.key) return;
+    refetchedKey.current = target.key;
+    void queryClient.invalidateQueries({ queryKey: taskKeys.comments(taskId) });
+  }, [target, comments, isFetching, queryClient, taskId]);
+
+  return target?.id ?? null;
+}
 
 /**
  * TaskCommentThread — bình luận + mention autocomplete (S4-FE-TASK-3, SPEC-06 §13.7/§14.14,
@@ -411,15 +465,10 @@ export function TaskCommentThread({
     TASK_CORE_ENGINE_PAIRS.COMMENT.resourceType,
   );
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [highlightId] = useState<string | null>(() =>
-    typeof window === "undefined"
-      ? null
-      : new URLSearchParams(window.location.search).get("comment_id"),
-  );
-
   const {
     data: comments,
     isLoading,
+    isFetching,
     isError,
     refetch,
   } = useQuery({
@@ -427,6 +476,7 @@ export function TaskCommentThread({
     queryFn: () => taskCollabApi.listComments(taskId),
     staleTime: 30_000,
   });
+  const highlightId = useCommentHighlight(taskId, comments, isFetching);
 
   // Mục không tên (hồ sơ chưa đủ) KHÔNG mention được — buildMentionCandidates đã loại.
   const candidates = useMentionCandidates(taskId, canComment);

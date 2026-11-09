@@ -1680,6 +1680,7 @@ Cho phép người liên quan trao đổi trong task.
 * Comment đã xóa nên là soft delete.
 * Mention người không có quyền xem task cần cảnh báo.
 * Nội dung comment cần lưu người tạo và thời gian tạo.
+* Thông báo bình luận/nhắc tên mở đúng việc kèm `?comment_id=<id>` (S20-NOTI-TARGETURL-1): drawer việc làm nổi và cuộn tới bình luận đó; danh sách trong bộ nhớ đệm cũ chưa có bình luận ⇒ tải lại đúng 1 lần, vẫn không thấy (đã xoá) ⇒ không làm nổi, không báo gì. Đang ở tab khác của drawer ⇒ làm nổi khi quay lại tab «Bình luận». Tải lại trang khi drawer đang mở thì mất làm nổi (yêu cầu không nằm trên URL của drawer).
 
 ---
 
@@ -1766,6 +1767,7 @@ AND status NOT IN (Done, Cancelled)
 * Gửi cho creator nếu cấu hình.
 * Gửi cho project manager nếu quá hạn lâu.
 * Hiển thị trên Dashboard.
+* Đích bấm của thông báo nhắc hạn là `/tasks/{taskId}` (mở drawer đúng việc, 1 lượt bấm); payload của job nhắc hạn có khoá `taskId` (S20-NOTI-TARGETURL-1, migration 0593).
 
 ---
 

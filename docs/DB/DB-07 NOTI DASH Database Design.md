@@ -637,7 +637,7 @@ TASK_ASSIGNED + PUSH + vi-VN
 | `body_template` | TEXT | Có | Template nội dung |
 | `short_body_template` | VARCHAR(500) | Không | Nội dung rút gọn cho dropdown/push |
 | `action_label_template` | VARCHAR(100) | Không | Label nút hành động |
-| `target_url_template` | VARCHAR(500) | Không | URL điều hướng dạng template |
+| `target_url_template` | VARCHAR(500) | Không | URL điều hướng dạng template. Placeholder hợp lệ = khoá có thật trong payload của MỌI producer của event (vd `{taskId}`, `{commentId}`, `{requestId}`); thiếu khoá ⇒ engine 422. Migration 0593 (S20-NOTI-TARGETURL-1) đổi 5 template global (nhắc hạn · bình luận · nhắc tên · đơn gửi người duyệt) và override còn mang đích cũ; xem SPEC-08 "target_url theo sự kiện" |
 | `variables_schema` | JSONB | Không | Danh sách biến cho template |
 | `sample_payload` | JSONB | Không | Payload mẫu để preview |
 | `version` | INT | Có | Version template |
