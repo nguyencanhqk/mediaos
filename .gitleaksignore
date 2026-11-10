@@ -7,3 +7,6 @@
 # sang ghép-từ-mảnh (mẫu STRONG); commit 6150cea trở thành unreachable sau squash-merge PR #121 +
 # xóa nhánh. Giữ dòng này vô hại (trỏ 1 commit cụ thể).
 6150cea82f2ffa318ee4a97a7296a7f687b08867:packages/web-core/src/lib/auth-users-api.spec.ts:generic-api-key:42
+
+# #671: duong t�nh gi? � t�n kho� c?u h�nh trong int-spec, kh�ng ph?i secret
+91d2131cd050b8e8998d0b767aa22d05a71e4845:apps/api/test/integration/s19-sec-filepointer-1.int-spec.ts:generic-api-key:419
