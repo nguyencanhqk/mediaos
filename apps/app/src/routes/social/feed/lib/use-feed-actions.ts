@@ -9,7 +9,7 @@
  */
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ApiError, socialApi, socialKeys } from "@mediaos/web-core";
+import { ApiError, socialApi } from "@mediaos/web-core";
 import type {
   FeedPostDto,
   FeedReactionEmojiDto,
@@ -19,6 +19,7 @@ import type {
 import type { PostCardMenuActions } from "../components/PostCardMenu";
 import type { ActionErrorReason } from "../components/ActionErrorBanner";
 import { postActionErrorReason } from "./feed-errors";
+import { invalidatePostLists } from "./post-list-invalidation";
 
 /**
  * Hành động nào vừa hỏng. Dùng để chọn CÂU nói với người dùng — «không ghim được bài» khác hẳn
@@ -26,26 +27,6 @@ import { postActionErrorReason } from "./feed-errors";
  * làm gì tiếp.
  */
 export type FeedActionKind = "reaction" | "save" | "moderate" | "delete";
-
-/**
- * Tiền tố MỌI danh sách `025` (trang cá nhân ĐỒNG NGHIỆP, mọi `employeeId`) = `["social","profile-posts"]`.
- *
- * Nhánh này KHÔNG nằm dưới `feed.allOf()` (chỉ `/feed/profiles/me` đi `feed.list`), và web-core chưa có
- * `allOf` cho nó ⇒ CẮT từ chính `socialKeys.profilePosts` thay vì chép literal: đổi tên khoá ở web-core
- * thì tiền tố đổi theo, không trôi im lặng. Review LIGHT 02/10/2026 (FEMODERRMSG-1): thiếu nó thì bài bị
- * xoá/ẩn vẫn nằm trên trang đồng nghiệp — cả sau lượt kiểm duyệt THÀNH CÔNG lẫn sau 404 «postGone».
- */
-const PROFILE_POSTS_PREFIX = socialKeys.profilePosts("").slice(0, socialKeys.all.length + 1);
-
-/**
- * Tiền tố MỌI kết quả tìm kiếm `023` (mọi `q`) = `["social","search"]` — `/feed?q=…` đọc
- * `socialKeys.search({q})`, KHÔNG nằm dưới `feed.allOf()`. Cắt từ chính `socialKeys.search` như
- * `PROFILE_POSTS_PREFIX`; KHÔNG dùng `socialKeys.search()` trần: `[…,"search",undefined]` không khớp một
- * phần `[…,"search",{q}]` (cùng lý do `socialKeys.groups.lists()`). Review LIGHT 03/10/2026
- * (FEMODERRMSG-1, LOW): thiếu nó thì ở chế độ tìm kiếm, thẻ của bài đã mất vẫn nằm trên màn trong khi
- * dải «postGone» nói dữ liệu đã được tải lại.
- */
-const SEARCH_PREFIX = socialKeys.search().slice(0, socialKeys.all.length + 1);
 
 export interface FeedActionError {
   kind: FeedActionKind;
@@ -105,31 +86,19 @@ export function useFeedActions(): FeedActions {
   const [actionError, setActionError] = React.useState<FeedActionError | null>(null);
 
   /**
-   * Làm mới đúng các nhánh mà một thay đổi trên bài có thể ảnh hưởng.
+   * Làm mới đúng các nhánh mà một thay đổi trên bài có thể ảnh hưởng — tập khoá là MỘT nguồn dùng chung
+   * (`post-list-invalidation.ts`, S16-SOCIAL-FEMODINVAL-1): bình chọn · sáng kiến · vinh danh · tin tức ·
+   * trang cá nhân đồng nghiệp · tìm kiếm… Không biết loại bài ở đây (`remove`/`moderate` chỉ có `postId`)
+   * nên làm mới tất cả; các danh sách ngắn, rẻ hơn một dòng chết.
    *
-   * S16-SOCIAL-FE-2 (plan §8 H5): thêm danh sách bình chọn (040) + sáng kiến (045) — xoá/ẩn một bài
-   * poll/idea mà hai danh sách đó không làm mới thì màn 007/008 và widget rail còn một dòng trỏ vào
-   * bài đã 404. Không biết loại bài ở đây (`remove`/`moderate` chỉ có `postId`) nên làm mới cả hai;
-   * hai danh sách ngắn, phân trang OFFSET — rẻ hơn một dòng chết.
+   * `moderation: "queues"` chỉ cho ẩn / xoá (hành động ĐỔI trạng thái hiển thị): báo cáo về bài đó và
+   * tab «Bài đang ẩn» (`staleTime: 0`) phải đọc lại.
    */
-  const invalidatePostLists = (postId?: string): void => {
-    void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
-    void queryClient.invalidateQueries({ queryKey: socialKeys.saved() });
-    void queryClient.invalidateQueries({ queryKey: socialKeys.polls.allOf() });
-    void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
-    // S16-SOCIAL-FE-2C — bài kudos bị xoá/ẩn cũng phải rời màn 009 + widget «Vinh danh tháng này».
-    void queryClient.invalidateQueries({ queryKey: socialKeys.kudos.lists() });
-    // S16-SOCIAL-FEMODERRMSG-1 — trang cá nhân đồng nghiệp (`025`), xem `PROFILE_POSTS_PREFIX`.
-    void queryClient.invalidateQueries({ queryKey: PROFILE_POSTS_PREFIX });
-    // S16-SOCIAL-FEMODERRMSG-1 — kết quả tìm kiếm (`023`, `/feed?q=…`), xem `SEARCH_PREFIX`.
-    void queryClient.invalidateQueries({ queryKey: SEARCH_PREFIX });
-    // S16-SOCIAL-FEMODERRMSG-1 — tin tức (`020`): khung portal luôn hiện «tin nổi bật» qua
-    // `news.list({ highlight })`, nên bài tin đã mất phải rời cả khung (cùng khoá `NewsPage` tự làm mới).
-    void queryClient.invalidateQueries({ queryKey: socialKeys.news.allOf() });
-    if (postId) {
-      void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
-    }
-  };
+  const refreshAfter = (kind: FeedActionKind, postId?: string): void =>
+    invalidatePostLists(queryClient, {
+      moderation: kind === "moderate" || kind === "delete" ? "queues" : "none",
+      ...(postId === undefined ? {} : { postId }),
+    });
 
   /**
    * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: `QueryClient` ở `main.tsx` không
@@ -143,7 +112,7 @@ export function useFeedActions(): FeedActions {
   const onActionError = (kind: FeedActionKind, err: unknown, postId: string): void => {
     const reason = postActionErrorReason(err);
     setActionError({ kind, forbidden: err instanceof ApiError && err.status === 403, reason });
-    if (reason === "postGone") invalidatePostLists(postId);
+    if (reason === "postGone") refreshAfter(kind, postId);
   };
 
   const reactionMutation = useMutation({
@@ -154,7 +123,7 @@ export function useFeedActions(): FeedActions {
     onSuccess: (result) => {
       // Dùng NGUYÊN mảng server trả về làm nguồn sự thật, không tự cộng trừ từng số.
       setReactionSummaries((prev) => ({ ...prev, [result.targetId]: result.reactions }));
-      invalidatePostLists(result.targetId);
+      refreshAfter("reaction", result.targetId);
       setActionError(null);
     },
     onError: (err, { postId }) => onActionError("reaction", err, postId),
@@ -164,7 +133,7 @@ export function useFeedActions(): FeedActions {
     mutationFn: ({ postId, currentlySaved }: { postId: string; currentlySaved: boolean }) =>
       currentlySaved ? socialApi.unsavePost(postId) : socialApi.savePost(postId),
     onSuccess: (result) => {
-      invalidatePostLists(result.postId);
+      refreshAfter("save", result.postId);
       setActionError(null);
     },
     onError: (err, { postId }) => onActionError("save", err, postId),
@@ -181,7 +150,7 @@ export function useFeedActions(): FeedActions {
     mutationFn: ({ postId, patch }: { postId: string; patch: ModerateFeedPostDto }) =>
       socialApi.moderatePost(postId, patch),
     onSuccess: (post) => {
-      invalidatePostLists(post.id);
+      refreshAfter("moderate", post.id);
       setActionError(null);
     },
     onError: (err, { postId }) => onActionError("moderate", err, postId),
@@ -190,7 +159,7 @@ export function useFeedActions(): FeedActions {
   const deleteMutation = useMutation({
     mutationFn: (postId: string) => socialApi.deletePost(postId),
     onSuccess: () => {
-      invalidatePostLists();
+      refreshAfter("delete");
       setActionError(null);
     },
     onError: (err, postId) => onActionError("delete", err, postId),

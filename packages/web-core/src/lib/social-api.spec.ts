@@ -18,6 +18,7 @@ vi.mock("./api-client", async (importOriginal) => {
 interface FetchInit {
   method?: string;
   body?: string;
+  signal?: AbortSignal;
 }
 
 function lastCall(): [
@@ -154,6 +155,22 @@ describe("sáng kiến 045..046", () => {
         total: 21,
       }).success,
     ).toBe(true);
+  });
+
+  it("moderatePost ⇒ PATCH …/moderation; KHÔNG truyền signal thì init không mang khoá `signal`", async () => {
+    await socialApi.moderatePost(POST_ID, { hidden: false });
+    const [url, , init] = lastCall();
+    expect(url).toBe(`/social/posts/${POST_ID}/moderation`);
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(init?.body ?? "{}")).toEqual({ hidden: false });
+    expect(init).not.toHaveProperty("signal");
+  });
+
+  it("moderatePost nhận `signal` (additive) và đưa xuống init của apiFetch", async () => {
+    const controller = new AbortController();
+    await socialApi.moderatePost(POST_ID, { hidden: false }, controller.signal);
+    const [, , init] = lastCall();
+    expect(init?.signal).toBe(controller.signal);
   });
 
   it("reviewIdea ⇒ PATCH …/idea/review với đúng body", async () => {

@@ -1,15 +1,10 @@
 /**
- * S16-SOCIAL-FE-3 (gate code, CODE-02) — RATCHET giữa HAI đường làm mới «mọi bề mặt đang vẽ bài»:
- *   · màn Kiểm duyệt  — `invalidatePostSurfaces` (file này);
- *   · menu ⋯ thẻ bài  — `invalidatePostLists` trong `feed/lib/use-feed-actions.ts`.
+ * S16-SOCIAL-FE-3 (gate code, CODE-02) → S16-SOCIAL-FEMODINVAL-1 — RATCHET giữa các đường làm mới «mọi bề
+ * mặt đang vẽ bài»: màn Kiểm duyệt (`invalidatePostSurfaces`) · menu ⋯ thẻ bài (`useFeedActions`).
  *
- * Hai tập khoá đang được chép tay ở hai nơi. `invalidatePostLists` đã được nối khoá qua nhiều WO; lần nối
- * kế tiếp mà quên màn Kiểm duyệt thì bài ẩn/xoá từ hàng đợi vẫn nằm ở bề mặt mới — và mọi spec viết tay
- * danh sách khoá vẫn xanh. Ca dưới KHÔNG viết tay danh sách: nó chạy THẬT đường menu ⋯ (`moderate` qua
- * `useFeedActions`), thu mọi khoá đường đó invalidate, rồi đòi đường Kiểm duyệt phủ đủ từng khoá.
- *
- * Chiều ngược (đường menu ⋯ chưa invalidate `moderation.hiddenPosts()` / `reports.lists()`) là nợ ĐÃ BIẾT
- * — ghi ở `socialKeys.moderation` (web-core); ca cuối ghim đúng hiện trạng đó để ngày trả nợ phải sửa ca.
+ * Hai đường nay đọc CÙNG một nguồn (`feed/lib/post-list-invalidation.ts`) nên hai tập không thể trôi khỏi
+ * nhau; ca dưới vẫn chạy THẬT đường menu ⋯ và thu mọi khoá nó invalidate (không viết tay danh sách) để bắt
+ * ca ai đó nối thêm khoá thẳng vào `use-feed-actions.ts` mà bỏ qua helper.
  */
 import type { ReactNode } from "react";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
@@ -18,6 +13,7 @@ import { QueryClient, QueryClientProvider, type QueryKey } from "@tanstack/react
 import { socialKeys } from "@mediaos/web-core";
 import { useFeedActions } from "../../feed/lib/use-feed-actions";
 import { makePost } from "../../feed/social-test-doubles";
+import { postListKeys } from "../../feed/lib/post-list-invalidation";
 import { invalidatePostSurfaces } from "./moderation-invalidation";
 
 const moderatePost = vi.fn();
@@ -78,41 +74,49 @@ afterEach(() => {
   cleanup();
 });
 
-describe("màn Kiểm duyệt phủ ĐỦ mọi bề mặt bài mà menu ⋯ của thẻ bài làm mới", () => {
-  it("mỗi khoá danh sách của đường menu ⋯ đều nằm dưới một khoá của `invalidatePostSurfaces`", async () => {
-    const cardMenu = await keysOfCardMenuPath();
-    const moderation = keysOfModerationPath();
-    // Chi tiết của MỘT bài do nơi gọi của màn Kiểm duyệt tự làm mới (chỉ nơi gọi biết id bài).
-    const detail = socialKeys.posts.detail(POST_ID);
-    const surfaces = cardMenu.filter((key) => JSON.stringify(key) !== JSON.stringify(detail));
+const same = (a: QueryKey, b: QueryKey): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-    // Đường menu ⋯ thật sự đã chạy: có chi tiết bài + ít nhất dòng cuộn (chống ca «tập rỗng ⇒ xanh»).
+describe("một nguồn tập khoá «mọi bề mặt đang vẽ bài»", () => {
+  it('mỗi khoá danh sách mà đường menu ⋯ THẬT invalidate đều nằm dưới một khoá của `postListKeys("queues")`', async () => {
+    const cardMenu = await keysOfCardMenuPath();
+    const source = postListKeys("queues");
+    // Chi tiết của MỘT bài là của nơi gọi (chỉ nơi gọi biết id bài).
+    const detail = socialKeys.posts.detail(POST_ID);
+    const surfaces = cardMenu.filter((key) => !same(key, detail));
+
+    // Đường menu ⋯ thật sự đã chạy (chống ca «tập rỗng ⇒ xanh»).
     expect(cardMenu).toContainEqual(detail);
     expect(surfaces).toContainEqual(socialKeys.feed.allOf());
-    expect(surfaces.length).toBeGreaterThanOrEqual(8);
+    expect(surfaces.length).toBeGreaterThanOrEqual(10);
 
-    const uncovered = surfaces.filter(
-      (key) => !moderation.some((prefix) => isPrefixOf(prefix, key)),
-    );
-    expect(uncovered).toEqual([]);
+    expect(surfaces.filter((key) => !source.some((prefix) => isPrefixOf(prefix, key)))).toEqual([]);
   });
 
-  it("màn Kiểm duyệt làm mới THÊM `moderation.hiddenPosts()` — nhánh riêng, không nằm dưới `feed.allOf()`", () => {
-    expect(keysOfModerationPath()).toContainEqual(socialKeys.moderation.hiddenPosts());
+  it("chiều ngược: mỗi khoá của nguồn đều được đường menu ⋯ THẬT làm mới (menu ⋯ không bỏ sót)", async () => {
+    const cardMenu = await keysOfCardMenuPath();
+    const missed = postListKeys("queues").filter((key) => !cardMenu.some((k) => same(k, key)));
+    expect(missed).toEqual([]);
   });
 
-  it("không quét sạch: không khoá nào của `invalidatePostSurfaces` là gốc `social` hay phủ catalog huy hiệu / sinh nhật", () => {
+  it('`invalidatePostSurfaces` làm mới ĐÚNG tập `postListKeys("hidden")` — không thừa, không thiếu', () => {
     const moderation = keysOfModerationPath();
-    const untouched = [socialKeys.kudos.badges(), socialKeys.birthdays({ range: "week" })];
-    for (const key of untouched) {
-      expect(moderation.filter((prefix) => isPrefixOf(prefix, key))).toEqual([]);
-    }
+    const source = postListKeys("hidden");
+    expect(moderation).toHaveLength(source.length);
+    expect(source.filter((key) => !moderation.some((k) => same(k, key)))).toEqual([]);
+    expect(moderation).toContainEqual(socialKeys.moderation.hiddenPosts());
   });
 
-  it("NỢ ĐÃ BIẾT (chiều ngược): đường menu ⋯ CHƯA làm mới `moderation.hiddenPosts()` lẫn `reports.lists()`", async () => {
+  it("ẩn / xoá từ menu ⋯ làm mới thêm `moderation.hiddenPosts()` + `reports.lists()`", async () => {
     const cardMenu = await keysOfCardMenuPath();
     const reaches = (key: QueryKey): boolean => cardMenu.some((prefix) => isPrefixOf(prefix, key));
-    expect(reaches(socialKeys.moderation.hiddenPosts())).toBe(false);
-    expect(reaches(socialKeys.moderation.reports.lists())).toBe(false);
+    expect(reaches(socialKeys.moderation.hiddenPosts())).toBe(true);
+    expect(reaches(socialKeys.moderation.reports.lists())).toBe(true);
+  });
+
+  it("không quét sạch: không khoá nào của nguồn phủ catalog huy hiệu / sinh nhật", () => {
+    const untouched = [socialKeys.kudos.badges(), socialKeys.birthdays({ range: "week" })];
+    for (const key of untouched) {
+      expect(postListKeys("queues").filter((prefix) => isPrefixOf(prefix, key))).toEqual([]);
+    }
   });
 });

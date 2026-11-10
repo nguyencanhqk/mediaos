@@ -175,10 +175,10 @@ export function HiddenPostsTab({
   // `useGuardedMutation`: khoá ĐỒNG BỘ (006 không `@Idempotent`; `isPending` tới màn sau một nhịp nên bấm
   // đúp / Enter giữ phím đều lọt), hỏng ngay khi offline, hết hạn chờ thì rơi vào `outcomeUnknown` + «Thử lại»
   // thay vì khoá mọi nút «Hiện lại» vô hạn. Khoá nhả sau MỌI kết cục — hành động này lặp lại được.
-  // `socialApi.moderatePost` chưa nhận `signal`: hết hạn chỉ nhả màn, yêu cầu treo không bị huỷ; lượt lặp
-  // `{ hidden: false }` không đổi gì thêm.
+  // `signal` nối xuống `socialApi.moderatePost`: hết hạn chờ thì yêu cầu treo bị HUỶ thật (không chỉ nhả màn);
+  // lượt lặp `{ hidden: false }` không đổi gì thêm.
   const unhide = useGuardedMutation<FeedPostDto, string>({
-    mutationFn: (postId) => socialApi.moderatePost(postId, unhideBody()),
+    mutationFn: (postId, signal) => socialApi.moderatePost(postId, unhideBody(), signal),
     onSuccess: (_post, postId) => {
       setNotice({ kind: "done" });
       outcomeFocus.requestFocus();
