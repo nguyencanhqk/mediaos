@@ -556,7 +556,8 @@ describe.skipIf(!runDb)(
         // S5-NOTI-FIX-1: template global TASK_COMMENT_CREATED có target_url_template '/tasks/{taskId}' (mig 0497).
         // Payload PHẢI có taskId (producer THẬT commentPayload luôn có) — thiếu ⇒ renderer giữ literal {taskId} →
         // assertInternalTargetUrl 422. sourceEntityId CHÍNH là task id (sourceEntityType='task') ⇒ dùng lại.
-        payload: { taskId: sourceEntityId, taskTitle: "QA dedupe" },
+        // S20-NOTI-TARGETURL-1 (0593): thêm `commentId` — template COMMENT_CREATED giờ là `?comment_id={commentId}`.
+        payload: { taskId: sourceEntityId, commentId: randomUUID(), taskTitle: "QA dedupe" },
       };
 
       const r1 = await api(nest)

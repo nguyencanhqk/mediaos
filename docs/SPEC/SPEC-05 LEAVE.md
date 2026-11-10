@@ -2409,6 +2409,8 @@ Mã event LEAVE dùng `UPPER_SNAKE`, prefix `LEAVE_`, khớp registry chuẩn NO
 
 ### 19.2 Nội dung thông báo gợi ý
 
+> **Đích bấm (S20-NOTI-TARGETURL-1).** `LEAVE_REQUEST_SUBMITTED` gửi NGƯỜI DUYỆT ⇒ `/leave/approvals?request={requestId}` (mở đúng đơn trong phạm vi duyệt; đơn ngoài phạm vi ⇒ thông điệp chung). Các thông báo gửi CHỦ đơn (APPROVED/REJECTED/CANCELLED/REVOKED) giữ `/leave/me/requests/{requestId}`.
+
 #### Gửi đơn nghỉ
 
 ```text

@@ -1,16 +1,19 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { randomUUID } from "node:crypto";
+import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   useAuthStore,
   taskCollabApi,
+  taskKeys,
   taskCoreApi,
   taskProjectApi,
   hrApi,
   ApiError,
 } from "@mediaos/web-core";
 import { TaskCommentThread } from "./TaskCommentThread";
+import { clearCommentHighlight, requestCommentHighlight } from "./task-drawer-nav";
 import type {
   TaskCommentResponseDto,
   TaskCoreResponseDto,
@@ -237,12 +240,13 @@ describe("TaskCommentThread", () => {
   // ── Deep link ?comment_id= highlight đúng bình luận ─────────────────────────
   it("highlights the comment matching ?comment_id= from the URL", async () => {
     setCapabilities({});
-    window.history.pushState({}, "", "/tasks/task-001?comment_id=cmt-001");
-    vi.mocked(taskCollabApi.listComments).mockResolvedValue([MOCK_COMMENT]);
+    const id = randomUUID();
+    window.history.pushState({}, "", `/tasks/task-001?comment_id=${id}`);
+    vi.mocked(taskCollabApi.listComments).mockResolvedValue([{ ...MOCK_COMMENT, id }]);
     renderWithQuery(<TaskCommentThread taskId="task-001" />);
 
     await waitFor(() => expect(screen.getByText("Bình luận đầu tiên")).toBeInTheDocument());
-    const row = document.getElementById("comment-cmt-001");
+    const row = document.getElementById(`comment-${id}`);
     expect(row?.className).toContain("border-brand");
 
     window.history.pushState({}, "", "/");
@@ -513,5 +517,133 @@ describe("TaskCommentThread — gợi ý @ và phím tắt gửi", () => {
     expect(textarea).not.toHaveAttribute("aria-activedescendant");
     const notPrevented = fireEvent.keyDown(textarea, { key: "Enter" });
     expect(notPrevented).toBe(true);
+  });
+});
+
+// ── S20-NOTI-TARGETURL-1 — làm nổi bình luận theo yêu cầu từ thông báo ──────────────
+describe("TaskCommentThread — làm nổi từ thông báo (S20-NOTI-TARGETURL-1)", () => {
+  const TASK = "task-001";
+  const CID = randomUUID();
+  const COMMENT: TaskCommentResponseDto = { ...MOCK_COMMENT, id: CID };
+  const isHighlighted = (id = CID) =>
+    document.getElementById(`comment-${id}`)?.className.includes("border-brand") ?? false;
+
+  /** Cache danh sách ĐÃ tải (còn tươi 30 s) với `seed` ⇒ mount không tự gọi API. */
+  function clientWith(seed: TaskCommentResponseDto[]) {
+    const client = makeQueryClient();
+    client.setQueryData(taskKeys.comments(TASK), seed);
+    return client;
+  }
+  const mount = (
+    client: QueryClient,
+    ui: React.ReactElement = <TaskCommentThread taskId={TASK} />,
+  ) => render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const ask = (taskId = TASK, commentId = CID) =>
+    act(() => requestCommentHighlight(taskId, commentId));
+
+  beforeEach(() => {
+    clearCapabilities();
+    clearCommentHighlight();
+    vi.clearAllMocks();
+    vi.mocked(taskCollabApi.listComments).mockResolvedValue([]);
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(makeTask());
+    vi.mocked(taskCoreApi.listWatchers).mockResolvedValue([]);
+    vi.mocked(taskProjectApi.listMembers).mockResolvedValue([]);
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(
+      DIRECTORY as unknown as Awaited<ReturnType<typeof hrApi.listEmployees>>,
+    );
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    window.history.pushState({}, "", "/");
+  });
+
+  it("ALLOW: cache đã có bình luận ⇒ làm nổi, 0 lời gọi danh sách thêm", async () => {
+    mount(clientWith([COMMENT]));
+    await screen.findByText("Bình luận đầu tiên");
+    ask();
+    await waitFor(() => expect(isHighlighted()).toBe(true));
+    expect(taskCollabApi.listComments).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW: thread mount SAU yêu cầu (drawer đang đóng) ⇒ vẫn làm nổi", async () => {
+    ask();
+    mount(clientWith([COMMENT]));
+    await waitFor(() => expect(isHighlighted()).toBe(true));
+  });
+
+  it("ALLOW: cache cũ chưa có bình luận ⇒ đúng 1 lần tải lại ⇒ làm nổi", async () => {
+    vi.mocked(taskCollabApi.listComments).mockResolvedValue([COMMENT]);
+    mount(clientWith([]));
+    ask();
+    await waitFor(() => expect(isHighlighted()).toBe(true));
+    expect(taskCollabApi.listComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("DENY: bình luận đã xoá (không có cả sau tải lại) ⇒ tối đa 1 lần tải, không làm nổi", async () => {
+    mount(clientWith([]));
+    ask();
+    await waitFor(() => expect(taskCollabApi.listComments).toHaveBeenCalledTimes(1));
+    await screen.findByText(/chưa có bình luận/i);
+    expect(isHighlighted()).toBe(false);
+    expect(taskCollabApi.listComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("DENY: yêu cầu cho việc KHÁC ⇒ thread không đổi, 0 lời gọi", async () => {
+    mount(clientWith([COMMENT]));
+    await screen.findByText("Bình luận đầu tiên");
+    ask("task-other");
+    await act(async () => undefined);
+    expect(isHighlighted()).toBe(false);
+    expect(taskCollabApi.listComments).not.toHaveBeenCalled();
+  });
+
+  it("DENY: comment_id rác trên URL ⇒ không làm nổi, không tải thêm", async () => {
+    window.history.pushState({}, "", "/tasks/task-001?comment_id=khong-phai-uuid");
+    vi.mocked(taskCollabApi.listComments).mockResolvedValue([COMMENT]);
+    mount(makeQueryClient());
+    await screen.findByText("Bình luận đầu tiên");
+    expect(isHighlighted()).toBe(false);
+    expect(taskCollabApi.listComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("DENY: sau clearCommentHighlight (đóng drawer) thread mount mới không làm nổi", async () => {
+    ask();
+    clearCommentHighlight();
+    mount(clientWith([COMMENT]));
+    await screen.findByText("Bình luận đầu tiên");
+    expect(isHighlighted()).toBe(false);
+  });
+
+  it("ALLOW: hai thread cùng việc (trang toàn màn + drawer) — thread nào cũng làm nổi, không cướp tín hiệu", async () => {
+    const client = clientWith([COMMENT]);
+    mount(
+      client,
+      <>
+        <TaskCommentThread taskId={TASK} />
+        <TaskCommentThread taskId={TASK} />
+      </>,
+    );
+    await screen.findAllByText("Bình luận đầu tiên");
+    ask();
+    await waitFor(() =>
+      expect(
+        Array.from(document.querySelectorAll(`[id="comment-${CID}"]`)).every((el) =>
+          el.className.includes("border-brand"),
+        ),
+      ).toBe(true),
+    );
+    expect(document.querySelectorAll(`[id="comment-${CID}"]`)).toHaveLength(2);
+  });
+
+  it("StrictMode: mount sau yêu cầu + cache cũ ⇒ làm nổi và đúng 1 lần tải danh sách", async () => {
+    vi.mocked(taskCollabApi.listComments).mockResolvedValue([COMMENT]);
+    ask();
+    mount(
+      clientWith([]),
+      <React.StrictMode>
+        <TaskCommentThread taskId={TASK} />
+      </React.StrictMode>,
+    );
+    await waitFor(() => expect(isHighlighted()).toBe(true));
+    expect(taskCollabApi.listComments).toHaveBeenCalledTimes(1);
   });
 });

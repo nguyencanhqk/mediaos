@@ -778,6 +778,24 @@ Tất cả user đã đăng nhập.
 | created_at      | Thời gian tạo   |
 | target_url      | Link điều hướng |
 
+#### target_url theo sự kiện (S20-NOTI-TARGETURL-1, migration 0593)
+
+`target_url` render từ `target_url_template` của template + payload sự kiện; mọi placeholder phải có khoá thật trong payload của producer, nếu không engine từ chối (422 `NOTI-ERR-TARGET-UNAVAILABLE`) và KHÔNG tạo thông báo.
+
+| Sự kiện (template IN_APP vi-VN)         | Người nhận        | Đích (template)                              | Khoá payload             |
+| --------------------------------------- | ----------------- | -------------------------------------------- | ------------------------ |
+| TASK_DUE_SOON · TASK_OVERDUE            | Phụ trách (+ reporter khi quá hạn) | `/tasks/{taskId}`            | `taskId` (job nhắc hạn)  |
+| TASK_COMMENT_CREATED · TASK_MENTIONED   | Người liên quan / được nhắc | `/tasks/{taskId}?comment_id={commentId}` | `taskId`, `commentId` |
+| LEAVE_REQUEST_SUBMITTED                 | Người duyệt       | `/leave/approvals?request={requestId}`       | `requestId`              |
+| LEAVE_REQUEST_APPROVED/REJECTED/CANCELLED/REVOKED | Chủ đơn | `/leave/me/requests/{requestId}` (giữ nguyên) | `requestId`   |
+
+Quy tắc:
+
+* Migration 0593 chỉ đổi template (UPDATE in-place theo `template_code`, idempotent), KHÔNG sửa thông báo đã phát (đích cũ vẫn mở trang danh sách).
+* Template ghi đè theo công ty còn mang đúng đích cũ (bản chép copy-on-write) được cập nhật theo; override đã tuỳ biến hoặc đã xoá mềm được GIỮ nguyên. Migration không đổi `updated_by` (không phải hành động của người dùng) và in số hàng đã cập nhật qua `RAISE NOTICE`.
+* Thông báo bình luận gộp theo dedupe TimeWindow 5 phút (việc, người nhận): thông báo trỏ tới bình luận ĐẦU của cửa sổ.
+* Đích chỉ là gợi ý điều hướng — quyền xem vẫn do server quyết khi mở bản ghi (xoá mềm / ngoài phạm vi / công ty khác ⇒ cùng thông điệp chung, không lộ tiêu đề).
+
 #### Quy tắc
 
 * Chỉ hiển thị thông báo của user hiện tại.

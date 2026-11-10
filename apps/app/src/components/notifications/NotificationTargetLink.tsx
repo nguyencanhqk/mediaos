@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { chatRoomTargetFromUrl } from "@/routes/chat/chat-room-link";
-import { taskIdFromPath, useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
+import { taskTargetFromUrl, useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
 import { useChatRoomLinkOpener } from "./use-chat-room-link-opener";
 
 /**
@@ -20,6 +20,9 @@ import { useChatRoomLinkOpener } from "./use-chat-room-link-opener";
  * S20-TASK-DRAWER-1: đích `/tasks/<uuid>` KHÔNG rời trang — thêm `?task=<uuid>` vào URL hiện tại để
  * drawer việc toàn cục mở tại chỗ (đứng ở /goals/G ⇒ /goals/G?task=T). Quyền xem việc vẫn do server
  * quyết khi drawer tải; đích khác giữ nguyên điều hướng cũ.
+ *
+ * S20-NOTI-TARGETURL-1: `/tasks/<uuid>?comment_id=<uuid>` ⇒ cùng drawer, kèm yêu cầu làm nổi bình luận (không thêm
+ * `comment_id` vào URL). `comment_id` rác ⇒ vẫn mở drawer, không làm nổi.
  *
  * S20-CHAT-DEEPLINK-1: đích `/chat/<uuid>` ⇒ drawer chat mở phòng tại chỗ (hoặc `/chat/R` khi đang ở
  * trang chat) — luật đầy đủ ở `use-chat-room-link-opener.ts`.
@@ -41,9 +44,12 @@ export function useOpenNotificationTarget(): (targetUrl: string) => void {
   const openChatRoom = useChatRoomLinkOpener();
   return useCallback(
     (targetUrl: string) => {
-      const taskId = taskIdFromPath(targetUrl);
-      if (taskId) {
-        openTask(taskId);
+      const taskTarget = taskTargetFromUrl(targetUrl);
+      if (taskTarget) {
+        openTask(
+          taskTarget.taskId,
+          taskTarget.commentId ? { commentId: taskTarget.commentId } : undefined,
+        );
         return;
       }
       const chatTarget = chatRoomTargetFromUrl(targetUrl);

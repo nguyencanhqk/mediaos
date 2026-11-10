@@ -19,6 +19,9 @@ import {
   readTaskDrawerParam,
   readTaskDrawerTab,
   taskIdFromPath,
+  taskTargetFromUrl,
+  getCommentHighlight,
+  clearCommentHighlight,
   useTaskDetailBack,
   useTaskDetailNav,
   useTaskDrawer,
@@ -73,11 +76,64 @@ describe("taskIdFromPath — đích thông báo", () => {
     ["/tasks/my-tasks", null],
     ["/tasks/overdue", null],
     ["/tasks/task-1", null],
-    [`/tasks/${UUID}?comment_id=c1`, null],
+    [`/tasks/${UUID}?comment_id=c1`, UUID],
+    [`/tasks/${UUID}#x`, null],
+    [`/tasks/${UUID}/sub`, null],
     [`/tasks/projects/${UUID}`, null],
     [`/goals/${UUID}`, null],
   ])("%s → %s", (path, expected) => {
     expect(taskIdFromPath(path)).toBe(expected);
+  });
+});
+
+describe("taskTargetFromUrl — đích việc kèm bình luận (S20-NOTI-TARGETURL-1)", () => {
+  const CID = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
+  it.each([
+    [`/tasks/${UUID}?comment_id=${CID}`, { taskId: UUID, commentId: CID }],
+    [`/tasks/${UUID}`, { taskId: UUID, commentId: null }],
+    [`/tasks/${UUID}?comment_id=rac`, { taskId: UUID, commentId: null }],
+    [`/tasks/${UUID}?comment_id=`, { taskId: UUID, commentId: null }],
+    [`/tasks/${UUID}?khac=1&comment_id=${CID}`, { taskId: UUID, commentId: CID }],
+    [`/tasks/my-tasks?comment_id=${CID}`, null],
+    [`/tasks/${UUID}?comment_id=${CID}#frag`, null],
+    [`//evil/tasks/${UUID}`, null],
+    [`/goals/${UUID}?comment_id=${CID}`, null],
+  ])("%s", (url, expected) => {
+    expect(taskTargetFromUrl(url)).toEqual(expected);
+  });
+});
+
+describe("openTask(.., { commentId }) — yêu cầu làm nổi, KHÔNG thêm gì vào URL", () => {
+  const CID = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
+  beforeEach(() => clearCommentHighlight());
+
+  it("commentId hợp lệ ⇒ phát yêu cầu {taskId, commentId}, search chỉ có task", () => {
+    const { result } = renderHook(() => useTaskDrawer());
+    result.current.openTask(UUID, { commentId: CID });
+    expect(getCommentHighlight()).toMatchObject({ taskId: UUID, commentId: CID });
+    const arg = navigateMock.mock.calls.at(-1)?.[0] as { search: (p: object) => object };
+    expect(arg.search({})).toEqual({ task: UUID });
+  });
+
+  it("yêu cầu mới có seq lớn hơn; commentId rác không phát yêu cầu", () => {
+    const { result } = renderHook(() => useTaskDrawer());
+    result.current.openTask(UUID, { commentId: CID });
+    const first = getCommentHighlight()?.seq ?? 0;
+    result.current.openTask(UUID, { commentId: CID });
+    expect(getCommentHighlight()?.seq).toBeGreaterThan(first);
+    clearCommentHighlight();
+    result.current.openTask(UUID, { commentId: "rac" });
+    expect(getCommentHighlight()).toBeNull();
+  });
+
+  it("openTask không commentId và closeTask ⇒ xoá yêu cầu treo", () => {
+    const { result } = renderHook(() => useTaskDrawer());
+    result.current.openTask(UUID, { commentId: CID });
+    result.current.openTask(UUID);
+    expect(getCommentHighlight()).toBeNull();
+    result.current.openTask(UUID, { commentId: CID });
+    result.current.closeTask();
+    expect(getCommentHighlight()).toBeNull();
   });
 });
 
