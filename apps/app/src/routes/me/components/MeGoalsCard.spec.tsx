@@ -311,3 +311,35 @@ describe("MeGoalsCard — kỳ hiện tại, cả Nháp (NV-04)", () => {
     await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(callsBefore + 2));
   });
 });
+
+describe("MeGoalsCard — S20-GOAL-OWNERCHECKIN-1 «Cần check-in»", () => {
+  beforeEach(() => setCaps({ "access:goal": true, "checkin:goal": true }));
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+
+  it("manual Active quá 7 ngày ⇒ nhãn + «Check-in N ngày trước», đẩy lên đầu", async () => {
+    mockGetGoals.mockResolvedValue([
+      makeGoal({ id: "g-fresh", name: "Mới check-in", lastCheckinAt: daysAgo(1) }),
+      makeGoal({ id: "g-stale", name: "Lâu chưa check-in", lastCheckinAt: daysAgo(10) }),
+    ]);
+    renderCard();
+    await waitFor(() => expect(screen.getByText("Lâu chưa check-in")).toBeInTheDocument());
+    const order = Array.from(document.querySelectorAll('[data-testid^="me-goal-checkin-"]')).map(
+      (b) => b.getAttribute("data-testid"),
+    );
+    expect(order).toEqual(["me-goal-checkin-g-stale", "me-goal-checkin-g-fresh"]);
+    expect(screen.getByTestId("goal-needs-checkin-g-stale")).toHaveTextContent("Cần check-in");
+    expect(screen.queryByTestId("goal-needs-checkin-g-fresh")).toBeNull();
+    expect(screen.getByTestId("goal-lastcheckin-g-stale")).toHaveTextContent(
+      "Check-in 10 ngày trước",
+    );
+  });
+
+  it("chế độ đo tự động ⇒ KHÔNG có nhãn «Cần check-in» dù lâu không check-in", async () => {
+    mockGetGoals.mockResolvedValue([
+      makeGoal({ id: "g-auto", progressMode: "tasks", lastCheckinAt: daysAgo(30) }),
+    ]);
+    renderCard();
+    await waitFor(() => expect(screen.getByText("Tăng doanh thu 20%")).toBeInTheDocument());
+    expect(screen.queryByTestId("goal-needs-checkin-g-auto")).toBeNull();
+  });
+});

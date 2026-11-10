@@ -104,6 +104,14 @@ export const goalCoreResponseSchema = z.object({
   finalizedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  /**
+   * S20-GOAL-OWNERCHECKIN-1 (Q14 = B) — TÊN HIỂN THỊ người phụ trách (kèm «(Đã nghỉ)» khi hồ sơ đã
+   * nghỉ; null = «—»). CHỈ tên: không email/SĐT/mã NV. Optional, KHÔNG default (client cũ parse được).
+   * Chỉ có ở các endpoint ĐỌC (list/tree/detail/me); phản hồi ghi có thể vắng.
+   */
+  ownerName: z.string().nullable().optional(),
+  /** MAX(created_at) của check-in (updateType=checkin); null/vắng = chưa từng check-in. */
+  lastCheckinAt: z.string().datetime().nullable().optional(),
 });
 export type GoalCoreResponseDto = z.infer<typeof goalCoreResponseSchema>;
 
@@ -220,6 +228,8 @@ export const goalUpdateResponseSchema = z.object({
   confidence: z.number().int().nullable(),
   note: z.string().nullable(),
   createdAt: z.string().datetime(),
+  /** S20-GOAL-OWNERCHECKIN-1 (Q14 = B) — tên hiển thị người check-in; null = «—» (tài khoản đã xoá). */
+  actorName: z.string().nullable().optional(),
 });
 export type GoalUpdateResponseDto = z.infer<typeof goalUpdateResponseSchema>;
 

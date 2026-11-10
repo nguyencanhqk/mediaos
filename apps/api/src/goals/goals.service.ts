@@ -22,7 +22,8 @@ import {
   type GoalActorScope,
   type GoalRequestUser as RequestUser,
 } from "./goal-access.service";
-import { buildGoalTree, toGoalCoreDto } from "./goals.mapper";
+import { buildGoalTree, toGoalCoreDto, type GoalIdentityExtra } from "./goals.mapper";
+import { GoalUpdatesRepository } from "./goal-updates.repository";
 import { goalAssignedPayload } from "./goal-noti.payload";
 import { GoalsRepository, type GoalListFilter, type GoalPatchValues } from "./goals.repository";
 import {
@@ -64,7 +65,32 @@ export class GoalsService {
     private readonly access: GoalAccessService,
     private readonly engine: GoalProgressEngineService,
     private readonly outbox: OutboxService,
+    private readonly updates: GoalUpdatesRepository,
   ) {}
+
+  /**
+   * S20-GOAL-OWNERCHECKIN-1 — làm giàu CẢ LÔ bằng đúng HAI truy vấn gộp (tên người phụ trách + MAX check-in),
+   * không truy vấn từng mục tiêu. Trả hàm tra theo hàng; chỉ dùng ở đường ĐỌC.
+   */
+  private async identityOf(
+    tx: TenantTx,
+    companyId: string,
+    rows: readonly Goal[],
+  ): Promise<(row: Goal) => GoalIdentityExtra> {
+    // Tuần tự: cùng MỘT kết nối của tx — Promise.all chỉ là giả song song (driver xếp hàng).
+    const names = await this.repo.ownerNamesTx(tx, companyId, [
+      ...new Set(rows.map((r) => r.ownerEmployeeId)),
+    ]);
+    const last = await this.updates.lastCheckinByGoalIdsTx(
+      tx,
+      companyId,
+      rows.map((r) => r.id),
+    );
+    return (row) => ({
+      ownerName: names.get(row.ownerEmployeeId) ?? null,
+      lastCheckinAt: last.get(row.id) ?? null,
+    });
+  }
 
   // ── Reads ────────────────────────────────────────────────────────────────────
 
@@ -88,7 +114,8 @@ export class GoalsService {
         },
         actor.readScopeExists,
       );
-      return rows.map(toGoalCoreDto);
+      const extraOf = await this.identityOf(tx, user.companyId, rows);
+      return rows.map((r) => toGoalCoreDto(r, extraOf(r)));
     });
   }
 
@@ -114,7 +141,7 @@ export class GoalsService {
       if (rows.length > TREE_NODE_CAP) {
         throw new UnprocessableEntityException(GOAL_ERR.TREE_TOO_LARGE(TREE_NODE_CAP));
       }
-      return buildGoalTree(rows);
+      return buildGoalTree(rows, await this.identityOf(tx, user.companyId, rows));
     });
   }
 
@@ -127,8 +154,9 @@ export class GoalsService {
         ? await this.repo.findGoalRefTx(tx, user.companyId, goal.parentGoalId)
         : undefined;
       const childCount = await this.repo.countNonDeletedChildrenTx(tx, user.companyId, goal.id);
+      const extraOf = await this.identityOf(tx, user.companyId, [goal]);
       return {
-        ...toGoalCoreDto(goal),
+        ...toGoalCoreDto(goal, extraOf(goal)),
         parent: parent
           ? {
               id: parent.id,
@@ -160,7 +188,8 @@ export class GoalsService {
         offset: query.offset && query.offset > 0 ? query.offset : 0,
       };
       const rows = await this.repo.listTx(tx, user.companyId, filter);
-      return rows.map(toGoalCoreDto);
+      const extraOf = await this.identityOf(tx, user.companyId, rows);
+      return rows.map((r) => toGoalCoreDto(r, extraOf(r)));
     });
   }
 

@@ -36,6 +36,8 @@ import {
   Button,
 } from "@mediaos/ui";
 import { GoalProgressBar } from "@/routes/goals/components/GoalProgressBar";
+import { GoalCheckinCell, GoalNeedsCheckinBadge } from "@/routes/goals/components/GoalCheckinCell";
+import { floatNeedingCheckin } from "@/routes/goals/goal-checkin-freshness";
 import { GoalCheckinDialog } from "@/routes/goals/components/GoalCheckinDialog";
 import { GoalStatusBadge } from "@/routes/goals/components/GoalBadges";
 import {
@@ -115,7 +117,10 @@ export function MeGoalsCard() {
   const data = pages.every((page): page is GoalCoreResponseDto[] => page !== undefined)
     ? pages
     : undefined;
-  const openGoals = data ? mergeOpenGoals(data) : [];
+  // S20-GOAL-OWNERCHECKIN-1 — mục tiêu «Cần check-in» (manual Active quá hạn, giờ công ty) lên đầu.
+  const openGoals = data
+    ? floatNeedingCheckin(mergeOpenGoals(data), new Date(), companyTimeZone())
+    : [];
   // Một trang bất kỳ đầy `limit` ⇒ có thể còn nữa ⇒ «N+» (API không trả tổng).
   const mayHaveMore = (data ?? []).some((page) => page.length >= ME_GOALS_FETCH_LIMIT);
   const refetch = () => Promise.all(results.map((result) => result.refetch()));
@@ -269,7 +274,11 @@ function MeGoalRow({
           )}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">{goalPeriodLabel(goal)}</p>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <p className="text-xs text-muted-foreground">{goalPeriodLabel(goal)}</p>
+        <GoalCheckinCell goal={goal} />
+        <GoalNeedsCheckinBadge goal={goal} />
+      </div>
       {/* NULL = "chưa đo" → GoalProgressBar hiện "—" + cảnh báo, KHÔNG vẽ 0%. */}
       <GoalProgressBar progressPercent={goal.progressPercent} compact />
       {canCheckin && <GoalCheckinLockHint goal={goal} id={lockHintId} />}

@@ -34,6 +34,10 @@ vi.mock("@mediaos/web-core", () => {
     !perm.denied.has(`${action}:${resourceType}`);
   return {
     useCan: (action: string, resourceType: string) => can(action, resourceType),
+    // S20-GOAL-OWNERCHECKIN-1 — nhãn «Check-in cuối» đọc giờ công ty.
+    companyTimeZone: () => "Asia/Ho_Chi_Minh",
+    localDateOf: (d: Date) => d.toISOString().slice(0, 10),
+    localTimeOf: (d: Date) => d.toISOString().slice(11, 16),
     // PermissionGate THẬT ẩn children khi thiếu quyền — mock phải giữ đúng ngữ nghĩa đó, nếu không
     // mọi test deny-path đều xanh giả.
     PermissionGate: ({

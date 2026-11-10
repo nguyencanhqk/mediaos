@@ -464,7 +464,9 @@ describe("GoalListPage — check-in ngay trên dòng (US-GOAL-NV-91)", () => {
     mockListGoals.mockResolvedValue([GOAL_ROW]);
     mountAt(LIST_HREF);
     await screen.findByText("Tăng doanh thu 20%");
-    expect(screen.queryByRole("button", { name: /^Check-in / })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Check-in Tăng doanh thu 20%" }),
+    ).not.toBeInTheDocument();
   });
 
   it.each([
@@ -562,5 +564,63 @@ describe("GoalListPage — kích hoạt hàng loạt mục tiêu Nháp (US-GOAL-
 
     await waitFor(() => expect(mockUpdateGoal).toHaveBeenCalledTimes(1));
     expect(mockUpdateGoal).toHaveBeenCalledWith("d-1", { status: "Active" });
+  });
+});
+
+describe("GoalListPage — cột «Phụ trách» + «Check-in cuối» sắp tại chỗ (S20-GOAL-OWNERCHECKIN-1)", () => {
+  const LIST_HREF = `/goals?period=${Q4}&view=list`;
+  const ROWS = [
+    {
+      ...GOAL_ROW,
+      id: "g-new",
+      goalCode: "GOAL-NEW",
+      name: "Mục tiêu mới check-in",
+      ownerName: "Bùi Văn Bình",
+      lastCheckinAt: "2026-11-08T02:00:00.000Z",
+    },
+    {
+      ...GOAL_ROW,
+      id: "g-old",
+      goalCode: "GOAL-OLD",
+      name: "Mục tiêu check-in cũ",
+      ownerName: "An Thị Ánh",
+      lastCheckinAt: "2026-10-01T02:00:00.000Z",
+    },
+  ];
+  /** Thứ tự hàng theo goalCode (mỗi hàng một mã riêng) — không đoán bằng chuỗi con của tên. */
+  const rowNames = () =>
+    screen
+      .getAllByRole("row")
+      .map((r) => r.textContent ?? "")
+      .flatMap((txt) =>
+        txt.includes("GOAL-OLD") ? ["old"] : txt.includes("GOAL-NEW") ? ["new"] : [],
+      );
+  const sortButton = (name: string) => screen.getByRole("button", { name });
+  const ariaSortOf = (name: string) => sortButton(name).closest("th")?.getAttribute("aria-sort");
+
+  it("bấm tiêu đề «Check-in cuối» ⇒ cũ nhất lên đầu; bấm lại ⇒ đảo; aria-sort theo chiều; cột khác không có nút sắp", async () => {
+    login({ "view:goal": true });
+    mockListGoals.mockResolvedValue(ROWS);
+    mountAt(LIST_HREF);
+    await screen.findByText("Mục tiêu check-in cũ");
+    expect(rowNames()).toEqual(["new", "old"]);
+    expect(ariaSortOf("Check-in cuối")).toBe("none");
+    fireEvent.click(sortButton("Check-in cuối"));
+    await waitFor(() => expect(rowNames()).toEqual(["old", "new"]));
+    expect(ariaSortOf("Check-in cuối")).toBe("ascending");
+    fireEvent.click(sortButton("Check-in cuối"));
+    await waitFor(() => expect(rowNames()).toEqual(["new", "old"]));
+    expect(ariaSortOf("Check-in cuối")).toBe("descending");
+    expect(screen.queryByTestId("sort-name")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sort-status")).not.toBeInTheDocument();
+  });
+
+  it("bấm tiêu đề «Phụ trách» ⇒ sắp theo tên người phụ trách", async () => {
+    login({ "view:goal": true });
+    mockListGoals.mockResolvedValue(ROWS);
+    mountAt(LIST_HREF);
+    await screen.findByText("Mục tiêu check-in cũ");
+    fireEvent.click(sortButton("Phụ trách"));
+    await waitFor(() => expect(rowNames()).toEqual(["old", "new"]));
   });
 });

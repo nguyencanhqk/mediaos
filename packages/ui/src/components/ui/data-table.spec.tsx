@@ -138,6 +138,65 @@ describe("DataTable — sắp xếp server (manual-mode)", () => {
     expect(onSortingChange).toHaveBeenCalledTimes(1);
   });
 
+  it("nút sắp mang TÊN CỘT làm tên trợ năng (WCAG 2.5.3) + th có aria-sort theo chiều đang sắp", () => {
+    const { rerender } = render(
+      <DataTable
+        columns={groupedColumns}
+        data={groupedData}
+        sorting={[]}
+        onSortingChange={vi.fn()}
+      />,
+    );
+    const btn = screen.getByTestId("sort-name");
+    expect(btn).toHaveAccessibleName("Tên");
+    expect(btn.closest("th")).toHaveAttribute("aria-sort", "none");
+    rerender(
+      <DataTable
+        columns={groupedColumns}
+        data={groupedData}
+        sorting={[{ id: "name", desc: false }]}
+        onSortingChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("sort-name").closest("th")).toHaveAttribute("aria-sort", "ascending");
+    rerender(
+      <DataTable
+        columns={groupedColumns}
+        data={groupedData}
+        sorting={[{ id: "name", desc: true }]}
+        onSortingChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("sort-name").closest("th")).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+  });
+
+  it("manual-mode chỉ MỘT cột sắp: Shift+bấm cột thứ hai THAY cột cũ (server chỉ áp sorting[0] ⇒ aria-sort không báo cột bị bỏ qua)", () => {
+    type Row2 = { a: string; b: string };
+    const cols: ColumnDef<Row2>[] = [
+      { accessorKey: "a", header: "Cột A" },
+      { accessorKey: "b", header: "Cột B" },
+    ];
+    const current = [{ id: "a", desc: false }];
+    const onSortingChange = vi.fn();
+    render(
+      <DataTable
+        columns={cols}
+        data={[{ a: "x", b: "y" }]}
+        sorting={current}
+        onSortingChange={onSortingChange}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("sort-b"), { shiftKey: true });
+    expect(onSortingChange).toHaveBeenCalledTimes(1);
+    const arg = onSortingChange.mock.calls[0]?.[0];
+    const next = typeof arg === "function" ? arg(current) : arg;
+    expect(next).toHaveLength(1);
+    expect(next[0].id).toBe("b");
+  });
+
   it("KHÔNG truyền onSortingChange → không có affordance sắp xếp (không manual-sort)", () => {
     render(<DataTable columns={groupedColumns} data={groupedData} />);
     expect(screen.queryByTestId("sort-name")).not.toBeInTheDocument();

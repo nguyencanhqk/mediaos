@@ -54,6 +54,7 @@ export function GoalCheckinsTab({ goalId, active }: { goalId: string; active: bo
           t("detail.checkins.columns.confidence"),
           t("detail.checkins.columns.note"),
           t("detail.checkins.columns.at"),
+          t("detail.checkins.columns.actor"),
         ]}
       >
         {updates.map((u: GoalUpdateResponseDto) => (
@@ -73,6 +74,12 @@ export function GoalCheckinsTab({ goalId, active }: { goalId: string; active: bo
             <td className="px-3 py-2 text-sm text-foreground">{u.note ?? "—"}</td>
             <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
               {new Date(u.createdAt).toLocaleString("vi-VN")}
+            </td>
+            <td
+              className="px-3 py-2 text-sm text-foreground"
+              data-testid={`goal-update-actor-${u.id}`}
+            >
+              {u.actorName ?? "—"}
             </td>
           </tr>
         ))}

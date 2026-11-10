@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,8 +18,6 @@ import {
   goalApi,
   goalInvalidation,
   goalKeys,
-  hrApi,
-  hrKeys,
   PermissionGate,
   useCan,
 } from "@mediaos/web-core";
@@ -39,6 +37,7 @@ import { GOAL_ENGINE_PAIRS, TASK_CREATE_PAIR_FOR_DECOMPOSE } from "./constants";
 import { formatPeriod, goalCheckinLockReason } from "./goal-format";
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
 import { GoalProgressBar } from "./components/GoalProgressBar";
+import { GoalCheckinCell, GoalNeedsCheckinBadge } from "./components/GoalCheckinCell";
 import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
 import { GoalFinalizeDialog } from "./components/GoalFinalizeDialog";
 import { GoalCheckinsTab } from "./components/GoalCheckinsTab";
@@ -363,20 +362,9 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
 // ── Tab: Tổng quan ────────────────────────────────────────────────────────────
 function OverviewTab({ goal }: { goal: GoalDetailResponseDto }) {
   const { t } = useTranslation("goals");
-  // Tên người phụ trách — reference lookup (GoalDetailResponseDto chỉ có ownerEmployeeId, KHÔNG có tên).
-  // GATE read:employee (mẫu GoalListPage): nhân viên thường thường KHÔNG có company-scope read:employee ⇒
-  // GET /hr/employees 403; KHÔNG chạy query + KHÔNG lộ UUID trơ (fallback "—" khi chưa giải được tên).
-  const canReadEmployees = useCan("read", "employee");
-  const { data: employeesPage } = useQuery({
-    queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
-    queryFn: () => hrApi.listEmployees({ pageSize: 100, status: "active" }),
-    enabled: canReadEmployees,
-    staleTime: 60_000,
-  });
-  const ownerName = useMemo(
-    () => employeesPage?.items.find((e) => e.id === goal.ownerEmployeeId)?.fullName ?? null,
-    [employeesPage, goal.ownerEmployeeId],
-  );
+  // S20-GOAL-OWNERCHECKIN-1 (Q14 = B) — tên do SERVER trả (`goal.ownerName`), không cần read:employee
+  // và không còn query danh bạ nhân viên; vắng/null ⇒ «—».
+  const ownerName = goal.ownerName ?? null;
 
   return (
     <Card>
@@ -393,6 +381,12 @@ function OverviewTab({ goal }: { goal: GoalDetailResponseDto }) {
             <GoalLevelBadge level={goal.level} />
           </Row>
           <Row label={t("detail.overview.owner")}>{ownerName ?? "—"}</Row>
+          <Row label={t("detail.overview.lastCheckin")}>
+            <div className="flex items-center gap-2">
+              <GoalCheckinCell goal={goal} />
+              <GoalNeedsCheckinBadge goal={goal} />
+            </div>
+          </Row>
           <Row label={t("detail.overview.period")}>
             {formatPeriod(goal.periodStart, goal.periodEnd)}
           </Row>

@@ -54,6 +54,15 @@ export default {
 
   finalizedBadge: "Đã chốt kỳ",
 
+  // S20-GOAL-OWNERCHECKIN-1 — nhãn «check-in cuối» (giờ công ty).
+  checkinFreshness: {
+    never: "Chưa check-in",
+    today: "Check-in hôm nay",
+    daysAgo: "Check-in {{count}} ngày trước",
+    needed: "Cần check-in",
+    staleTooltip: "Check-in cuối: {{at}} — quá {{days}} ngày chưa check-in.",
+  },
+
   // S7-GOAL-PROJTAB-1 — tab «Mục tiêu» của workspace dự án (lát A).
   projectTab: {
     heading: "Mục tiêu của dự án ({{count}})",
@@ -116,6 +125,7 @@ export default {
       period: "Kỳ",
       progress: "Tiến độ",
       status: "Trạng thái",
+      lastCheckin: "Check-in cuối",
       checkin: "Check-in",
     },
     empty: {
@@ -235,6 +245,7 @@ export default {
       code: "Mã mục tiêu",
       level: "Cấp",
       owner: "Người phụ trách",
+      lastCheckin: "Check-in cuối",
       period: "Kỳ",
       measure: "Đơn vị đo",
       target: "Giá trị mục tiêu",
@@ -282,6 +293,7 @@ export default {
         confidence: "Độ tự tin",
         note: "Ghi chú",
         at: "Thời điểm",
+        actor: "Người check-in",
       },
       empty: {
         title: "Chưa có lịch sử check-in",

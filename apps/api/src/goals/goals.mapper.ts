@@ -29,7 +29,19 @@ const toIso = (v: Date | string | null): string | null => {
   return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
 };
 
-export function toGoalCoreDto(row: Goal): GoalCoreResponseDto {
+/**
+ * S20-GOAL-OWNERCHECKIN-1 (Q14 = B) — phần làm giàu danh tính. CHỈ hai trường: tên hiển thị + mốc check-in.
+ * Vắng extra ⇒ vắng cả khoá (không `null` giả) để phản hồi ghi/dashboard giữ nguyên hình cũ.
+ */
+export interface GoalIdentityExtra {
+  ownerName?: string | null;
+  lastCheckinAt?: string | null;
+}
+
+/** Hàng `goal_updates` kèm tên người check-in (JOIN `users` ở repository). */
+export type GoalUpdateRowWithActor = GoalUpdate & { actorName?: string | null };
+
+export function toGoalCoreDto(row: Goal, extra?: GoalIdentityExtra): GoalCoreResponseDto {
   return {
     id: row.id,
     companyId: row.companyId,
@@ -56,6 +68,8 @@ export function toGoalCoreDto(row: Goal): GoalCoreResponseDto {
     finalizedAt: toIso(row.finalizedAt),
     createdAt: toIso(row.createdAt) ?? new Date(0).toISOString(),
     updatedAt: toIso(row.updatedAt) ?? new Date(0).toISOString(),
+    ...(extra && extra.ownerName !== undefined ? { ownerName: extra.ownerName } : {}),
+    ...(extra && extra.lastCheckinAt !== undefined ? { lastCheckinAt: extra.lastCheckinAt } : {}),
   };
 }
 
@@ -64,7 +78,7 @@ export function toGoalCoreDto(row: Goal): GoalCoreResponseDto {
  * `null` giữ NULL: "check-in không đổi số" và "check-in về 0" là hai chuyện khác nhau, y hệt luật
  * "chưa đo ≠ 0%" của `progress_percent` (SPEC-10 §13.2).
  */
-export function toGoalUpdateDto(row: GoalUpdate): GoalUpdateResponseDto {
+export function toGoalUpdateDto(row: GoalUpdateRowWithActor): GoalUpdateResponseDto {
   return {
     id: row.id,
     goalId: row.goalId,
@@ -77,6 +91,7 @@ export function toGoalUpdateDto(row: GoalUpdate): GoalUpdateResponseDto {
     confidence: row.confidence === null ? null : Number(row.confidence),
     note: row.note,
     createdAt: toIso(row.createdAt) ?? new Date(0).toISOString(),
+    ...(row.actorName !== undefined ? { actorName: row.actorName } : {}),
   };
 }
 
@@ -86,11 +101,14 @@ export function toGoalUpdateDto(row: GoalUpdate): GoalUpdateResponseDto {
  * Cấu trúc dữ liệu chặn độ sâu ở 3 tầng (department → project|employee); vòng lặp dữ liệu lệch được
  * cắt bằng `seen` để KHÔNG treo đệ quy.
  */
-export function buildGoalTree(rows: Goal[]): GoalTreeNodeDto[] {
+export function buildGoalTree(
+  rows: Goal[],
+  extraOf?: (row: Goal) => GoalIdentityExtra,
+): GoalTreeNodeDto[] {
   const nodes = new Map<string, GoalTreeNodeDto>();
   const parentOf = new Map<string, string | null>();
   for (const row of rows) {
-    nodes.set(row.id, { ...toGoalCoreDto(row), children: [] });
+    nodes.set(row.id, { ...toGoalCoreDto(row, extraOf?.(row)), children: [] });
     parentOf.set(row.id, row.parentGoalId);
   }
 
