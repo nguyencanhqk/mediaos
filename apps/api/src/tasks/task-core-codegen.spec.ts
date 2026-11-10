@@ -138,6 +138,8 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     } as never,
     // S20-TASK-ASSIGNNOTI-1 — nhật ký tạo + sự kiện giao việc.
     assignEvents as never,
+    // S20-TASK-ALLOWEDACTIONS-1 — tra người theo dõi (chỉ getTask dùng; createTask không gọi tới).
+    { findActiveWatcherTx: vi.fn() } as never,
   );
   return { svc, repo, db, sequence, assignEvents };
 }

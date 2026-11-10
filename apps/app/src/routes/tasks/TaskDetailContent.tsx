@@ -6,7 +6,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { taskCoreApi, taskKeys, useCan, useCanExact, ApiError } from "@mediaos/web-core";
+import { taskCoreApi, taskKeys, useCan, ApiError } from "@mediaos/web-core";
 import {
   EmptyState,
   Button,
@@ -20,6 +20,7 @@ import {
 } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
+import { useTaskActionAllowed, useTaskDeleteAllowed } from "./task-patch-field-locks";
 import { TaskOverdueBadge } from "./TaskStatusBadge";
 import {
   TaskStateField,
@@ -85,10 +86,9 @@ function TaskHeaderStrip({ task }: { task: TaskCoreResponseDto }) {
   const [moveOpen, setMoveOpen] = useState(false);
   // S5-TASK-MOVEPROJ-1 — đổi dự án gửi kèm stateId nên đòi ĐỦ HAI cặp; thiếu một ⇒ ẩn nút thay vì
   // hiện rồi 403 (UI-02 §5.3). Server vẫn là người quyết cuối.
-  const canUpdate = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE.resourceType,
-  );
+  const canUpdate = useTaskActionAllowed(task, "edit");
+  // Cặp update-state THUẦN (không qua allowedActions.changeState): khoá đó gộp điều kiện hàng (không
+  // dự án/việc con) trong khi đổi dự án chính là cách đưa việc vào dự án — giữ nguyên cổng cặp.
   const canSetState = useCan(
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.action,
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.resourceType,
@@ -265,14 +265,8 @@ export function TaskDetailActions({
   /** Gọi sau khi xoá thành công — trang thì quay lại danh sách, drawer thì đóng panel. */
   onDeleted: () => void;
 }) {
-  const canUpdate = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE.resourceType,
-  );
-  const canDelete = useCanExact(
-    TASK_CORE_ENGINE_PAIRS.DELETE.action,
-    TASK_CORE_ENGINE_PAIRS.DELETE.resourceType,
-  );
+  const canUpdate = useTaskActionAllowed(task, "edit");
+  const canDelete = useTaskDeleteAllowed(task);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
