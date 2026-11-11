@@ -92,6 +92,8 @@ export * from "./task-goal-ref";
 export * from "./task-actions";
 // S20-TASK-ASSIGNNOTI-1 (additive): phản hồi POST /tasks kèm `warnings[]` — tách khỏi ./task (quá 800 dòng).
 export * from "./task-create-response";
+// S20-TASK-WORKLOAD-1 (additive): GET /tasks/workload — màn «Đội của tôi».
+export * from "./task-workload";
 // S4-TASK-BE-4 (additive): Kanban board + move · comment/mention · checklist/items · activity feed.
 export * from "./task-collab";
 // S4-TASK-BE-5 (additive): Task File (đính kèm công việc) — link/list/download/soft-delete DTOs

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
+import { buildAssigneeScopeExists, taskOverduePredicate } from "./task-workload.predicates";
 
 /**
  * S4-TASK-BE-2 — persistence Task core (SPEC-06 §7/§9, DB-06 §7.4 cột TitleCase MỚI mig 0478).
@@ -318,6 +319,8 @@ export class TaskCoreRepository {
     actorUserId: string,
     mode: TaskScopeMode = "read",
   ): SQL {
+    // ⚓ Nhánh (A) này KHỚP NGUYÊN VĂN `buildAssigneeScopeExists` (task-workload.predicates.ts, S20-TASK-WORKLOAD-1) —
+    // unit `task-workload.predicates.spec.ts` ghim hai chiều. Sửa một bên mà không sửa bên kia ⇒ ĐỎ.
     const assigneeExists = sql`exists (
       select 1 from employee_profiles
        where employee_profiles.id = tk.main_assignee_employee_id
@@ -350,6 +353,11 @@ export class TaskCoreRepository {
     )`;
 
     return sql`(${assigneeExists} or ${projectMemberExists})`;
+  }
+
+  /** S20-TASK-WORKLOAD-1 — nhánh (A) của `buildReadScopeExists` đứng riêng (xem task-workload.predicates.ts). */
+  buildAssigneeScopeExists(scopeCond: SQL): SQL {
+    return buildAssigneeScopeExists(scopeCond);
   }
 
   // ── Reads ──────────────────────────────────────────────────────────────────────
@@ -392,11 +400,8 @@ export class TaskCoreRepository {
     }
     if (filter.dueFrom) conds.push(sql`tk.due_at >= ${filter.dueFrom}`);
     if (filter.dueTo) conds.push(sql`tk.due_at <= ${filter.dueTo}`);
-    if (filter.overdue === true) {
-      conds.push(
-        sql`tk.due_at is not null and tk.due_at < now() and (tk.task_status is null or tk.task_status not in ('Done','Cancelled'))`,
-      );
-    }
+    // S20-TASK-WORKLOAD-1 — định nghĩa «quá hạn» dùng chung với /tasks/workload (task-workload.predicates.ts).
+    if (filter.overdue === true) conds.push(taskOverduePredicate("tk"));
     if (filter.parentOnly) conds.push(sql`tk.parent_task_id is null`);
     if (filter.parentId) conds.push(sql`tk.parent_task_id = ${filter.parentId}`);
     if (filter.goalId) conds.push(sql`tk.goal_id = ${filter.goalId}`);

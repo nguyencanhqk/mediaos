@@ -1128,12 +1128,30 @@ export class TaskCoreService {
 
   /** DATA-SCOPE ĐỌC: Company/System ⇒ undefined (toàn tenant); Own/Team/Department ⇒ EXISTS predicate. */
   private async resolveReadScopeExists(tx: TenantTx, user: RequestUser): Promise<SQL | undefined> {
+    return (await this.resolveReadScope(tx, user)).exists;
+  }
+
+  /**
+   * S20-TASK-WORKLOAD-1 (D1) — bộ dựng phạm vi đọc DUY NHẤT của GET /tasks, trả đủ mảnh để /tasks/workload
+   * dùng CHUNG (không viết lại): `scope`, `scopeCond` (vị từ trên employee_profiles; undefined ở
+   * Company/System) và `exists` (undefined ở Company/System).
+   */
+  async resolveReadScope(
+    tx: TenantTx,
+    user: RequestUser,
+  ): Promise<{ scope: DataScope; scopeCond?: SQL; exists?: SQL }> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "task");
-    if (scope === "Company" || scope === "System") return undefined;
+    if (scope === "Company" || scope === "System") return { scope };
     const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
     const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
     const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-    return this.repo.buildReadScopeExists(user.companyId, scopeCond, actorEmp?.id ?? null, user.id);
+    const exists = this.repo.buildReadScopeExists(
+      user.companyId,
+      scopeCond,
+      actorEmp?.id ?? null,
+      user.id,
+    );
+    return { scope, scopeCond, exists };
   }
 
   /**

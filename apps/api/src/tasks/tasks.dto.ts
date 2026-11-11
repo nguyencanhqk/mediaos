@@ -23,6 +23,7 @@ import {
   updateTaskChecklistSchema,
   updateTaskCommentSchema,
   reorderSubtasksSchema,
+  taskWorkloadQuerySchema,
   updateTaskCoreSchema,
   updateTaskFieldsSchema,
   updateTaskStatusSchema,
@@ -63,6 +64,9 @@ export class UpdateLabelDto extends createZodDto(updateLabelSchema) {}
 
 /** GET /tasks — filter status/priority/assignee/project/due-range/overdue + pagination (read:task). */
 export class ListTaskCoreQueryDto extends createZodDto(listTaskCoreQuerySchema) {}
+
+/** GET /tasks/workload — lọc projectId/departmentId (S20-TASK-WORKLOAD-1; id rác ⇒ 400). */
+export class TaskWorkloadQueryDto extends createZodDto(taskWorkloadQuerySchema) {}
 
 /** POST /tasks — tạo task core (create:task). title bắt buộc, project optional (task cá nhân MVP). */
 export class CreateTaskCoreDto extends createZodDto(createTaskCoreSchema) {}

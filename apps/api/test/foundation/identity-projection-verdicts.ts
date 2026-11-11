@@ -520,6 +520,14 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "goals.service.ts#identityOf — id tra tên là ownerEmployeeId của CHÍNH các hàng goal vừa đọc qua `listTx(…, actor.readScopeExists)` (list/tree) hoặc `loadReadableGoalTx` (detail); đường /me gọi `listTx` KHÔNG kèm readScopeExists mà lọc `mineEmployeeId` (actor — lấy từ token — là owner HOẶC subject ⇒ tập con của phạm vi Own, endpoint vẫn có view:goal): tập người bị chặn bởi quyền ĐỌC TÀI NGUYÊN (mục tiêu) — vị từ EXISTS goal-read-scope, KHÔNG phải vị từ scope trên employee_profiles (nên dùng căn cứ `membership`, không đụng trần `scoped-predicate`). Q14 = B (owner 23/10/2026): người có view:goal thấy TÊN HIỂN THỊ không cần read:employee (như assigneeName của task) — CHỈ cột full_name, không email/SĐT/mã NV; hồ sơ xoá mềm ⇒ null, nghỉ việc ⇒ hậu tố «(Đã nghỉ)». Bằng chứng: test/integration/s20-goal-owner-checkin.int-spec.ts (DENY view@Own không thấy tên ngoài phạm vi · ALLOW chỉ view:goal vẫn thấy tên).",
     signedBy: "S20-GOAL-OWNERCHECKIN-1",
   },
+  // ── tasks (S20-TASK-WORKLOAD-1 · «Đội của tôi») ─────────────────────────────
+  {
+    point: "tasks/task-workload.repository.ts#assigneeNamesTx:users.fullName",
+    basis: "membership",
+    reason:
+      "task-workload.service.ts#getWorkload — id tra tên là `main_assignee_employee_id` của CHÍNH các hàng `aggregateTx` vừa trả, đã qua `exists` read-scope CỦA GET /tasks (TaskCoreService.resolveReadScope — D1) VÀ vị từ «người thuộc phạm vi» (buildWorkloadPersonPredicate — D2) ⇒ không mở tập tên nào ngoài `assigneeName` mà GET /tasks đã trả cho cùng người xem; tập bị chặn bởi quyền ĐỌC TÀI NGUYÊN (việc), không phải vị từ scope đặt trên chính câu tra tên (nên dùng căn cứ `membership`, như goals#ownerNamesTx). CHỈ cột full_name, không email/SĐT/mã NV; hồ sơ/tài khoản xoá mềm ⇒ null. Không dùng IdentityGrant/identityColumns: module tasks không có cơ chế đó, thêm sẽ kéo ~9 người gọi của buildReadScopeExists vào bán kính WO. Bằng chứng: test/integration/s20-task-workload.int-spec.ts (R2/R3/R9 DENY: không dòng/tên ngoài phạm vi, kể cả khi chung dự án).",
+    signedBy: "S20-TASK-WORKLOAD-1",
+  },
   {
     point: "goals/goal-updates.repository.ts#listByGoalTx:users.fullName",
     basis: "membership",
@@ -901,7 +909,11 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // FULL gate theo Q14 = B (owner 23/10/2026): người có `view:goal` thấy TÊN HIỂN THỊ không cần
   // `read:employee`. Điểm mới KHÔNG mở bề mặt đọc nào ngoài chủ các mục tiêu actor vốn đã được xem
   // (hàng goal đã qua vị từ EXISTS goal-read-scope); CHỈ cột full_name, không email/SĐT/mã NV.
-  membership: 14,
+  // 14 → 15 (S20-TASK-WORKLOAD-1, 11/11/2026): `tasks/task-workload.repository.ts#assigneeNamesTx` — tên người phụ trách
+  // trên «Đội của tôi». Nới CÓ CHỦ ĐÍCH qua FULL gate (tiền lệ `goals.repository.ts#ownerNamesTx`, cùng khuôn: truy
+  // vấn drizzle riêng tra tên theo id của các hàng đã qua read-scope). Không nâng `rawSqlIdentity` — truy vấn gộp
+  // không chứa full_name. Điểm mới KHÔNG mở bề mặt đọc ngoài `assigneeName` mà GET /tasks đã trả; CHỈ full_name.
+  membership: 15,
   // 4 → 5 (S16-SOCIAL-BE-1, 21/09/2026): `social-posts.service.ts#resolveActorName` (nay ở
   // `social-posts-notify.ts` — S16-SOCIAL-POSTSSPLIT-1, cùng điểm, không đổi số) — tên của CHÍNH
   // actor cho biến template `{actor_name}` của NOTI-028/029/030. Truy vấn ghim `users.id = actor`.

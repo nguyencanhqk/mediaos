@@ -80,6 +80,8 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "listActivity", action: "read", resourceType: "task" },
   // S5-TASK-DETAIL-1 (GAP 4): GET watchers — cùng cặp watch:task với add/remove.
   { handlerName: "listWatchers", action: "watch", resourceType: "task" },
+  // S20-TASK-WORKLOAD-1: «Đội của tôi» — đọc tổng hợp trên cùng phạm vi đọc của GET /tasks.
+  { handlerName: "getTeamWorkload", action: "read", resourceType: "task" },
 ];
 
 /** Read intentionally open cho mọi user tenant — HIỆN RỖNG (getComments đã chuyển sang gate ở trên). */
@@ -167,6 +169,9 @@ describe("TasksController — một đường đọc danh sách việc (S20-SEC-
   const APPROVED_GET_PATHS: readonly string[] = [
     "/",
     "my",
+    // S20-TASK-WORKLOAD-1 — đọc TỔNG HỢP trên CÙNG biểu thức phạm vi (`resolveReadScope`), KHÔNG phải đường
+    // danh sách thứ hai.
+    "workload",
     ":taskId",
     ":taskId/activity",
     ":taskId/checklists",
