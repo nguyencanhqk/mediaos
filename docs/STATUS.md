@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-11 06:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-11 07:43Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -127,7 +127,7 @@
 - `S19-SEC-SCOPEDENIEDCODE-1` Mã máy `AUTH-ERR-SCOPE-DENIED` cho RECRUIT · PAYROLL · HR (403 sàn scope hôm nay rơi về `AUTH-ERR-FORBIDDEN`) ⏳ cần: S16-SOCIAL-SCOPEDENIEDCODE-1
 - `S16-SOCIAL-STORAGERATCHET-1` Mọi int-spec có thể phát lời gọi storage thật (trực tiếp qua `ObjectStorageService` hoặc qua route mà server đọc/ghi object) đều nằm trong manifest và mở `openStorageTestGate` — ép bằng quy tắc dương, không chỉ dựa vào tripwire của hồ sơ `offline` ⏳ cần: S16-SOCIAL-PDFBATCHLEAK-1
 - `S20-DASH-WIDGETS-1` Dashboard hiện đủ widget đã seed (Số dư phép, Lịch nghỉ, Cảnh báo chấm công) và nhãn «Mục tiêu kỳ này» phân biệt được từng mục tiêu; widget thiếu component bị test chặn ⏳ cần: S4-DASH-WIDGETCARD-VARIANT-1
-- `S20-TASK-REVIEWQUEUE-1` Quản lý duyệt nhanh hàng đợi «Chờ duyệt» (Hoàn thành hoặc «Trả lại kèm lý do» ngay trên dòng) và đặt checklist «bắt buộc trước khi Hoàn thành» trên giao diện ⏳ cần: S20-TASK-MYTASKSLOAD-1
+- `S20-TASK-REVIEWQUEUE-1` Quản lý duyệt nhanh hàng đợi «Chờ duyệt» (Hoàn thành hoặc «Trả lại kèm lý do» ngay trên dòng) và đặt checklist «bắt buộc trước khi Hoàn thành» trên giao diện ⏳ cần: S20-TASK-MYTASKSLOAD-1, S20-TASK-WORKLOAD-1
 - `S20-TASK-REPORTCOUNTS-1` Tab Báo cáo dự án cho biết mỗi người bao nhiêu việc quá hạn, sắp hạn và phân bổ theo ưu tiên; bấm vào số mở ngay bảng đã lọc ⏳ cần: S20-TASK-WORKLOAD-1
 - `S20-TASK-PROJLISTSTATS-1` Danh sách dự án có số việc, số xong, số quá hạn, % tiến độ và lọc «Có việc quá hạn» / «Tôi phụ trách» — trưởng phòng nắm cả phòng trên một màn ⏳ cần: S20-TASK-REPORTCOUNTS-1
 - `S20-GOAL-CHECKINPEEK-1` Quản lý rà lịch sử check-in cả đội trong drawer ngay trên /goals (có tên người check-in) và bấm «Phản hồi» mở chat riêng đã điền sẵn ngữ cảnh mục tiêu ⏳ cần: S20-GOAL-RISKFLAG-1
@@ -151,6 +151,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `c4ef4952` | 2026-11-11 | chore(backlog): paths Đợt 4 (kế hoạch 07/11b) — WORKLOAD thêm registry/nav/query-keys/task-list-search của web-core; gieo S16-SOCIAL-FILESVCSPLIT-1 (lát A tách files.service của FILEDEBT-1) |
 | `d17760d3` | 2026-11-10 | chore(backlog): sổ hậu merge Đợt 3 — 5 WO đóng dấu từ #673 · #674 · #675 · #676 · gieo 6 WO nợ (WARNTOKEN · ALLOWEDACTIONS-2 · SCOPECTX · COMMENTJUMP · WEBCORESLOW · LOCALGITLEAKS) · regen STATUS + INDEX |
 | `c9f17084` | 2026-11-10 | feat(notifications): S20-NOTI-TARGETURL-1 — template target_url mở đúng bản ghi (nhắc hạn → việc, bình luận kèm comment_id, đơn gửi người duyệt kèm request) (#675) |
 | `35a2f84d` | 2026-11-10 | feat(goals): S20-GOAL-OWNERCHECKIN-1 — mục tiêu hiện người phụ trách + check-in cuối (Q14 = B); DataTable sắp: tên cột + aria-sort (#676) |
@@ -162,7 +163,6 @@
 | `5b5a3222` | 2026-11-09 | chore(backlog): paths Đợt 3 (kế hoạch 07/11b) theo tệp thật — ALLOWEDACTIONS · OWNERCHECKIN · TARGETURL · FEMODINVAL · FESTALELISTS; gieo S16-SOCIAL-FESTALELISTS-CREATEPOST-1 (chờ #580) |
 | `74011b20` | 2026-11-09 | chore(status): regen sau #672 (S20-NOTI-PRIORITYFILTER-1 phần FE) — Đợt 2 đóng |
 | `08542d18` | 2026-11-09 | fix(notifications): S20-NOTI-PRIORITYFILTER-1 (2/2 FE) — «đánh dấu đã đọc theo bộ lọc» một lời gọi, mốc theo thời điểm server (#672) |
-| `03bad02e` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 2 — 4 WO đóng dấu từ #671 · #668 · #669 · #670 · gieo S20-FE-WAVE2POLISH-1 + S20-NOTI-WSPAYLOAD-1 · regen STATUS + INDEX |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

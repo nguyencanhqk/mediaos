@@ -830,7 +830,7 @@
 | `S20-TASK-MYTASKSLOAD-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-MYTASKS-1 | «Việc của tôi» vẫn mở nhanh dù đã xong hàng trăm việc, và mỗi việc hiệ |
 | `S20-TASK-ALLOWEDACTIONS-1` | amber | ✅ xong | [📄](S20-TASK-ALLOWEDACTIONS-1.md) | — | Ở việc tôi chỉ theo dõi, trạng thái/hạn/người phụ trách hiện chỉ đọc k |
 | `S20-TASK-WORKLOAD-1` | amber | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 | Màn «Đội của tôi»: quản lý thấy số việc đang làm, quá hạn, sắp hạn và  |
-| `S20-TASK-REVIEWQUEUE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-MYTASKSLOAD-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKENTRY-1 | Quản lý duyệt nhanh hàng đợi «Chờ duyệt» (Hoàn thành hoặc «Trả lại kèm |
+| `S20-TASK-REVIEWQUEUE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-MYTASKSLOAD-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKENTRY-1 ⏳S20-TASK-WORKLOAD-1 | Quản lý duyệt nhanh hàng đợi «Chờ duyệt» (Hoàn thành hoặc «Trả lại kèm |
 | `S20-TASK-REPORTCOUNTS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-WORKLOAD-1 ✅S20-TASK-DRAWER-1 | Tab Báo cáo dự án cho biết mỗi người bao nhiêu việc quá hạn, sắp hạn v |
 | `S20-TASK-PROJLISTSTATS-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-REPORTCOUNTS-1 | Danh sách dự án có số việc, số xong, số quá hạn, % tiến độ và lọc «Có  |
 | `S20-GOAL-OWNERCHECKIN-1` | amber | ✅ xong | [📄](S20-GOAL-OWNERCHECKIN-1.md) | ✅S20-FE-COMPANYTZ-1 ✅S20-GOAL-LISTURL-1 ✅S20-GOAL-QUICKSTART-1 | Mục tiêu hiện tên người phụ trách, tên người check-in và lần check-in  |
