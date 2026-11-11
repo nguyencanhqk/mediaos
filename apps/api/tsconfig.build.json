@@ -5,5 +5,5 @@
     "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "vitest.config.ts", "drizzle.config.ts"]
+  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "**/*.harness.ts", "vitest.config.ts", "drizzle.config.ts"]
 }

@@ -55,3 +55,7 @@ Lát A của S16-SOCIAL-FILEDEBT-1. Thuần di chuyển mã, KHÔNG đổi hành
 - `files.service.ts` còn 736 dòng; tách tiếp luồng link/unlink/delete nếu WO FILE sau cần thêm chỗ.
 - `git diff -M --color-moved` chưa đính kèm vào PR; reviewer nên chạy để xác nhận thân hàm chỉ di chuyển.
 - Gate FULL (database-reviewer + security-reviewer + silent-failure-hunter) và `check.sh --lane-db` chưa chạy.
+
+## Sổ vết (vá review)
+
+- [LOW security] `files.service.harness.ts` import vitest nhưng bị `nest build` phát vào dist ⇒ thêm `"**/*.harness.ts"` vào `exclude` của `apps/api/tsconfig.build.json` (không đổi hành vi runtime, không di chuyển mã); ca `apps/api/test/build-excludes-test-code.unit-spec.ts` đỏ trên cấu hình cũ → xanh.
