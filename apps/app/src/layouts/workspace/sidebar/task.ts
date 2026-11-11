@@ -31,6 +31,18 @@ export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 20,
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
   },
+  // S20-TASK-WORKLOAD-1 — «Đội của tôi» (/tasks/team). Gate TASK.TASK.VIEW: phạm vi do SERVER quyết
+  // (NV @Own thấy 1 dòng của mình). icon "users" có trong DynamicIcon.ICON_MAP.
+  {
+    sidebarKey: "task.team",
+    moduleCode: "TASK",
+    label: "Đội của tôi",
+    path: "/tasks/team",
+    icon: "users",
+    group: "operation",
+    order: 22,
+    requiredAnyPermissions: ["TASK.TASK.VIEW"],
+  },
   // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Gate TASK.TASK.VIEW (như danh sách). icon
   // "alert-triangle" CÓ trong DynamicIcon.ICON_MAP (tránh fallback Circle).
   {

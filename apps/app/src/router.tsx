@@ -1524,6 +1524,12 @@ const tasksOverdueRoute = makeModuleRoute(
   OverdueTasksPage,
 );
 
+// S20-TASK-WORKLOAD-1 — «Đội của tôi». Route TĨNH 2-segment xếp hạng TRÊN "/tasks/$taskId".
+const TeamWorkloadPage = React.lazy(() =>
+  import("@/routes/tasks/TeamWorkloadPage").then((m) => ({ default: m.TeamWorkloadPage })),
+);
+const tasksTeamRoute = makeModuleRoute("/tasks/team", "task.team", "TASK", TeamWorkloadPage);
+
 // S4-FE-TASK-1 — Project List (TASK-SCREEN-001) + Detail (TASK-SCREEN-003, deep link $projectId).
 const ProjectListPage = React.lazy(() =>
   import("@/routes/tasks/ProjectListPage").then((m) => ({ default: m.ProjectListPage })),
@@ -3667,6 +3673,7 @@ const routeTree = rootRoute.addChildren([
   tasksRoute,
   tasksMyTasksRoute,
   tasksOverdueRoute,
+  tasksTeamRoute,
   tasksProjectsRoute,
   tasksProjectDetailRoute,
   tasksProjectReportRoute,

@@ -5,6 +5,9 @@ import {
   taskActionResponseSchema,
   taskWatcherResponseSchema,
   subtaskListItemSchema,
+  taskWorkloadResponseSchema,
+  type TaskWorkloadQuery,
+  type TaskWorkloadResponse,
   type TaskCoreResponseDto,
   type MyTaskItemDto,
   type TaskActionResponseDto,
@@ -61,6 +64,13 @@ export const taskCoreApi = {
 
   /** GET /tasks/my — task của CHÍNH user (read:task): gộp assigned+created+watched, mỗi dòng kèm `source`. */
   getMyTasks: (): Promise<MyTaskItemDto[]> => apiFetch(`/tasks/my`, z.array(myTaskItemSchema)),
+
+  /**
+   * GET /tasks/workload — «Đội của tôi» (S20-TASK-WORKLOAD-1, read:task). Parse bằng schema KHÔNG strict:
+   * BE thêm trường sau này thì FE cũ không vỡ.
+   */
+  getWorkload: (query?: TaskWorkloadQuery): Promise<TaskWorkloadResponse> =>
+    apiFetch(`/tasks/workload${buildQueryString(query ?? {})}`, taskWorkloadResponseSchema),
 
   /** GET /tasks/:id — chi tiết 1 task core (read:task, cùng data-scope với list). */
   getTask: (id: string): Promise<TaskCoreResponseDto> =>

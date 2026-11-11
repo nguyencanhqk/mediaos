@@ -42,6 +42,7 @@ leave.audit-logs
 ### TASK
 task.overview
 task.my-tasks
+task.team
 task.overdue
 task.projects
 ### NOTI
@@ -184,6 +185,7 @@ dash.overview
 ### TASK
 task.overview
 task.my-tasks
+task.team
 task.overdue
 ### NOTI
 (trống)

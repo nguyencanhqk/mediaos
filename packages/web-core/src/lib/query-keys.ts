@@ -452,6 +452,8 @@ export const taskKeys = {
   detail: (id: string) => [...rootKeys.tasks, "detail", id] as const,
   // S4-FE-TASK-2 — GET /tasks/my (TASK-API-210, MyTasksPage). Không tham số (gộp 3 nguồn server-side).
   my: () => [...rootKeys.tasks, "my"] as const,
+  // S20-TASK-WORKLOAD-1 — GET /tasks/workload («Đội của tôi»), khoá theo bộ lọc dự án/phòng ban.
+  workload: (params?: Record<string, unknown>) => [...rootKeys.tasks, "workload", params] as const,
   projects: {
     all: [...rootKeys.tasks, "projects"] as const,
     list: (params?: Record<string, unknown>) =>

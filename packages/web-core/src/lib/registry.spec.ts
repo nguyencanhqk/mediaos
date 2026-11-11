@@ -775,6 +775,23 @@ describe("S4 registry reconcile — TASK/NOTI/DASH route access (deny/allow)", (
   });
 });
 
+// S20-TASK-WORKLOAD-1 — «Đội của tôi».
+describe("S20-TASK-WORKLOAD-1 — task.team route meta", () => {
+  const taskTeam = getRouteMeta("task.team")!;
+
+  it("path tĩnh /tasks/team, gate read:task, vào sidebar, tiêu đề dịch được", () => {
+    expect(taskTeam.path).toBe("/tasks/team");
+    expect(taskTeam.screenCode).toBe("TASK-SCREEN-TEAM-WORKLOAD");
+    expect(taskTeam.titleKey).toBe("routeTitle.taskTeam");
+    expect(taskTeam.requiredAnyPermissions).toEqual(["TASK.TASK.VIEW"]);
+    expect(taskTeam.showInSidebar).toBe(true);
+  });
+
+  it("KHÔNG đòi quyền nào ngoài TASK.TASK.VIEW (DENY: không có cổng phụ ẩn)", () => {
+    expect(taskTeam.requiredAnyPermissions).toHaveLength(1);
+  });
+});
+
 // S5-FE-TASK-6 — 2 route mới: Task quá hạn (SCREEN-010) + Báo cáo tiến độ dự án (SCREEN-011).
 describe("S5-FE-TASK-6 — task.overdue + task.projects.report route meta", () => {
   const taskOverdue = getRouteMeta("task.overdue")!;
