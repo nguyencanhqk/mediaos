@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**750 WO** · có micro-plan: **389/750** · ⬜ 105 chờ · 🔵 2 đang làm · ✅ 642 xong · 🔴 1 chặn
+**751 WO** · có micro-plan: **389/751** · ⬜ 106 chờ · 🔵 2 đang làm · ✅ 642 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -623,6 +623,7 @@
 | `S16-SOCIAL-FILESETTINGKEY-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Validate theo KHOÁ lúc LƯU setting `file.allowed_mime_types` / `file.b |
 | `S16-SOCIAL-STORAGETESTGATE-1` | 🟡 | ✅ xong | [📄](S16-SOCIAL-STORAGETESTGATE-1.md) | ✅S16-SOCIAL-FILEDISPOSITION-1 | Các int-spec storage có sẵn (`files-e2e-confirm` · `hr-employee-avatar |
 | `S16-SOCIAL-FILEDEBT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl`  |
+| `S16-SOCIAL-FILESVCSPLIT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Tách apps/api/src/foundation/files/files.service.ts (~1.000 dòng) và f |
 | `S16-SOCIAL-BE-3A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3A.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 | BE track C/1 — resolve báo cáo KÈM HÀNH ĐỘNG (SOCIAL-API-029: ẩn bài · |
 | `S16-SOCIAL-GROUPMOD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A | Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong n |
 | `S16-SOCIAL-BE-3B` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3B.md) | ✅S16-SOCIAL-BE-3A | BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · th |

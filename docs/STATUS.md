@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-10 01:30Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-11 06:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -43,6 +43,7 @@
 - 🔴 `S16-SOCIAL-INLINELIST-1` Một nguồn sự thật cho «loại hiển thị trực tiếp»: 3 truy vấn ảnh (`file.repository.ts` — avatar · bìa task · avatar phòng) lọc `like 'image/%'` và `kindOf` của SOCIAL dùng `startsWith("image/")`, trong khi tầng ký dùng danh sách tường minh `INLINE_SERVE_MIME_TYPES` ⇒ hai định nghĩa «ảnh» lệch nhau
 - 🔴 `S16-SOCIAL-FILESETTINGKEY-1` Validate theo KHOÁ lúc LƯU setting `file.allowed_mime_types` / `file.blocked_extensions`: hôm nay giá trị chỉ được kiểm lúc ĐỌC (register), nên một cấu hình công ty chứa kiểu/đuôi mà server luôn từ chối vẫn lưu được và chỉ lộ ra khi người dùng tải tệp
 - 🔴 `S16-SOCIAL-FILEDEBT-1` Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl` chưa gọi `assertKeyInTenant` (GET đã gọi) · 5 controller CSV/XLSX tự ghép `Content-Disposition` thay vì `buildAttachmentDisposition` · `files.service.ts` (1.132 dòng) + `files.service.spec.ts` vượt trần 800 · dịch vụ mồ côi `task-attachments` (controller đã 410) · toàn vẹn object sau confirm · tín hiệu khi phục vụ bằng kiểu dự phòng · giới hạn tần suất dòng lỗi của lớp tự kiểm sau ký · các header khác của lượt ghi nằm ngoài chữ ký
+- 🔴 `S16-SOCIAL-FILESVCSPLIT-1` Tách apps/api/src/foundation/files/files.service.ts (~1.000 dòng) và files.service.spec.ts (~990 dòng) xuống dưới 800 dòng mỗi tệp, GIỮ NGUYÊN hành vi — lát A của S16-SOCIAL-FILEDEBT-1 để các WO tầng tệp sau sửa trên tệp nhỏ
 - 🟡 `S18-QA-SHAREDSTATE-1` Nợ quét cùng họ của S18-QA-CHECKALLFLAKE-1 — năm lớp test đọc / ghi trạng thái DÙNG CHUNG của lane: (0) `social-be3c-recycle-restore` A5 so số `notifications` của người được nhắc trong khi thông báo đến BẤT ĐỒNG BỘ qua outbox dùng chung — ĐÃ ĐỎ THẬT 10/10/2026; (1) `chat-noti-e2e` ca 15 đếm thông báo CHAT không lọc công ty; (2) `login-blocked-attribution` R11 đếm tuyệt đối theo email cố định, hàng chỉ dọn ở `afterAll`; (3) `task-project-role` phát lại mig 0501 bằng superuser autocommit ⇒ ghi `project_members` của MỌI công ty; (4) năm spec `REFRESH MATERIALIZED VIEW` toàn lane phá ca ghim «MV vẫn cũ»
 - 🔴 `S16-SOCIAL-GROUPMOD-1` Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong nhóm private mà người kiểm duyệt (manage:feed-post) không phải thành viên thì KHÔNG ai ngoài tác giả ẩn/xoá được — kể cả qua báo cáo 029
 -  `S16-SOCIAL-FERECYCLE-1` FE nợ SOCIAL: màn thùng rác bài viết (SOCIAL-API-057 liệt kê · 058 khôi phục, gác `restore:feed-post`) — hôm nay `delete_target` từ hàng đợi kiểm duyệt và «Xoá bài» ở menu ⋯ KHÔNG có đường khôi phục trên giao diện
@@ -141,7 +142,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 260 — `0593_s20notitargeturl1_target_url_record` (261 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -150,6 +151,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `d17760d3` | 2026-11-10 | chore(backlog): sổ hậu merge Đợt 3 — 5 WO đóng dấu từ #673 · #674 · #675 · #676 · gieo 6 WO nợ (WARNTOKEN · ALLOWEDACTIONS-2 · SCOPECTX · COMMENTJUMP · WEBCORESLOW · LOCALGITLEAKS) · regen STATUS + INDEX |
 | `c9f17084` | 2026-11-10 | feat(notifications): S20-NOTI-TARGETURL-1 — template target_url mở đúng bản ghi (nhắc hạn → việc, bình luận kèm comment_id, đơn gửi người duyệt kèm request) (#675) |
 | `35a2f84d` | 2026-11-10 | feat(goals): S20-GOAL-OWNERCHECKIN-1 — mục tiêu hiện người phụ trách + check-in cuối (Q14 = B); DataTable sắp: tên cột + aria-sort (#676) |
 | `994e73e7` | 2026-11-10 | feat(tasks): S20-TASK-ALLOWEDACTIONS-1 — chi tiết việc trả allowedActions theo cổng thật; FE khoá ô + lý do (#674) |
@@ -161,7 +163,6 @@
 | `74011b20` | 2026-11-09 | chore(status): regen sau #672 (S20-NOTI-PRIORITYFILTER-1 phần FE) — Đợt 2 đóng |
 | `08542d18` | 2026-11-09 | fix(notifications): S20-NOTI-PRIORITYFILTER-1 (2/2 FE) — «đánh dấu đã đọc theo bộ lọc» một lời gọi, mốc theo thời điểm server (#672) |
 | `03bad02e` | 2026-11-09 | chore(backlog): sổ hậu merge Đợt 2 — 4 WO đóng dấu từ #671 · #668 · #669 · #670 · gieo S20-FE-WAVE2POLISH-1 + S20-NOTI-WSPAYLOAD-1 · regen STATUS + INDEX |
-| `af1520f1` | 2026-11-09 | feat(notifications): S20-NOTI-LIVETOAST-1 — toast realtime thông báo + tin nhắn, «(N)» trên tiêu đề tab, tuỳ chọn toast theo trình duyệt (#670) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
