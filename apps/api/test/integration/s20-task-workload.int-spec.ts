@@ -52,6 +52,7 @@ describe.skipIf(!runDb)("S20-TASK-WORKLOAD-1 — GET /tasks/workload", () => {
   const emp: Record<string, string> = {};
   let projectP = "";
   let projectB = "";
+  let projectQ = "";
   const nowMs = Date.now();
   const at = (deltaDays: number) => new Date(nowMs + deltaDays * DAY_MS).toISOString();
 
@@ -172,6 +173,12 @@ describe.skipIf(!runDb)("S20-TASK-WORKLOAD-1 — GET /tasks/workload", () => {
     );
     projectB = pb.rows[0].id as string;
     for (const k of ["M", "E", "D"]) await addMember(k);
+    // Dự án Q: M/E/D KHÔNG là thành viên — «Chưa giao» trong Q và việc cá nhân (không dự án) phải nằm NGOÀI phạm vi Team/Department.
+    const pq = await direct.query(
+      `INSERT INTO projects (company_id, name, project_status) VALUES ($1,'wl-proj-q','Active') RETURNING id`,
+      [A.companyId],
+    );
+    projectQ = pq.rows[0].id as string;
 
     // N1: quá hạn 3 ngày + chờ duyệt (hạn +2 ngày) + 1 Done  · N2..N8: 1 việc mở · N9: chỉ Done/Cancelled/xoá mềm
     await addTask(A.companyId, emp.N1 as string, { dueAt: at(-3), project: projectP });
@@ -190,6 +197,8 @@ describe.skipIf(!runDb)("S20-TASK-WORKLOAD-1 — GET /tasks/workload", () => {
     await addTask(A.companyId, emp.Z as string, { project: projectP, status: "In Review" });
     await addTask(A.companyId, emp.E as string, { project: projectP, dueAt: at(3) });
     await addTask(A.companyId, null, { project: projectP });
+    await addTask(A.companyId, null, { project: projectQ });
+    await addTask(A.companyId, null, { project: null });
     // Công ty B
     await addTask(B.companyId, emp.OWN as string, { project: projectB, dueAt: at(-2) });
 
@@ -325,6 +334,15 @@ describe.skipIf(!runDb)("S20-TASK-WORKLOAD-1 — GET /tasks/workload", () => {
     expect(JSON.stringify(w)).not.toContain("Người Ngoài Đơn Vị");
     expect(ids(w.items)).toContain(emp.Z);
     expect(w.unassigned).not.toBeNull();
+  });
+
+  it("R10 · «Chưa giao» nằm trong phạm vi GET /tasks: Team/Department đếm 1 (chỉ dự án P); DENY Q + việc cá nhân; ALLOW Company đếm 3", async () => {
+    for (const who of ["M", "D"] as const) {
+      const w = await workload(who);
+      expect(w.unassigned?.activeCount, `unassigned ${who}`).toBe(1);
+    }
+    const wh = await workload("H");
+    expect(wh.unassigned?.activeCount).toBe(3);
   });
 
   /** P1 — mỗi số = kết quả GET /tasks cùng bộ lọc. */

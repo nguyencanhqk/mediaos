@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RefreshCw, Users } from "lucide-react";
 import { hrApi, hrKeys, taskCoreApi, taskKeys, taskProjectApi, useCan } from "@mediaos/web-core";
 import { Button, EmptyState, PageHeader, Select } from "@mediaos/ui";
-import type { TaskWorkloadCounts, TaskWorkloadQuery, TaskWorkloadRow } from "@mediaos/contracts";
+import {
+  TASK_WORKLOAD_MAX_ROWS,
+  type TaskWorkloadCounts,
+  type TaskWorkloadQuery,
+  type TaskWorkloadRow,
+} from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 
 /**
@@ -25,6 +30,7 @@ function CountLink({
   count,
   label,
   assignee,
+  personName,
   filters,
   extra,
   testId,
@@ -32,10 +38,12 @@ function CountLink({
   count: number;
   label: string;
   assignee: string;
+  personName: string;
   filters: LinkFilters;
   extra: { overdue: true } | { status: "In Review" };
   testId: string;
 }) {
+  const { t } = useTranslation("tasks");
   if (count === 0) return <span className="text-muted-foreground">{label}</span>;
   return (
     <Link
@@ -43,6 +51,7 @@ function CountLink({
       search={{ assignee, ...extra, ...filters }}
       className="font-medium text-primary underline-offset-2 hover:underline"
       data-testid={testId}
+      aria-label={t("teamWorkload.overdueLinkFor", { label, name: personName })}
     >
       {label}
     </Link>
@@ -51,15 +60,19 @@ function CountLink({
 
 function PersonRow({ row, filters }: { row: TaskWorkloadRow; filters: LinkFilters }) {
   const { t } = useTranslation("tasks");
+  const personName = row.displayName ?? t("teamWorkload.unknownName");
   return (
     <tr className="border-t" data-testid={`team-row-${row.employeeId}`}>
-      <td className="px-3 py-2 font-medium">{row.displayName ?? t("teamWorkload.unknownName")}</td>
+      <th scope="row" className="px-3 py-2 text-left font-medium">
+        {personName}
+      </th>
       <td className="px-3 py-2 tabular-nums">{row.activeCount}</td>
       <td className="px-3 py-2 tabular-nums">
         <CountLink
           count={row.overdueCount}
           label={t("teamWorkload.overdueLink", { count: row.overdueCount })}
           assignee={row.employeeId}
+          personName={personName}
           filters={filters}
           extra={{ overdue: true }}
           testId={`team-overdue-${row.employeeId}`}
@@ -71,6 +84,7 @@ function PersonRow({ row, filters }: { row: TaskWorkloadRow; filters: LinkFilter
           count={row.inReviewCount}
           label={t("teamWorkload.reviewLink", { count: row.inReviewCount })}
           assignee={row.employeeId}
+          personName={personName}
           filters={filters}
           extra={{ status: "In Review" }}
           testId={`team-review-${row.employeeId}`}
@@ -87,7 +101,9 @@ function UnassignedRow({ counts }: { counts: TaskWorkloadCounts }) {
   const { t } = useTranslation("tasks");
   return (
     <tr className="border-t bg-muted/30" data-testid="team-row-unassigned">
-      <td className="px-3 py-2 font-medium">{t("teamWorkload.unassigned")}</td>
+      <th scope="row" className="px-3 py-2 text-left font-medium">
+        {t("teamWorkload.unassigned")}
+      </th>
       <td className="px-3 py-2 tabular-nums">{counts.activeCount}</td>
       <td className="px-3 py-2 tabular-nums">
         {t("teamWorkload.overdueLink", { count: counts.overdueCount })}
@@ -190,6 +206,7 @@ export function TeamWorkloadPage() {
     queryFn: () => taskCoreApi.getWorkload(query),
     enabled: canView,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
   if (!canView) {
@@ -238,7 +255,7 @@ export function TeamWorkloadPage() {
         />
       ) : isLoading || data === undefined ? (
         <p role="status" className="text-sm text-muted-foreground">
-          …
+          {t("teamWorkload.loading")}
         </p>
       ) : isEmpty ? (
         <EmptyState
@@ -248,14 +265,15 @@ export function TeamWorkloadPage() {
       ) : (
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm" data-testid="team-workload-table">
+            <caption className="sr-only">{t("teamWorkload.tableLabel")}</caption>
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
-                <th className="px-3 py-2">{t("teamWorkload.columns.person")}</th>
-                <th className="px-3 py-2">{t("teamWorkload.columns.active")}</th>
-                <th className="px-3 py-2">{t("teamWorkload.columns.overdue")}</th>
-                <th className="px-3 py-2">{t("teamWorkload.columns.dueSoon")}</th>
-                <th className="px-3 py-2">{t("teamWorkload.columns.review")}</th>
-                <th className="px-3 py-2">{t("teamWorkload.columns.maxOverdueDays")}</th>
+                <th scope="col" className="px-3 py-2">{t("teamWorkload.columns.person")}</th>
+                <th scope="col" className="px-3 py-2">{t("teamWorkload.columns.active")}</th>
+                <th scope="col" className="px-3 py-2">{t("teamWorkload.columns.overdue")}</th>
+                <th scope="col" className="px-3 py-2">{t("teamWorkload.columns.dueSoon")}</th>
+                <th scope="col" className="px-3 py-2">{t("teamWorkload.columns.review")}</th>
+                <th scope="col" className="px-3 py-2">{t("teamWorkload.columns.maxOverdueDays")}</th>
               </tr>
             </thead>
             <tbody>
@@ -269,7 +287,7 @@ export function TeamWorkloadPage() {
       )}
       {data?.truncated && (
         <p className="text-sm text-muted-foreground" data-testid="team-truncated">
-          {t("teamWorkload.truncated")}
+          {t("teamWorkload.truncated", { max: TASK_WORKLOAD_MAX_ROWS })}
         </p>
       )}
     </div>

@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { hrApi, taskCoreApi, taskProjectApi, useAuthStore } from "@mediaos/web-core";
 import { TeamWorkloadPage } from "./TeamWorkloadPage";
-import type { TaskWorkloadResponse } from "@mediaos/contracts";
+import { TASK_WORKLOAD_MAX_ROWS, type TaskWorkloadResponse } from "@mediaos/contracts";
 
 // Link → <a href> đọc được (không dựng router thật); chỉ cần kiểm đích bấm.
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -225,5 +225,41 @@ describe("TeamWorkloadPage", () => {
     });
     renderPage();
     expect(await screen.findByText("An")).toBeInTheDocument();
+  });
+
+it("a11y: tên người là rowheader, cột có scope=col, bảng có tên, liên kết đếm nêu tên người", async () => {
+    respond({
+      items: [
+        { employeeId: ID_A, displayName: "An", ...counts, overdueCount: 3 },
+        { employeeId: ID_B, displayName: "Bình", ...counts, overdueCount: 2 },
+      ],
+      unassigned: null,
+      truncated: false,
+    });
+    renderPage();
+    await screen.findByTestId("team-workload-table");
+    expect(screen.getByRole("table", { name: "Số việc đang mở theo từng người" })).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: "An" })).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader")).toHaveLength(6);
+    expect(screen.getByRole("link", { name: "Quá hạn: 3 — An" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Quá hạn: 2 — Bình" })).toBeInTheDocument();
+  });
+
+  it("đang tải ⇒ trạng thái có chữ (không chỉ dấu …)", () => {
+    getWorkload.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    expect(screen.getByRole("status")).toHaveTextContent("Đang tải dữ liệu việc của đội");
+  });
+
+  it("truncated ⇒ câu nhắc lấy trần từ contract (không hard-code 100)", async () => {
+    respond({
+      items: [{ employeeId: ID_A, displayName: "An", ...counts }],
+      unassigned: null,
+      truncated: true,
+    });
+    renderPage();
+    expect(await screen.findByTestId("team-truncated")).toHaveTextContent(
+      `Chỉ hiện ${TASK_WORKLOAD_MAX_ROWS} người đầu`,
+    );
   });
 });

@@ -243,6 +243,9 @@ export default {
     unassigned: "Chưa giao",
     empty: { title: "Đội đang không có việc mở", description: "Mọi việc trong phạm vi của bạn đã xong hoặc chưa có việc nào." },
     error: { title: "Không tải được dữ liệu việc của đội", description: "Kiểm tra kết nối rồi thử lại." },
-    truncated: "Chỉ hiện 100 người đầu. Lọc theo dự án hoặc phòng ban để xem đủ.",
+    loading: "Đang tải dữ liệu việc của đội…",
+    tableLabel: "Số việc đang mở theo từng người",
+    overdueLinkFor: "{{label}} — {{name}}",
+    truncated: "Chỉ hiện {{max}} người đầu. Lọc theo dự án hoặc phòng ban để xem đủ.",
   },
 };

@@ -149,6 +149,19 @@ describe("TaskWorkloadService", () => {
     }
   });
 
+  it("scopeExists truyền xuống repository đúng là `exists` của resolveReadScope (cùng phạm vi GET /tasks)", async () => {
+    const { svc, repo, core } = build({ agg: [] });
+    const sentinel = sql`select 1`;
+    core.resolveReadScope.mockResolvedValueOnce({
+      scope: "Team",
+      scopeCond: sql`true`,
+      exists: sentinel,
+    });
+    await svc.getWorkload(USER, {});
+    const arg = (repo.aggregateTx.mock.calls[0] as unknown[])[1] as Record<string, unknown>;
+    expect(arg["scopeExists"]).toBe(sentinel);
+  });
+
   it("truyền bộ lọc + đồng hồ cố định xuống repository (cửa sổ tính một lần)", async () => {
     const { svc, repo } = build({ agg: [] });
     await svc.getWorkload(USER, { projectId: id(9), departmentId: id(8) });

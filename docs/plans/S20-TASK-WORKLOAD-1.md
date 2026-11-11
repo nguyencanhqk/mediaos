@@ -151,3 +151,9 @@ FE (`TeamWorkloadPage.spec.tsx`): thứ tự theo quá hạn; href «Quá hạn:
 - **Phát hành:** PR-1 (BE) = commit `a2724c29`; PR-2 (FE) = commit kế. Tách PR theo D11 là việc brain khi mở PR (cùng nhánh, hai commit).
 - **Sổ vết KPI:** (điền sau)
 - **Nợ cho gate/lane khác:** FULL gate BE chưa chạy (security-reviewer · database-reviewer · silent-failure-hunter) — phải ký riêng nâng trần `membership` 14→15 · `check.sh --all --lane-db` chưa chạy ở bước này · KPI #12 trình duyệt thật · SPEC-06 chưa có mã màn hình · PR-2 chờ API PROD ⊇ PR-1 (D11; điều kiện đo qua `/health` commit + `git merge-base --is-ancestor`, curl có phiên chỉ dành cho owner vì 2FA PROD).
+
+## 9. Sổ vết vá review (11/11/2026, chuỗi A)
+
+- **#1 [MEDIUM] a11y bảng:** ô người → `<th scope="row">`, tiêu đề cột `scope="col"`, `<caption class="sr-only">`, liên kết đếm `aria-label` «Quá hạn: 3 — {tên}». Ca mới `a11y: …` (rowheader/columnheader/table name/link name) — đỏ trên mã cũ (không có caption/rowheader), xanh sau vá.
+- **#2 [LOW] loading/truncated:** khoá i18n `teamWorkload.loading`; `truncated` nội suy `{{max}}` từ `TASK_WORKLOAD_MAX_ROWS` (contract); `placeholderData: keepPreviousData`. Hai ca mới (loading có chữ · truncated lấy trần từ contract).
+- **#3 [HIGH] santa — thiếu ca khoá `scopeExists`:** đã tự đọc mã: đúng (Team/Department chỉ có nhánh B của `scopeExists` giới hạn «Chưa giao»). Thêm int-spec R10 (dự án Q không thành viên + việc cá nhân; M/D đếm 1, Company đếm 3) và unit `scopeExists` = đúng sentinel `exists`. Đột biến `scopeExists: undefined` ⇒ đúng 1 ca đỏ ở unit và 1 ca (R10) ở int-spec; đã hoàn tác.
