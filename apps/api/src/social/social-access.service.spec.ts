@@ -23,7 +23,7 @@ const USER: SocialRequestUser = {
 };
 
 function makeService(opts: {
-  group?: { visible?: boolean; membershipStatus?: "active" | "pending" | null };
+  group?: { visible?: boolean; live?: boolean; membershipStatus?: "active" | "pending" | null };
   scopes: (DataScope | null)[];
   orgUnitId?: string | null;
   headed?: string[];
@@ -56,12 +56,17 @@ function makeService(opts: {
  */
 function makeGroups(opts?: {
   visible?: boolean;
+  live?: boolean;
   membershipStatus?: "active" | "pending" | null;
 }): SocialGroupAccessService {
   return {
     assertGroupVisibleTx: vi.fn(async () => {
       if (opts?.visible === false) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
       return { id: "g1", name: "N", visibility: "private", membership: null };
+    }),
+    lockGroupRowForShareTx: vi.fn(async () => undefined),
+    assertGroupLiveTx: vi.fn(async () => {
+      if (opts?.live === false) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
     }),
     getMembershipTx: vi.fn(async () =>
       opts?.membershipStatus == null ? null : { role: "member", status: opts.membershipStatus },
@@ -254,6 +259,50 @@ describe("assertWriteAudience — nhánh GHI (403 `ERR-002` chỉ ở đây)", (
     await expect(
       svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1"),
     ).rejects.toThrowError(SOCIAL_ERR.GROUP_NOT_FOUND);
+  });
+
+  type GroupMock = Record<
+    "assertGroupVisibleTx" | "lockGroupRowForShareTx" | "assertGroupLiveTx" | "getMembershipTx",
+    ReturnType<typeof vi.fn>
+  >;
+  const groupsOf = (svc: unknown): GroupMock => (svc as { groups: GroupMock }).groups;
+  const orderOf = (g: GroupMock): string[] =>
+    (Object.keys(g) as (keyof GroupMock)[])
+      .flatMap((k) => g[k].mock.invocationCallOrder.map((n) => [n, k] as const))
+      .sort((x, y) => x[0] - y[0])
+      .map(([, k]) => k);
+
+  it("`group`: thứ tự [visible, lockShare, live, membership]", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null],
+      group: { membershipStatus: "active" },
+    });
+    await svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1");
+    expect(orderOf(groupsOf(svc))).toEqual([
+      "assertGroupVisibleTx",
+      "lockGroupRowForShareTx",
+      "assertGroupLiveTx",
+      "getMembershipTx",
+    ]);
+  });
+
+  it("`group`: nhóm đã xoá sau khoá ⇒ 404 và KHÔNG đọc membership", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null],
+      group: { live: false, membershipStatus: "active" },
+    });
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1"),
+    ).rejects.toThrowError(SOCIAL_ERR.GROUP_NOT_FOUND);
+    expect(groupsOf(svc).getMembershipTx).not.toHaveBeenCalled();
+  });
+
+  it("`group`: cổng 404 ném ⇒ KHÔNG chạm khoá (người ngoài nhóm kín)", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null], group: { visible: false } });
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1"),
+    ).rejects.toThrowError(SOCIAL_ERR.GROUP_NOT_FOUND);
+    expect(groupsOf(svc).lockGroupRowForShareTx).not.toHaveBeenCalled();
   });
 
   it("`org_unit` thiếu khoá ⇒ 422 SOCIAL-ERR-008", async () => {

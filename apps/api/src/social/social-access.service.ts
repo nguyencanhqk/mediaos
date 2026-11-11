@@ -704,6 +704,8 @@ export class SocialAccessService {
    * │ 3. Thứ tự lỗi ở nhánh `group`: **404 TRƯỚC 403**. Nhóm không thấy được (không tồn tại · xoá mềm │
    * │    · `private` mà không phải thành viên) ⇒ 404 `ERR-012`, KHÔNG được để lộ rằng nó tồn tại;     │
    * │    thấy được mà không phải thành viên `active` (nhóm `public`) ⇒ 403 `ERR-002`.                 │
+   * │ 4. Nhánh `group`: sau cổng 404 khoá `FOR SHARE` hàng nhóm, rồi đọc lại «nhóm còn sống» và       │
+   * │    membership (quyết định ghi dựa trên lượt đọc SAU khoá, không dựa trên cổng 404).             │
    * └────────────────────────────────────────────────────────────────────────────────────────────────┘
    *
    * ⚠️ Thiếu `groupId` KHÔNG tới được đây: `createFeedPostSchema.superRefine` chặn từ Zod ⇒ **400**
@@ -723,6 +725,10 @@ export class SocialAccessService {
       }
       // 404 trước: cửa này nuốt cả "nhóm đã xoá mềm" (D13) và "private mà mình không thuộc".
       await this.groups.assertGroupVisibleTx(tx, actor, groupId);
+      // Khoá chia sẻ hàng nhóm RỒI đọc lại nhóm còn sống + membership: mọi thay đổi thành viên/xoá nhóm
+      // đã commit trước khoá đều thấy được ở hai câu đọc dưới (KHÔNG dùng membership của cổng 404).
+      await this.groups.lockGroupRowForShareTx(tx, actor.companyId, groupId);
+      await this.groups.assertGroupLiveTx(tx, actor.companyId, groupId);
       const membership = await this.groups.getMembershipTx(
         tx,
         actor.companyId,

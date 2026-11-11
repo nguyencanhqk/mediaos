@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import type { TenantTx } from "../db/db.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { SOCIAL_ERR } from "./social.errors";
@@ -32,7 +34,10 @@ const actor = (canManageGroups: boolean): SocialGroupActor => ({
 });
 
 /** Dịch vụ thật, hai câu SQL bị thay bằng spy ghi vào `calls`; hàng đọc được là `row`. */
-function serviceWith(row: SocialGroupMembership | null): {
+function serviceWith(
+  row: SocialGroupMembership | null,
+  liveError?: Error,
+): {
   svc: SocialGroupAccessService;
   calls: string[];
 } {
@@ -42,6 +47,10 @@ function serviceWith(row: SocialGroupMembership | null): {
     calls.push("lock");
     return Promise.resolve();
   });
+  vi.spyOn(svc, "assertGroupLiveTx").mockImplementation(() => {
+    calls.push("live");
+    return liveError ? Promise.reject(liveError) : Promise.resolve();
+  });
   vi.spyOn(svc, "getMembershipTx").mockImplementation(() => {
     calls.push("read");
     return Promise.resolve(row);
@@ -50,10 +59,10 @@ function serviceWith(row: SocialGroupMembership | null): {
 }
 
 describe("U1 — lockAndAssertGroupRoleTx khoá hàng nhóm TRƯỚC khi đọc vai actor", () => {
-  it("thứ tự lời gọi là [lock, read]", async () => {
+  it("thứ tự lời gọi là [lock, live, read] (nhóm còn sống kiểm SAU khoá, TRƯỚC đọc vai)", async () => {
     const { svc, calls } = serviceWith({ role: "admin", status: "active" });
     await svc.lockAndAssertGroupRoleTx(TX, actor(false), GROUP_ID, WRITE_ROLES);
-    expect(calls).toEqual(["lock", "read"]);
+    expect(calls).toEqual(["lock", "live", "read"]);
   });
 
   it("ném 403 cũng chỉ SAU khi đã khoá (không có nhánh đọc-trước-khoá)", async () => {
@@ -61,7 +70,52 @@ describe("U1 — lockAndAssertGroupRoleTx khoá hàng nhóm TRƯỚC khi đọc 
     await expect(
       svc.lockAndAssertGroupRoleTx(TX, actor(false), GROUP_ID, WRITE_ROLES),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(calls).toEqual(["lock", "read"]);
+    expect(calls).toEqual(["lock", "live", "read"]);
+  });
+
+  it("nhóm đã xoá mềm sau khoá ⇒ 404 và KHÔNG đọc vai", async () => {
+    const { svc, calls } = serviceWith(
+      { role: "admin", status: "active" },
+      new NotFoundException("gone"),
+    );
+    await expect(
+      svc.lockAndAssertGroupRoleTx(TX, actor(false), GROUP_ID, WRITE_ROLES),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(calls).toEqual(["lock", "live"]);
+  });
+});
+
+describe("U5/U6 — hàm khoá/kiểm sống mới của cổng ghi nhóm", () => {
+  const txWith = (rows: unknown[]) =>
+    ({
+      execute: vi.fn(async (q: unknown) => {
+        sqlSeen.push(new PgDialect().sqlToQuery(q as SQL).sql);
+        return { rows };
+      }),
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => rows }) }) }),
+    }) as unknown as TenantTx;
+  const sqlSeen: string[] = [];
+
+  it("U5: assertGroupLiveTx — 0 hàng ⇒ 404 · 1 hàng ⇒ ok", async () => {
+    const svc = new SocialGroupAccessService();
+    await expect(svc.assertGroupLiveTx(txWith([]), "c", GROUP_ID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(
+      svc.assertGroupLiveTx(txWith([{ id: GROUP_ID }]), "c", GROUP_ID),
+    ).resolves.toBeUndefined();
+  });
+
+  it("U6: lockGroupRowForShareTx — SQL là FOR SHARE (không KEY SHARE / UPDATE); 0 hàng ⇒ 404", async () => {
+    const svc = new SocialGroupAccessService();
+    sqlSeen.length = 0;
+    await svc.lockGroupRowForShareTx(txWith([{ one: 1 }]), "c", GROUP_ID);
+    const text = sqlSeen.join(" ");
+    expect(text).toMatch(/FOR SHARE/);
+    expect(text).not.toMatch(/KEY SHARE|FOR UPDATE/);
+    await expect(svc.lockGroupRowForShareTx(txWith([]), "c", GROUP_ID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
@@ -199,6 +253,25 @@ describe("U3 — cổng vai nhóm theo THÂN HÀM của social-groups.service.ts
       );
       expect(countOf(text, GATES.bareAssert), `${name}: assertGroupRoleTx trần`).toBe(bareAssert);
       expect(countOf(text, GATES.lockOnly), `${name}: lockGroupRowTx`).toBe(lockOnly);
+    },
+  );
+
+  it.each([
+    ["join", 1],
+    ["leave", 1],
+  ] as const)(
+    "%s: nhóm còn sống kiểm SAU khoá (findLiveGroupTx/assertGroupLiveTx ĐỨNG SAU lockGroupRowTx)",
+    (name, liveAfterLock) => {
+      const text = BODIES.get(name) ?? "";
+      const lockAt = text.search(/\blockGroupRowTx\(/);
+      const after = text.slice(lockAt);
+      expect(lockAt, `${name}: lockGroupRowTx`).toBeGreaterThanOrEqual(0);
+      const live = /\b(findLiveGroupTx|assertGroupLiveTx)\(/g;
+      expect(countOf(after, live), `${name}: kiểm sống sau khoá`).toBe(liveAfterLock);
+      if (name === "join") {
+        expect(text, "status lấy từ hàng đọc SAU khoá").toMatch(/live\.visibility/);
+        expect(text, "không đọc visibility từ biến trước khoá").not.toMatch(/group\.visibility/);
+      }
     },
   );
 
