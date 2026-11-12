@@ -4,6 +4,7 @@ import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { LeaveCalendarRepository } from "./leave-calendar.repository";
 import { toCalendarEntryView } from "./leave-calendar.mappers";
+import { buildTypeVisibility } from "./leave-calendar-type-visibility";
 
 interface Actor {
   id: string;
@@ -49,6 +50,12 @@ export class LeaveCalendarService {
     );
     const ctx = await this.dataScope.resolveContext(actor.id, actor.companyId);
     const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
+    // [0]=view:leave (sensitive), [1]=approve:leave — một lượt đọc grant, KHÔNG ném (null ⇒ không phủ).
+    const typeScopes = await this.dataScope.resolveManyOrNull(actor.id, actor.companyId, [
+      { action: "view", resourceType: "leave", isSensitive: true },
+      { action: "approve", resourceType: "leave" },
+    ]);
+    const canSeeType = buildTypeVisibility(this.dataScope, typeScopes, ctx, actor.id);
 
     const rows = await this.db.withTenant(actor.companyId, (tx) =>
       this.repo.listScopedTx(actor.companyId, scopeCond, { from: query.from, to: query.to }, tx),
@@ -56,7 +63,7 @@ export class LeaveCalendarService {
 
     return {
       scope: query.scope,
-      items: rows.map((row) => toCalendarEntryView(row, actor.id)),
+      items: rows.map((row) => toCalendarEntryView(row, actor.id, canSeeType(row))),
     };
   }
 }

@@ -4,6 +4,7 @@ import {
   createLeavePolicySchema,
   hasMaxNegativeForAllowNegative,
   hasValidCarryForwardDeadline,
+  leaveCalendarEntrySchema,
   leaveTypeCodeSchema,
 } from "./index";
 
@@ -232,5 +233,39 @@ describe("hasMaxNegativeForAllowNegative (S6-LEAVE-MAXNEG-1)", () => {
         maxNegativeDays: 5,
       }).success,
     ).toBe(true);
+  });
+});
+
+/** Lịch nghỉ — loại nghỉ có thể được server che (null + cờ); cờ tuỳ chọn để FE mới đọc được API cũ. */
+describe("leaveCalendarEntrySchema — trường loại nghỉ khi server che", () => {
+  const base = {
+    id: "11111111-1111-4111-8111-111111111111",
+    userId: "22222222-2222-4222-8222-222222222222",
+    userFullName: "A",
+    employeeCode: "E1",
+    leaveTypeId: "33333333-3333-4333-8333-333333333333",
+    leaveTypeCode: "AL",
+    leaveTypeName: "Annual",
+    startDate: "2027-04-01",
+    endDate: "2027-04-02",
+    totalDays: 2,
+    status: "Approved",
+    reason: null,
+  };
+
+  it("dòng bị che: leaveTypeId/Code/Name = null + leaveTypeMasked = true vẫn hợp lệ", () => {
+    const r = leaveCalendarEntrySchema.safeParse({
+      ...base,
+      leaveTypeId: null,
+      leaveTypeCode: null,
+      leaveTypeName: null,
+      leaveTypeMasked: true,
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.leaveTypeMasked).toBe(true);
+  });
+
+  it("thiếu cờ (API bản cũ) vẫn hợp lệ", () => {
+    expect(leaveCalendarEntrySchema.safeParse(base).success).toBe(true);
   });
 });

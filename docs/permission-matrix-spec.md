@@ -354,6 +354,8 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 | Điều chỉnh số dư phép | Có | Cấp | Cấp | — | — |
 | Xem lịch nghỉ team / công ty | Có | Cấp | Cấp/Có | Team | — |
 
+> Lịch nghỉ (`/leave/calendar`, widget `LEAVE_CALENDAR`): loại nghỉ chỉ trả cho đơn của chính người xem, hoặc khi người xem có `view:leave` / `approve:leave` phủ chủ đơn; dòng khác hiển thị “Nghỉ” + khoảng ngày (`leaveTypeMasked=true`, các trường loại = null).
+
 ---
 
 ## 6. TASK — Công việc & dự án (SPEC-06)
