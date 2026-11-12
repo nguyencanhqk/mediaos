@@ -14,6 +14,7 @@
 import * as React from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { X, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   APP_REGISTRY,
   getVisibleApps,
@@ -25,9 +26,26 @@ import {
 import { useAuthStore } from "@mediaos/web-core";
 import { Skeleton, cn } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
+import { useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
 import { AppCard } from "./AppCard";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { getCrossDomainOpener, isCurrentApp } from "./cross-domain-apps";
+import { CommandSearchResults, commandOptionDomId } from "./CommandSearchResults";
+import {
+  isChatComposerTarget,
+  useCommandSearch,
+  type CommandGroupKey,
+  type CommandSearchItem,
+} from "./use-command-search";
+
+/** Trang tìm của module cho gợi ý khi không có kết quả (đường dẫn route đã có sẵn). */
+const SUGGEST_ROUTES: Record<CommandGroupKey, string> = {
+  tasks: "/tasks",
+  projects: "/tasks/projects",
+  people: "/hr/employees",
+};
+
+const itemKey = (item: CommandSearchItem) => `${item.group}:${item.id}`;
 
 function buildSession(): SessionContext {
   const state = useAuthStore.getState();
@@ -118,13 +136,23 @@ function AppSwitcherSkeleton() {
 export function AppSwitcher() {
   const { isAppSwitcherOpen, closeAppSwitcher, dirtyFormState } = useLayoutStore();
   const [query, setQuery] = React.useState("");
-  const [pendingApp, setPendingApp] = React.useState<AppRegistryItem | null>(null);
+  const { t } = useTranslation("nav");
+  const [pendingAction, setPendingAction] = React.useState<(() => void) | null>(null);
+  const [activeId, setActiveId] = React.useState<string | null>(null);
+  const { openTask } = useTaskDrawer();
   const [showDirtyConfirm, setShowDirtyConfirm] = React.useState(false);
   const searchRef = React.useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const apps = useAppSwitcherApps();
+  const search = useCommandSearch(query, isAppSwitcherOpen);
+  const searchActive = search.term !== "";
+  const flatItems = React.useMemo(
+    () => search.groups.flatMap((g) => (g.status === "success" ? g.items : [])),
+    [search.groups],
+  );
+  React.useEffect(() => setActiveId(null), [search.term]);
 
   // Resolve current module code from pathname
   const currentModuleCode = React.useMemo(() => {
@@ -166,6 +194,8 @@ export function AppSwitcher() {
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        // CHAT-DEC-027: Ctrl/⌘+K khi focus ở ô soạn chat thuộc về chat — không chặn, không mở bảng lệnh.
+        if (isChatComposerTarget(e.target)) return;
         e.preventDefault();
         useLayoutStore.getState().toggleAppSwitcher();
       }
@@ -192,18 +222,60 @@ export function AppSwitcher() {
     void navigate({ to: app.defaultRoute as "/" });
   };
 
+  /** Rời trang hiện tại: có form dirty ⇒ hỏi xác nhận trước, không thì chạy luôn. */
+  const guardLeave = (action: () => void) => {
+    if (dirtyFormState) {
+      setPendingAction(() => action);
+      setShowDirtyConfirm(true);
+    } else {
+      action();
+    }
+  };
+
   const handleSelect = (app: AppRegistryItem) => {
     if (isCurrentApp(app, currentModuleCode)) {
       closeAppSwitcher();
       return;
     }
-    if (dirtyFormState) {
-      setPendingApp(app);
-      setShowDirtyConfirm(true);
-    } else {
-      doNavigate(app);
+    guardLeave(() => doNavigate(app));
+  };
+
+  const selectResult = (item: CommandSearchItem) => {
+    if (item.group === "tasks") {
+      closeAppSwitcher();
+      openTask(item.id);
+      return;
+    }
+    const to = item.group === "projects" ? `/tasks/projects/${item.id}` : `/hr/employees/${item.id}`;
+    guardLeave(() => {
+      closeAppSwitcher();
+      void navigate({ to: to as "/" });
+    });
+  };
+
+  const suggest = (group: CommandGroupKey) =>
+    guardLeave(() => {
+      closeAppSwitcher();
+      const to = SUGGEST_ROUTES[group];
+      if (group === "tasks") void navigate({ to: to as "/", search: { search: search.term } as never });
+      else void navigate({ to: to as "/" });
+    });
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (flatItems.length === 0) return;
+    const index = flatItems.findIndex((i) => itemKey(i) === activeId);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      const next = (index + step + flatItems.length) % flatItems.length;
+      setActiveId(itemKey(flatItems[next] as CommandSearchItem));
+    } else if (e.key === "Enter" && index >= 0) {
+      e.preventDefault();
+      selectResult(flatItems[index] as CommandSearchItem);
     }
   };
+
+  const activeItem = flatItems.find((i) => itemKey(i) === activeId);
 
   if (!isAppSwitcherOpen) return null;
 
@@ -238,8 +310,10 @@ export function AppSwitcher() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Tìm ứng dụng…"
-            aria-label="Tìm kiếm ứng dụng"
+            onKeyDown={handleInputKeyDown}
+            placeholder={t("commandSearch.placeholder")}
+            aria-label={t("commandSearch.inputAria")}
+            aria-activedescendant={activeItem ? commandOptionDomId(activeItem) : undefined}
             className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
           <button
@@ -256,18 +330,34 @@ export function AppSwitcher() {
           {apps.length === 0 ? (
             <AppSwitcherSkeleton />
           ) : (
-            <AppSwitcherGrid
-              apps={filteredApps}
-              currentModuleCode={currentModuleCode}
-              onSelect={handleSelect}
-            />
+            (!searchActive || filteredApps.length > 0) && (
+              <AppSwitcherGrid
+                apps={filteredApps}
+                currentModuleCode={currentModuleCode}
+                onSelect={handleSelect}
+              />
+            )
           )}
+          {searchActive ? (
+            <div className="mt-4">
+              <CommandSearchResults
+                term={search.term}
+                groups={search.groups}
+                isEmpty={search.isEmpty}
+                activeId={activeId}
+                onSelect={selectResult}
+                onSuggest={suggest}
+                onHover={setActiveId}
+              />
+            </div>
+          ) : null}
         </div>
 
         {/* Footer hint */}
         <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
           Nhấn <kbd className="rounded bg-muted px-1 py-0.5 font-mono">Esc</kbd> để đóng ·{" "}
-          <kbd className="rounded bg-muted px-1 py-0.5 font-mono">Ctrl+K</kbd> để mở/đóng
+          <kbd className="rounded bg-muted px-1 py-0.5 font-mono">Ctrl+K</kbd> để mở/đóng ·{" "}
+          {t("commandSearch.hint")}
         </div>
       </div>
 
@@ -280,12 +370,12 @@ export function AppSwitcher() {
         confirmLabel="Chuyển ứng dụng"
         onConfirm={() => {
           setShowDirtyConfirm(false);
-          if (pendingApp) doNavigate(pendingApp);
-          setPendingApp(null);
+          pendingAction?.();
+          setPendingAction(null);
         }}
         onCancel={() => {
           setShowDirtyConfirm(false);
-          setPendingApp(null);
+          setPendingAction(null);
         }}
       />
     </>

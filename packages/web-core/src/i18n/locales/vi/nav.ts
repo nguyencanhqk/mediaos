@@ -235,6 +235,24 @@ export default {
     comingSoon: "Sắp ra mắt",
     maintenance: "Đang bảo trì",
   },
+  // S20-FE-CMDKSEARCH-1 — bảng lệnh Ctrl+K (AppSwitcher): tìm việc / dự án / đồng nghiệp.
+  commandSearch: {
+    placeholder: "Tìm ứng dụng, việc, dự án, đồng nghiệp…",
+    inputAria: "Tìm kiếm ứng dụng, việc, dự án và đồng nghiệp",
+    resultsAria: "Kết quả tìm kiếm",
+    groups: { tasks: "Việc", projects: "Dự án", people: "Đồng nghiệp" },
+    loading: "Đang tìm…",
+    error: "Không tải được",
+    noResults: "Không tìm thấy “{{query}}”",
+    untitledTask: "(Không có tiêu đề)",
+    unnamedPerson: "(Chưa có tên)",
+    suggest: {
+      tasks: "Mở danh sách việc để tìm tiếp",
+      projects: "Mở danh sách dự án để tìm tiếp",
+      people: "Mở danh bạ nhân sự để tìm tiếp",
+    },
+    hint: "↑↓ chọn · Enter mở · gõ từ 2 ký tự để tìm việc, dự án, đồng nghiệp",
+  },
   // Forbidden / error states
   forbidden: {
     title: "Bạn không có quyền truy cập trang này.",
