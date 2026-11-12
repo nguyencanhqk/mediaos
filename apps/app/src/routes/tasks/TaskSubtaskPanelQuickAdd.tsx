@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { taskCoreApi, taskSubtaskInvalidation } from "@mediaos/web-core";
 import { subtaskErrorKey } from "./TaskSubtaskDialogs";
 import { EMPTY_SUBTASK_FORM, subtaskFormToCreatePayload } from "./subtask-form-schema";
+import { SubtaskGoalCheckbox, useSubtaskGoalOption } from "./TaskSubtaskPanelQuickAdd.goal";
 
 /**
  * Ô nhập inline cuối danh sách việc con — S20-TASK-QUICKENTRY-1 (US-TASK-NV-10), thay hộp thoại
@@ -18,12 +19,16 @@ import { EMPTY_SUBTASK_FORM, subtaskFormToCreatePayload } from "./subtask-form-s
 export function SubtaskQuickAdd({
   parentTaskId,
   projectId,
+  parentGoalId = null,
 }: {
   parentTaskId: string;
   projectId: string | null;
+  /** S20-GOAL-SUGGEST-1 — mục tiêu việc cha đang gắn (ô «Tính vào …»). */
+  parentGoalId?: string | null;
 }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
+  const goalOption = useSubtaskGoalOption(parentGoalId, projectId !== null);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -33,8 +38,9 @@ export function SubtaskQuickAdd({
       taskCoreApi.createTask(
         subtaskFormToCreatePayload({ ...EMPTY_SUBTASK_FORM, title: value }, parentTaskId),
       ),
-    onSuccess: () => {
+    onSuccess: (created) => {
       setTitle("");
+      goalOption.afterCreate(created);
       for (const queryKey of taskSubtaskInvalidation.afterMutate(parentTaskId, projectId))
         void queryClient.invalidateQueries({ queryKey });
     },
@@ -42,6 +48,7 @@ export function SubtaskQuickAdd({
   });
 
   const close = () => {
+    goalOption.reset();
     setOpen(false);
     setTitle("");
     setErrorKey(null);
@@ -99,6 +106,7 @@ export function SubtaskQuickAdd({
         onKeyDown={onKeyDown}
         className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
       />
+      <SubtaskGoalCheckbox option={goalOption} />
       {errorKey && (
         <p role="alert" className="text-xs text-destructive">
           {t(errorKey)}

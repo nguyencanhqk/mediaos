@@ -658,4 +658,21 @@ export default {
       dismiss: "Đóng",
     },
   },
+  // S20-GOAL-SUGGEST-1 (US-GOAL-NV-92/93) — gợi ý gắn việc vào mục tiêu khi tạo việc: toast + lý do «chưa gắn».
+  goalSuggest: {
+    linked: "Đã gắn vào {{goal}}",
+    undo: "Gỡ",
+    undoFailed: "Chưa gỡ được khỏi {{goal}}. Mở chi tiết việc để gỡ.",
+    offer: "Đã tạo «{{code}}» · Tính vào {{goal}}?",
+    offerAction: "Tính vào",
+    unlinkedAfterCreate: "Đã tạo việc «{{code}}» nhưng chưa gắn: {{reason}}",
+    retry: "Thử gắn lại",
+    reason: {
+      outOfScope: "bạn không có quyền ghi việc này vào mục tiêu",
+      forbidden: "bạn không có quyền gắn việc vào mục tiêu này",
+      finalized: "mục tiêu đã chốt kỳ",
+      anchor: "việc này không thuộc phạm vi của mục tiêu",
+      generic: "chưa kết nối được máy chủ, thử lại sau",
+    },
+  },
 } as const;

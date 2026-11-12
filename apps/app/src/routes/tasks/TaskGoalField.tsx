@@ -1,12 +1,12 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Target } from "lucide-react";
-import { ApiError, goalApi, goalInvalidation, goalKeys, useCan } from "@mediaos/web-core";
-import { GOAL_PAGE_LIMIT_MAX } from "@mediaos/contracts";
-import type { GoalCoreResponseDto, TaskCoreResponseDto } from "@mediaos/contracts";
+import { ApiError, goalApi, goalInvalidation, useCan } from "@mediaos/web-core";
+import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { Select } from "@mediaos/ui";
 import { GOAL_ENGINE_PAIRS } from "@/routes/goals/constants";
+import { useGoalSuggestions } from "@/routes/goals/use-goal-suggestions";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 
 /**
@@ -17,13 +17,9 @@ import { TASK_CORE_ENGINE_PAIRS } from "./constants";
  * trên hàng `tasks`). Thiếu một cổng ⇒ CHỈ ĐỌC: không mount picker, KHÔNG gọi `GET /goals` (đỡ 1 request
  * chắc chắn vô ích) — ẩn còn hơn hiện-rồi-403.
  *
- * ỨNG VIÊN LỌC Ở CLIENT, VÌ SAO: `GET /goals` chỉ nhận MỘT neo mỗi lần (level/departmentId/projectId/
- * employeeId) chứ không có OR-filter đa-neo, mà một task hợp lệ với NHIỀU neo cùng lúc (mục tiêu phòng
- * của nó, mục tiêu dự án của nó, mục tiêu cá nhân của người phụ trách). Nên tải một trang goal `Active`
- * rồi lọc theo đúng luật GOAL-ERR-008:
- *   · `employee` → CHỈ khi `employeeId` === người phụ trách chính của task (server CHẶN 422 nếu lệch);
- *   · `project`  → CHỈ khi `projectId` === dự án của task                    (server CHẶN 422);
- *   · `department` → cho hiện (server chỉ CẢNH BÁO MỀM, không chặn — §12), ưu tiên đúng phòng của task.
+ * ỨNG VIÊN (S20-GOAL-SUGGEST-1): hook `useGoalSuggestions` — tối đa 3 truy vấn GET /goals hẹp lọc Ở SERVER
+ * theo từng neo (cá nhân/dự án/phòng của việc) + kỳ chứa hạn việc, rồi lọc luật GOAL-ERR-008 +
+ * cách đo «theo việc gắn» ở `goal-suggest.ts`. Việc CHƯA gắn + đúng 1 ứng viên ⇒ chip một chạm.
  *
  * ĐỔI mục tiêu = gọi `linkTasks(goalMới)`: server tự gỡ khỏi mục tiêu cũ và recompute CẢ HAI. Vì vậy
  * invalidate phải phủ CẢ goal mới lẫn goal CŨ (goalInvalidation.linkTasks) + phía task (panel + board),
@@ -50,17 +46,20 @@ export function TaskGoalField({ task }: { task: TaskCoreResponseDto }) {
   // TƯỜNG MINH của server mới bật nhánh này: phản hồi API cũ (không cờ) giữ nguyên hành vi trước.
   const isRestricted = task.hasGoal === true && !task.goalCode;
 
-  const goalsQuery = useQuery({
-    queryKey: goalKeys.list({ status: "Active", limit: GOAL_PAGE_LIMIT_MAX }),
-    queryFn: () => goalApi.listGoals({ status: "Active", limit: GOAL_PAGE_LIMIT_MAX }),
-    enabled: canEdit && !isRestricted,
-    staleTime: 60_000,
-  });
-
-  const options = useMemo(
-    () => (goalsQuery.data ?? []).filter((goal) => matchesTaskAnchor(goal, task)),
-    [goalsQuery.data, task],
+  // S20-GOAL-SUGGEST-1 — ứng viên do hook chung lọc Ở SERVER theo neo + kỳ (không còn cắt ở 200 mục
+  // tiêu đầu) và CHỈ mục tiêu đo «theo việc gắn» (việc gắn vào manual/children/project không đổi số).
+  const suggestions = useGoalSuggestions(
+    {
+      projectId: task.projectId,
+      assigneeEmployeeId: task.mainAssigneeEmployeeId,
+      departmentId: task.departmentId,
+      dueAt: task.dueAt,
+    },
+    { enabled: !isRestricted },
   );
+  const options = suggestions.candidates;
+  // Việc CHƯA gắn mà có đúng 1 ứng viên ⇒ chip một chạm. Việc đang gắn mục tiêu khác: KHÔNG gợi ý chuyển.
+  const offered = !currentGoalId && options.length === 1 ? (options[0] ?? null) : null;
 
   const mutation = useMutation({
     mutationFn: async (nextGoalId: string) => {
@@ -137,7 +136,7 @@ export function TaskGoalField({ task }: { task: TaskCoreResponseDto }) {
         id="task-goal-picker"
         data-testid="task-goal-picker"
         value={currentGoalId ?? ""}
-        disabled={mutation.isPending || goalsQuery.isLoading}
+        disabled={mutation.isPending || suggestions.isLoading}
         onChange={(e) => {
           // Chọn lại đúng giá trị đang có ⇒ KHÔNG gọi API (gắn lại mục tiêu cũ là request vô nghĩa
           // nhưng vẫn ghi audit + recompute ở server).
@@ -160,7 +159,18 @@ export function TaskGoalField({ task }: { task: TaskCoreResponseDto }) {
           </option>
         ))}
       </Select>
-      {goalsQuery.isError && (
+      {offered && (
+        <button
+          type="button"
+          data-testid="task-goal-offer"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate(offered.id)}
+          className="rounded-full border border-border px-2.5 py-0.5 text-xs text-foreground hover:bg-muted disabled:opacity-60"
+        >
+          {t("goalSuggest.chipOffer", { goal: `${offered.goalCode} — ${offered.name}` })}
+        </button>
+      )}
+      {suggestions.isError && (
         <p className="text-xs text-destructive">{t("tasks.detail.goal.loadError")}</p>
       )}
       {errorMessage && (
@@ -170,25 +180,4 @@ export function TaskGoalField({ task }: { task: TaskCoreResponseDto }) {
       )}
     </div>
   );
-}
-
-/**
- * Luật neo GOAL-ERR-008 nhìn từ phía TASK (helper THUẦN, không React — dễ suy luận + test).
- * Trả về `true` khi gắn task này vào mục tiêu đó KHÔNG bị server chặn cứng.
- */
-function matchesTaskAnchor(goal: GoalCoreResponseDto, task: TaskCoreResponseDto): boolean {
-  if (goal.status !== "Active" || goal.finalizedAt) return false;
-  switch (goal.level) {
-    case "employee":
-      return goal.employeeId !== null && goal.employeeId === task.mainAssigneeEmployeeId;
-    case "project":
-      return goal.projectId !== null && goal.projectId === task.projectId;
-    case "department":
-      // Server KHÔNG chặn (chỉ cảnh báo mềm) — nhưng gợi ý đúng phòng của task thì danh sách mới dùng
-      // được; task chưa có phòng thì để nguyên mọi mục tiêu phòng cho người dùng tự quyết.
-      return task.departmentId == null || goal.departmentId === task.departmentId;
-    default:
-      // `company`: MVP không tạo được (GOAL-ERR-004) — không đưa vào picker.
-      return false;
-  }
 }

@@ -264,4 +264,23 @@ export default {
     overdueLinkFor: "{{label}} — {{name}}",
     truncated: "Chỉ hiện {{max}} người đầu. Lọc theo dự án hoặc phòng ban để xem đủ.",
   },
+  // S20-GOAL-SUGGEST-1 — ô «Mục tiêu» khi tạo việc / chi tiết việc / việc con.
+  goalSuggest: {
+    label: "Mục tiêu",
+    none: "—",
+    badge: "Gợi ý",
+    chipOffer: "Gắn vào {{goal}}?",
+    chipOn: "Sẽ gắn vào {{goal}}",
+    chipRemove: "Bỏ",
+    createdTitle: "Đã tạo việc «{{code}}»",
+    close: "Đóng",
+    subtask: {
+      label: "Tính vào {{goal}} của việc cha",
+      note: "Mục tiêu đếm từng việc: việc cha và việc con đều được tính.",
+      lockedPersonalOwner:
+        "Mục tiêu cá nhân chỉ nhận việc do chủ mục tiêu phụ trách, mà việc con thêm nhanh chưa có người phụ trách.",
+      lockedNoWriteScope:
+        "Việc con chưa có người phụ trách và việc cha không thuộc dự án nên chưa ghi được vào mục tiêu.",
+    },
+  },
 };
