@@ -54,6 +54,10 @@ Nguồn: US-X-07 · UI-02 §14.1, §18.1–18.3 · UI-06 §4.2. FE thuần, khô
   3. [LOW] bảng trống khi không có quyền đọc và không ứng dụng khớp — hiện «Không tìm thấy “…”». Ca: «không có quyền đọc nào + từ khoá không khớp…».
   4. [LOW] khoảng trống test — thêm: ArrowUp/wrap, aria-activedescendant khớp id option, Enter trên người, phản hồi lệch thứ tự (promise hoãn), bấm gợi ý, xác nhận form dirty cho dự án + người; ca storage thao tác thêm chọn kết quả; đổi tên ca Enter cho đúng nội dung. Ghi chú: RED trên mã cũ phần lớn do đổi role searchbox→combobox (17/18 đỏ).
 
+  5. [MEDIUM] bảng Ctrl+K không giữ focus (Tab ra body/topbar) — trapTab quay vòng trong panel, kéo focus ngoài panel về trong; bỏ qua khi hộp xác nhận dirty đang mở. Ca: «Tab từ phần tử cuối…», «focus rơi ra ngoài…». RED trên mã cũ: 5/23 đỏ.
+  6. [MEDIUM] đóng bảng không trả focus — nhớ activeElement lúc mở, trả lại ở cleanup (còn isConnected); dọn setTimeout focus. Ca: «Esc ⇒ trả focus», «bấm nút X ⇒ trả focus».
+  7. [LOW] aria-controls trỏ id không có trong DOM — cùng điều kiện với listbox (searchActive && groups>0). Ca: «aria-controls vắng…».
+
 ## Nợ
 
 - security-reviewer (gom dữ liệu nhiều module, có HR) — chạy ở bước gate.

@@ -293,7 +293,9 @@ describe("AppSwitcher — bảng lệnh tìm kiếm", () => {
         ? new Promise((r) => {
             resolveAb = r;
           })
-        : Promise.resolve([{ id: TASK_ID, title: "Kết quả abc", projectName: null, status: "todo" }]),
+        : Promise.resolve([
+            { id: TASK_ID, title: "Kết quả abc", projectName: null, status: "todo" },
+          ]),
     );
     renderOpen();
     type("ab");
@@ -369,5 +371,74 @@ describe("AppSwitcher — bảng lệnh tìm kiếm", () => {
     act(() => void document.body.dispatchEvent(ev2));
     expect(useLayoutStore.getState().isAppSwitcherOpen).toBe(true);
     host.remove();
+  });
+});
+
+describe("AppSwitcher — focus", () => {
+  function openFromButton() {
+    const opener = document.createElement("button");
+    opener.textContent = "Mở danh sách ứng dụng";
+    document.body.appendChild(opener);
+    opener.focus();
+    const view = renderOpen();
+    return { opener, view };
+  }
+
+  it("Tab từ phần tử cuối ⇒ về phần tử đầu; Shift+Tab từ phần tử đầu ⇒ phần tử cuối", async () => {
+    setCaps(ALL_CAPS);
+    const { opener } = openFromButton();
+    await wait(80);
+    const dialog = screen.getByRole("dialog");
+    const items = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    const first = items[0] as HTMLElement;
+    const last = items[items.length - 1] as HTMLElement;
+    last.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+    opener.remove();
+  });
+
+  it("focus rơi ra ngoài bảng ⇒ Tab kéo về trong bảng", async () => {
+    setCaps(ALL_CAPS);
+    const { opener } = openFromButton();
+    await wait(80);
+    opener.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    opener.remove();
+  });
+
+  it("Esc ⇒ trả focus về nút đã mở", async () => {
+    setCaps(ALL_CAPS);
+    const { opener } = openFromButton();
+    await wait(80);
+    expect(document.activeElement).not.toBe(opener);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it("bấm nút X ⇒ trả focus về nút đã mở", async () => {
+    setCaps(ALL_CAPS);
+    const { opener } = openFromButton();
+    await wait(80);
+    fireEvent.click(screen.getByRole("button", { name: "Đóng danh sách ứng dụng" }));
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it("aria-controls vắng khi chưa có nhóm kết quả", async () => {
+    setCaps({ "DASH.DASHBOARD.VIEW": true });
+    renderOpen();
+    expect(screen.getByRole("combobox")).not.toHaveAttribute("aria-controls");
+    type("zzzz");
+    await wait(450);
+    expect(screen.getByRole("combobox")).not.toHaveAttribute("aria-controls");
   });
 });

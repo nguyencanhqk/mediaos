@@ -30,7 +30,11 @@ import { useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
 import { AppCard } from "./AppCard";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { getCrossDomainOpener, isCurrentApp } from "./cross-domain-apps";
-import { COMMAND_LISTBOX_ID, CommandSearchResults, commandOptionDomId } from "./CommandSearchResults";
+import {
+  COMMAND_LISTBOX_ID,
+  CommandSearchResults,
+  commandOptionDomId,
+} from "./CommandSearchResults";
 import {
   isChatComposerTarget,
   useCommandSearch,
@@ -133,6 +137,31 @@ function AppSwitcherSkeleton() {
   );
 }
 
+const FOCUS_DELAY_MS = 50;
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Giữ Tab/Shift+Tab quay vòng trong panel; focus đang ở ngoài panel ⇒ kéo về phần tử đầu/cuối. */
+function trapTab(e: KeyboardEvent, panel: HTMLElement | null) {
+  if (!panel) return;
+  const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (!first || !last) {
+    e.preventDefault();
+    return;
+  }
+  const active = document.activeElement;
+  const inside = active instanceof Node && panel.contains(active);
+  if (e.shiftKey && (!inside || active === first)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (!inside || active === last)) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 export function AppSwitcher() {
   const { isAppSwitcherOpen, closeAppSwitcher, dirtyFormState } = useLayoutStore();
   const [query, setQuery] = React.useState("");
@@ -142,6 +171,7 @@ export function AppSwitcher() {
   const { openTask } = useTaskDrawer();
   const [showDirtyConfirm, setShowDirtyConfirm] = React.useState(false);
   const searchRef = React.useRef<HTMLInputElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -172,23 +202,29 @@ export function AppSwitcher() {
     });
   }, [apps, query]);
 
-  // Open/close effects
+  // Mở: nhớ phần tử đang giữ focus, đưa focus vào ô nhập. Đóng/unmount: dọn hẹn giờ, trả focus về
+  // phần tử đã mở (chỉ khi nó còn trong DOM).
   React.useEffect(() => {
-    if (isAppSwitcherOpen) {
-      setQuery("");
-      setTimeout(() => searchRef.current?.focus(), 50);
-    }
+    if (!isAppSwitcherOpen) return;
+    setQuery("");
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const timer = setTimeout(() => searchRef.current?.focus(), FOCUS_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      if (opener && opener !== document.body && opener.isConnected) opener.focus();
+    };
   }, [isAppSwitcherOpen]);
 
-  // Esc to close
+  // Esc to close + giữ Tab trong bảng (focus trap)
   React.useEffect(() => {
     if (!isAppSwitcherOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeAppSwitcher();
+      else if (e.key === "Tab" && !showDirtyConfirm) trapTab(e, panelRef.current);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [isAppSwitcherOpen, closeAppSwitcher]);
+  }, [isAppSwitcherOpen, closeAppSwitcher, showDirtyConfirm]);
 
   // Ctrl+K global shortcut
   React.useEffect(() => {
@@ -246,7 +282,8 @@ export function AppSwitcher() {
       openTask(item.id);
       return;
     }
-    const to = item.group === "projects" ? `/tasks/projects/${item.id}` : `/hr/employees/${item.id}`;
+    const to =
+      item.group === "projects" ? `/tasks/projects/${item.id}` : `/hr/employees/${item.id}`;
     guardLeave(() => {
       closeAppSwitcher();
       void navigate({ to: to as "/" });
@@ -257,7 +294,8 @@ export function AppSwitcher() {
     guardLeave(() => {
       closeAppSwitcher();
       const to = SUGGEST_ROUTES[group];
-      if (group === "tasks") void navigate({ to: to as "/", search: { search: search.term } as never });
+      if (group === "tasks")
+        void navigate({ to: to as "/", search: { search: search.term } as never });
       else void navigate({ to: to as "/" });
     });
 
@@ -307,6 +345,7 @@ export function AppSwitcher() {
 
       {/* Panel */}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Danh sách ứng dụng"
@@ -327,7 +366,9 @@ export function AppSwitcher() {
             type="search"
             role="combobox"
             aria-expanded={hasOptions}
-            aria-controls={searchActive ? COMMAND_LISTBOX_ID : undefined}
+            aria-controls={
+              searchActive && search.groups.length > 0 ? COMMAND_LISTBOX_ID : undefined
+            }
             aria-autocomplete="list"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
