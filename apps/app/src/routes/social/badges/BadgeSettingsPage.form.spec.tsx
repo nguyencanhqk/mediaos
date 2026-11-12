@@ -193,7 +193,9 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
     clickSave();
 
     await dialogGone();
-    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { name: "Đồng đội mới" }]]);
+    expect(updateBadge.mock.calls).toEqual([
+      [BADGE_ID, { name: "Đồng đội mới" }, expect.any(AbortSignal)],
+    ]);
     expect(snapshot()).toEqual(REFRESHED_WITH_KUDOS);
     await waitFor(() => expect(listBadgesAdmin).toHaveBeenCalledTimes(2));
     expect(screen.getByRole("status")).toHaveTextContent(DONE_UPDATED);
@@ -208,7 +210,7 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
     clickSave();
 
     await dialogGone();
-    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { icon: "🎉" }]]);
+    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { icon: "🎉" }, expect.any(AbortSignal)]]);
     expect(snapshot()).toEqual(REFRESHED_WITH_KUDOS);
   });
 
@@ -221,7 +223,7 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
     clickSave();
 
     await dialogGone();
-    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { position: 7 }]]);
+    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { position: 7 }, expect.any(AbortSignal)]]);
     expect(snapshot()).toEqual(REFRESHED);
   });
 
@@ -265,6 +267,7 @@ describe("Kết cục LỖI đóng hộp thoại — dải ở TRANG", () => {
     expect(snapshot()).toEqual(UNTOUCHED);
     expect(listBadgesAdmin).toHaveBeenCalledTimes(1);
   });
+
 });
 
 describe("Lỗi GIỮ hộp thoại báo dữ liệu cũ (`onStale`) — trang làm mới NGAY, hộp thoại còn nguyên", () => {

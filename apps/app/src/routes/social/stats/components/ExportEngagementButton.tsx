@@ -15,8 +15,8 @@
  * Lượt xuất đi qua `useGuardedMutation` (một cơ chế cho mọi lượt gửi của cụm quản trị — bài học PR-A):
  *  · khoá ĐỒNG BỘ ⇒ bấm đúp cùng nhịp vẫn là MỘT lời gọi (mỗi lời gọi 053 ghi một dòng audit);
  *  · hạn chờ 30 giây + `networkMode: "always"` ⇒ yêu cầu treo / mất mạng không khoá nút vô hạn; phản hồi về
- *    SAU hạn bị bỏ qua (không có tệp «tự tải» sau khi đã báo lỗi). `exportEngagement` của web-core không nhận
- *    `signal` nên yêu cầu trên dây KHÔNG bị huỷ — chỉ kết quả của nó bị bỏ.
+ *    SAU hạn bị bỏ qua (không có tệp «tự tải» sau khi đã báo lỗi). `signal` nối xuống `exportEngagement` ⇒
+ *    hết hạn thì yêu cầu trên dây bị HUỶ thật (S16-SOCIAL-FEADMINSIGNAL-1).
  *  · mọi lỗi ra dải `AdminErrorNotice` cạnh nút; `message` của server không lên màn.
  *
  * KHÔNG tải tệp hỏng: 2xx mà thân rỗng, hoặc là trang HTML / JSON (proxy, SPA fallback trả 200) ⇒ coi là lỗi.
@@ -84,8 +84,8 @@ function exportParamsOf(params: FeedEngagementParams, range: StatsDateRange): Fe
   };
 }
 
-async function fetchExport(request: ExportRequest): Promise<ApiBlobResult> {
-  const result = await socialStatsApi.exportEngagement(request.params);
+async function fetchExport(request: ExportRequest, signal: AbortSignal): Promise<ApiBlobResult> {
+  const result = await socialStatsApi.exportEngagement(request.params, signal);
   if (!isUsableFile(result.blob)) throw new StatsExportFileError();
   return result;
 }
@@ -141,7 +141,10 @@ export function ExportEngagementButton({
   range,
 }: ExportEngagementButtonProps): React.ReactElement {
   const { t } = useTranslation("social");
-  const { isPending, failure, runExport, dismissFailure } = useEngagementExport({ params, range });
+  const { isPending, failure, runExport, dismissFailure } = useEngagementExport({
+    params,
+    range,
+  });
   const visibleFailure = isPending ? null : failure;
 
   return (

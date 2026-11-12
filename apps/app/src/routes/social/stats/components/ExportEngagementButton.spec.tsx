@@ -294,3 +294,30 @@ describe("yêu cầu treo", () => {
     expect(triggerBlobDownload).not.toHaveBeenCalled();
   });
 });
+
+// S16-SOCIAL-FEADMINSIGNAL-1 — hết hạn chờ phải HUỶ yêu cầu 053 trên dây (mỗi lời gọi ghi một dòng audit).
+describe("signal của lượt xuất (053)", () => {
+  it("treo quá 30 giây ⇒ signal (đối số thứ 2) bị HUỶ; trước hạn thì chưa", async () => {
+    vi.useFakeTimers();
+    hangExport();
+    renderButton();
+    clickExport();
+    await advanceFakeTimers(TIMEOUT_MS - 1);
+    const signal: unknown = exportEngagement.mock.calls[0]?.[1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+
+    await advanceFakeTimers(1);
+    expect((signal as AbortSignal).aborted).toBe(true);
+  });
+
+  it("đối chứng — xuất thành công trước hạn ⇒ signal KHÔNG bị huỷ", async () => {
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    renderButton();
+    clickExport();
+    await waitFor(() => expect(triggerBlobDownload).toHaveBeenCalledTimes(1));
+    const signal: unknown = exportEngagement.mock.calls[0]?.[1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+  });
+});
