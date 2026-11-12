@@ -91,7 +91,7 @@ function renderPage() {
     </QueryClientProvider>
   );
   const view = render(ui());
-  return { ...view, rerenderPage: () => view.rerender(ui()) };
+  return { ...view, client, rerenderPage: () => view.rerender(ui()) };
 }
 
 describe("MyTasksPage — tải nhẹ + chip mục tiêu (S20-TASK-MYTASKSLOAD-1)", () => {
@@ -153,6 +153,54 @@ describe("MyTasksPage — tải nhẹ + chip mục tiêu (S20-TASK-MYTASKSLOAD-1
     await screen.findByTestId("my-tasks-closed-error");
     expect(screen.getByText("Việc mở")).toBeInTheDocument();
     expect(screen.queryByText(/không thể tải công việc/i)).toBeNull();
+  });
+
+  it("bật công tắc từ tắt sang bật: lần hai gọi {includeClosed:true}, danh sách mở còn nguyên + có chỉ báo đang tải", async () => {
+    let release: (rows: MyTaskItemDto[]) => void = () => undefined;
+    vi.mocked(taskCoreApi.getMyTasks)
+      .mockResolvedValueOnce([makeItem({ id: "a", title: "Việc mở" })])
+      .mockImplementationOnce(
+        () => new Promise<MyTaskItemDto[]>((resolve) => { release = resolve; }),
+      );
+    const { rerenderPage } = renderPage();
+    await screen.findByText("Việc mở");
+    expect(vi.mocked(taskCoreApi.getMyTasks).mock.calls[0]).toEqual([undefined]);
+    expect(screen.queryByTestId("my-tasks-closed-loading")).toBeNull();
+    searchRef.current = { showDone: 1 };
+    rerenderPage();
+    await screen.findByTestId("my-tasks-closed-loading");
+    expect(vi.mocked(taskCoreApi.getMyTasks).mock.calls[1]).toEqual([{ includeClosed: true }]);
+    expect(screen.getByText("Việc mở")).toBeInTheDocument();
+    release([makeItem({ id: "a", title: "Việc mở" }), ...doneRows(1)]);
+    await screen.findByText("Đã xong 0");
+    expect(screen.queryByTestId("my-tasks-closed-loading")).toBeNull();
+  });
+
+  it("công tắc tắt: tải lại nền lỗi ⇒ vẫn báo lỗi tại chỗ (thông điệp chung), không im lặng", async () => {
+    vi.mocked(taskCoreApi.getMyTasks)
+      .mockResolvedValueOnce([makeItem({ id: "a", title: "Việc mở" })])
+      .mockRejectedValueOnce(new Error("Network error"));
+    const { client } = renderPage();
+    await screen.findByText("Việc mở");
+    expect(screen.queryByTestId("my-tasks-refresh-error")).toBeNull();
+    await client.refetchQueries();
+    await screen.findByTestId("my-tasks-refresh-error");
+    expect(screen.getByText("Việc mở")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-tasks-closed-error")).toBeNull();
+  });
+
+  it("đổi từ showDone sang tắt rồi lỗi: không dùng lại dòng đã xong của khoá khác", async () => {
+    searchRef.current = { showDone: 1 };
+    vi.mocked(taskCoreApi.getMyTasks)
+      .mockResolvedValueOnce([makeItem({ id: "a", title: "Việc mở" }), ...doneRows(1)])
+      .mockRejectedValueOnce(new Error("Network error"));
+    const { rerenderPage } = renderPage();
+    await screen.findByText("Đã xong 0");
+    searchRef.current = {};
+    rerenderPage();
+    await screen.findByTestId("my-tasks-refresh-error");
+    expect(screen.getByText("Việc mở")).toBeInTheDocument();
+    expect(screen.queryByText("Đã xong 0")).toBeNull();
   });
 
   it("chip: mục tiêu đọc được ⇒ link /tasks?goalId=…; bị che (null) ⇒ không chip", async () => {

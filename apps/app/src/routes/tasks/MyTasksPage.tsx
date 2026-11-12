@@ -354,6 +354,7 @@ export function MyTasksPage() {
     data: fetched,
     isLoading,
     isError,
+    isPlaceholderData,
     refetch,
     dataUpdatedAt,
   } = useQuery({
@@ -364,9 +365,21 @@ export function MyTasksPage() {
     placeholderData: keepPreviousData,
   });
   // Lần tải sau LỖI (query chuyển 'error' ⇒ placeholder biến mất) vẫn giữ dòng đã có để không trắng trang.
-  const lastGoodRef = useRef<MyTaskItemDto[] | undefined>(undefined);
-  if (fetched !== undefined) lastGoodRef.current = fetched;
-  const data = fetched ?? lastGoodRef.current;
+  // Dòng tốt gần nhất nhớ kèm khoá includeClosed: khác khoá ⇒ chỉ dùng lại dòng MỞ (đúng ở cả hai khoá).
+  const lastGoodRef = useRef<{ rows: MyTaskItemDto[]; includeClosed: boolean } | undefined>(
+    undefined,
+  );
+  if (fetched !== undefined && !isPlaceholderData) {
+    lastGoodRef.current = { rows: fetched, includeClosed: showDone };
+  }
+  const lastGood = lastGoodRef.current;
+  const fallback =
+    lastGood === undefined
+      ? undefined
+      : lastGood.includeClosed === showDone
+        ? lastGood.rows
+        : lastGood.rows.filter((r) => r.status !== "Done" && r.status !== "Cancelled");
+  const data = fetched ?? fallback;
   // Đúng bằng trần ⇒ bị cắt; LỚN HƠN trần ⇒ API cũ chưa hiểu `includeClosed` (trả hết) ⇒ không báo trần.
   const closedCount = (data ?? []).filter(
     (r) => r.status === "Done" || r.status === "Cancelled",
@@ -419,7 +432,7 @@ export function MyTasksPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6" aria-busy={isPlaceholderData || undefined}>
       <PageHeader
         title={t("tasks.my.title")}
         description={t("tasks.my.description")}
@@ -433,9 +446,22 @@ export function MyTasksPage() {
           ) : undefined
         }
       />
-      {showDone && isError && data !== undefined && (
-        <p className="text-sm text-destructive" role="alert" data-testid="my-tasks-closed-error">
-          {t("myTasks.closedLoadError")}
+      {isError && data !== undefined && (
+        <p
+          className="text-sm text-destructive"
+          role="alert"
+          data-testid={showDone ? "my-tasks-closed-error" : "my-tasks-refresh-error"}
+        >
+          {t(showDone ? "myTasks.closedLoadError" : "myTasks.refreshError")}
+        </p>
+      )}
+      {showDone && isPlaceholderData && !isError && (
+        <p
+          className="text-xs text-muted-foreground"
+          role="status"
+          data-testid="my-tasks-closed-loading"
+        >
+          {t("myTasks.closedLoading")}
         </p>
       )}
       {closedCapped && (

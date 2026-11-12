@@ -69,6 +69,8 @@ export default {
     showDone: "Hiện việc đã xong",
     closedCapped: "Chỉ hiện tối đa {{count}} việc đã xong gần nhất.",
     closedLoadError: "Không tải được việc đã xong. Danh sách việc đang mở vẫn hiển thị.",
+    refreshError: "Không làm mới được danh sách. Đang hiện dữ liệu đã tải trước đó.",
+    closedLoading: "Đang tải việc đã xong…",
     quickFilterLabel: "Lọc nhanh theo tiêu đề",
     quickFilterPlaceholder: "Lọc nhanh theo tiêu đề… (phím /)",
     due: "Hạn {{value}}",
