@@ -268,6 +268,21 @@ describe("Kết cục LỖI đóng hộp thoại — dải ở TRANG", () => {
     expect(listBadgesAdmin).toHaveBeenCalledTimes(1);
   });
 
+  // S16-SOCIAL-FESTATSBUSY-1 — lỗi KHÔNG làm mới ⇒ hàng không đổi, nút «Sửa» còn: focus về đúng nút đã mở
+  // hộp thoại, không bị kéo sang dải (đối chứng: ca 404 hàng đổi ⇒ focus ở dải, ca «sau kết cục» phía trên).
+  it("sửa gặp 403 ⇒ focus trở về nút «Sửa» đã mở hộp thoại, không bị kéo sang dải", async () => {
+    updateBadge.mockImplementation(() => Promise.reject(ADMIN_ERR.forbidden()));
+    await renderPage();
+    const editButton = screen.getByRole("button", { name: EDIT_ROW });
+    editButton.focus();
+    openEditAndRename();
+
+    clickSave();
+
+    await screen.findByRole("alert");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(editButton));
+  });
 });
 
 describe("Lỗi GIỮ hộp thoại báo dữ liệu cũ (`onStale`) — trang làm mới NGAY, hộp thoại còn nguyên", () => {

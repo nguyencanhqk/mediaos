@@ -85,5 +85,7 @@ export default {
   export: {
     button: "Xuất Excel",
     exporting: "Đang xuất…",
+    /** Vùng `role="status"` sau khi tệp đã được tải — trình đọc màn hình không thấy hộp tải xuống của trình duyệt. */
+    done: "Đã xuất tệp thống kê.",
   },
 };

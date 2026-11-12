@@ -122,6 +122,21 @@ export function asUrlRange(
   return isDefault ? null : range;
 }
 
+/**
+ * Khoảng thanh bộ lọc phải vẽ = khoảng ĐÃ YÊU CẦU (URL) khi có, kèm số tuần suy từ hai đầu; không có (URL
+ * mặc định) hoặc hai đầu không tròn tuần ⇒ `fallback` (`range` của response). Thanh bộ lọc dựng từ response
+ * cũ thì bấm ‹ / › lần hai trước khi phản hồi về dịch từ khoảng CŨ — không dịch thêm bước nào.
+ */
+export function requestedRange(requested: StatsDateRange | null, fallback: StatsRange): StatsRange {
+  if (requested === null) return fallback;
+  const from = utcMidnightOf(requested.from);
+  const to = utcMidnightOf(requested.to);
+  if (from === null || to === null) return fallback;
+  const days = Math.round((to - from) / DAY_MS) + 1;
+  const weeks = days / DAYS_PER_WEEK;
+  return Number.isInteger(weeks) && weeks > 0 ? { ...requested, weeks } : fallback;
+}
+
 /** Chủ nhật của tuần bắt đầu ở `weekStart` (thứ Hai). */
 export function weekEndOf(weekStart: string): string | null {
   return shiftIsoDate(weekStart, DAYS_PER_WEEK - 1);

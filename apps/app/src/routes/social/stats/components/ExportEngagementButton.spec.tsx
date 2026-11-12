@@ -321,3 +321,32 @@ describe("signal của lượt xuất (053)", () => {
     expect((signal as AbortSignal).aborted).toBe(false);
   });
 });
+
+describe("thông báo «đã xuất xong» (S16-SOCIAL-FESTATSBUSY-1)", () => {
+  it('xuất xong ⇒ có vùng `role="status"` mang câu «Đã xuất tệp thống kê.»; trước khi xuất thì vùng không có chữ', async () => {
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    renderButton();
+    expect(screen.queryByText("Đã xuất tệp thống kê.")).toBeNull();
+
+    clickExport();
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Đã xuất tệp thống kê.");
+    expect(triggerBlobDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it("đối chứng — xuất LỖI ⇒ không có câu «đã xuất»; xuất lại ⇒ câu cũ bị gỡ trong lúc chờ", async () => {
+    exportEngagement.mockRejectedValueOnce(ADMIN_ERR.forbidden());
+    renderButton();
+    clickExport();
+    await screen.findByRole("alert");
+    expect(screen.queryByText("Đã xuất tệp thống kê.")).toBeNull();
+
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    clickExport();
+    expect(await screen.findByText("Đã xuất tệp thống kê.")).toBeInTheDocument();
+    hangExport();
+    clickExport();
+    await waitFor(() => expect(screen.queryByText("Đã xuất tệp thống kê.")).toBeNull());
+  });
+});

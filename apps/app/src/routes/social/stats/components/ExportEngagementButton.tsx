@@ -92,6 +92,8 @@ async function fetchExport(request: ExportRequest, signal: AbortSignal): Promise
 
 interface EngagementExport {
   isPending: boolean;
+  /** Lượt xuất gần nhất ĐÃ tải xong cho đúng bộ tham số đang xem ⇒ vùng `role="status"` có chữ. */
+  isDone: boolean;
   /** Lỗi của lượt xuất gần nhất, CHỈ khi nó thuộc về đúng bộ tham số đang xem. */
   failure: StatsErrorOutcome | null;
   runExport: () => void;
@@ -101,11 +103,13 @@ interface EngagementExport {
 /** Lượt xuất 053 + dải lỗi của nó. `range: null` (chưa có dữ liệu) ⇒ `runExport` không làm gì. */
 function useEngagementExport({ params, range }: ExportEngagementButtonProps): EngagementExport {
   const [failure, setFailure] = React.useState<ExportFailure | null>(null);
+  const [doneKey, setDoneKey] = React.useState<string | null>(null);
 
   const { isPending, start } = useGuardedMutation<ApiBlobResult, ExportRequest>({
     mutationFn: fetchExport,
     onSuccess: (result, request) => {
       setFailure(null);
+      setDoneKey(paramsKeyOf(request.params));
       triggerBlobDownload(result.blob, result.filename ?? request.fallbackFilename);
     },
     onError: (error, request) => {
@@ -122,14 +126,17 @@ function useEngagementExport({ params, range }: ExportEngagementButtonProps): En
     if (range === null || exportParams === null) return;
     if (start({ params: exportParams, fallbackFilename: fallbackFilenameFor(range) })) {
       setFailure(null);
+      setDoneKey(null);
     }
   };
 
   // Dải lỗi của một lượt xuất CŨ không được đứng cạnh số liệu của bộ lọc khác.
   const isCurrent =
     failure !== null && exportParams !== null && failure.paramsKey === paramsKeyOf(exportParams);
+  const isDone = exportParams !== null && doneKey === paramsKeyOf(exportParams);
   return {
     isPending,
+    isDone: isDone && !isPending,
     failure: isCurrent ? failure : null,
     runExport,
     dismissFailure: () => setFailure(null),
@@ -141,7 +148,7 @@ export function ExportEngagementButton({
   range,
 }: ExportEngagementButtonProps): React.ReactElement {
   const { t } = useTranslation("social");
-  const { isPending, failure, runExport, dismissFailure } = useEngagementExport({
+  const { isPending, isDone, failure, runExport, dismissFailure } = useEngagementExport({
     params,
     range,
   });
@@ -165,6 +172,10 @@ export function ExportEngagementButton({
         )}
         {t(isPending ? "admin.stats.export.exporting" : "admin.stats.export.button")}
       </Button>
+      {/* Hộp tải xuống của trình duyệt không tới được trình đọc màn hình: báo bằng vùng trạng thái. */}
+      <p role="status" className="sr-only">
+        {isDone ? t("admin.stats.export.done") : ""}
+      </p>
       {visibleFailure !== null && (
         <AdminErrorNotice
           reason={visibleFailure.reason}
