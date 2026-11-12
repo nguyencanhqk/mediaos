@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**756 WO** · có micro-plan: **391/756** · ⬜ 106 chờ · 🔵 2 đang làm · ✅ 647 xong · 🔴 1 chặn
+**756 WO** · có micro-plan: **391/756** · ⬜ 99 chờ · 🔵 7 đang làm · ✅ 647 xong · 🔴 3 chặn
 
 ## Sprint 0
 
@@ -598,7 +598,7 @@
 | `S16-SOCIAL-BE-2C` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2C.md) | ✅S16-SOCIAL-BE-2A | BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUser |
 | `S16-SOCIAL-RTGROUPCR-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Fan-out `feed:comment.created` / `feed:reaction.changed` của bài `audi |
 | `S16-SOCIAL-GROUPPOSTDEL-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Đua `034` xoá nhóm ↔ `002` đăng bài nhóm: cổng ghi `002` đọc nhóm KHÔN |
-| `S16-SOCIAL-FEGROUPBADGE-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Badge «N bài mới» THEO NHÓM — tiêu thụ biến thể `audience:'group'` của |
+| `S16-SOCIAL-FEGROUPBADGE-1` | amber | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Badge «N bài mới» THEO NHÓM — tiêu thụ biến thể `audience:'group'` của |
 | `S16-SOCIAL-FE-2` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 ✅S16-SOCIAL-FE-1 | FE track B / lát A: SOC-SCREEN-007 Bình chọn (composer · khối poll tro |
 | `S16-SOCIAL-FE-2B` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2B.md) | ✅S16-SOCIAL-FE-2 | FE track B / lát B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm = feed |
 | `S16-SOCIAL-GROUPERR-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-GROUPERR-1.md) | ✅S16-SOCIAL-FE-2B | Nợ BE nhóm do FE-2B đo: (1) admin nhóm ĐANG active + có manage:feed-gr |
@@ -610,7 +610,7 @@
 | `S16-SOCIAL-SCOPEDENIEDCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | `SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH |
 | `S16-SOCIAL-BE-2D` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2D.md) | ✅S16-SOCIAL-BE-2B-2 | BE mở khoá lát C — (1) khối `kudos?` (người nhận · huy hiệu · lời nhắn |
 | `S16-SOCIAL-FE-2C` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2C.md) | ✅S16-SOCIAL-FE-2 ✅S16-SOCIAL-BE-2D | FE track B / lát C: SOC-SCREEN-009 Vinh danh — composer kudos (chọn ≤1 |
-| `S16-SOCIAL-FE-2D` | amber | 🔵 đang làm | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
+| `S16-SOCIAL-FE-2D` | amber | 🔴 chặn | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
 | `S16-SOCIAL-MENTIONLINK-1` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FEBLOCKSEED-1 | FE lát B tách từ S16-SOCIAL-FE-2D: @mention thành link hồ sơ từ mảng ` |
 | `S16-SOCIAL-MENTIONDIR-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1D | Web KHÔNG sinh được @mention: `002`/`004`/`015`/`016` đòi `mentionedUs |
 | `S16-SOCIAL-VIDEOMIME-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D ✅S16-SOCIAL-FILEDISPOSITION-1 | Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt` |
@@ -618,7 +618,7 @@
 | `S16-SOCIAL-FILEDISPOSITION-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-FILEDISPOSITION-1.md) | — | Kiểu nội dung và tên tệp storage phục vụ phải gắn với thứ đã kiểm lúc  |
 | `S16-SOCIAL-ATTMETAMASK-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-ATTMETAMASK-1.md) | — | Đính kèm bị TỪ CHỐI presign (`url: null`) vẫn trả `fileName`/`sizeByte |
 | `S16-SOCIAL-ORPHANUPLOAD-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Tệp đã `Uploaded` mà KHÔNG BAO GIỜ được link (gỡ khỏi khay sau khi 055 |
-| `S16-SOCIAL-FILEOPENUX-1` | amber | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | 7 màn đang «mở xem ở tab mới» cho tệp không phải ảnh/video nay nhận ph |
+| `S16-SOCIAL-FILEOPENUX-1` | amber | 🔴 chặn | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | 7 màn đang «mở xem ở tab mới» cho tệp không phải ảnh/video nay nhận ph |
 | `S16-SOCIAL-INLINELIST-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Một nguồn sự thật cho «loại hiển thị trực tiếp»: 3 truy vấn ảnh (`file |
 | `S16-SOCIAL-FILESETTINGKEY-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Validate theo KHOÁ lúc LƯU setting `file.allowed_mime_types` / `file.b |
 | `S16-SOCIAL-STORAGETESTGATE-1` | 🟡 | ✅ xong | [📄](S16-SOCIAL-STORAGETESTGATE-1.md) | ✅S16-SOCIAL-FILEDISPOSITION-1 | Các int-spec storage có sẵn (`files-e2e-confirm` · `hr-employee-avatar |
@@ -639,8 +639,8 @@
 | `S16-SOCIAL-RESNOTEMASK-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-RESNOTEMASK-1.md) | ✅S16-SOCIAL-BE-3A ✅S16-SOCIAL-FE-3 | SOCIAL-API-028 trả resolutionNote NGUYÊN VĂN cho mọi người đọc hàng đợ |
 | `S16-SOCIAL-FEMODINVAL-1` | amber | ✅ xong | [📄](S16-SOCIAL-FEMODINVAL-1.md) | ✅S16-SOCIAL-FE-3 ✅S16-SOCIAL-MENTIONLINK-1 | Một nguồn cho tập khoá cache «mọi bề mặt đang vẽ bài»: moderation-inva |
 | `S16-SOCIAL-FEMODSCOPE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3 | Cổng FE của nút «Xử lý» / hành động kèm ở màn Kiểm duyệt chỉ hỏi CÓ cặ |
-| `S16-SOCIAL-FEADMINSIGNAL-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C | Lượt ghi của hai màn quản trị SOCIAL (049 tạo · 050 sửa/bật lại · 051  |
-| `S16-SOCIAL-FESTATSBUSY-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C | Màn Thống kê tương tác: trong lúc tải khoảng mới thanh bộ lọc dựng từ  |
+| `S16-SOCIAL-FEADMINSIGNAL-1` | amber | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C | Lượt ghi của hai màn quản trị SOCIAL (049 tạo · 050 sửa/bật lại · 051  |
+| `S16-SOCIAL-FESTATSBUSY-1` | amber | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C | Màn Thống kê tương tác: trong lúc tải khoảng mới thanh bộ lọc dựng từ  |
 | `S16-SOCIAL-FEADMINSHARED-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C ✅S16-SOCIAL-FEMODINVAL-1 | Dọn thứ dùng chung của cụm quản trị SOCIAL: DoneNotice · useOutcomeFoc |
 | `S16-SOCIAL-FEPOSTSWITCH-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Trang chi tiết bài (`PostDetailPage`) giữ state của bài CŨ khi chỉ `$p |
 | `S16-SOCIAL-FECROSSOPEN-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Mở ứng dụng ở tên miền khác (LMS · Đăng bài Facebook) từ BỐN nơi — dải |
@@ -829,7 +829,7 @@
 | `S20-FE-MOBILEDAILY-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-BULKACTIONS-1 ✅S20-TASK-OVERDUEDESK-1 ✅S20-GOAL-QUICKCHECKIN-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-TASK-DRAWER-1 ✅S20-FE-TOAST-1 ✅S20-X-QUICKCREATE-1 | Công việc và Mục tiêu dùng được trên điện thoại 375px: danh sách thành |
 | `S20-TASK-ASSIGNNOTI-1` | 🟡 | ✅ xong | [📄](S20-TASK-ASSIGNNOTI-1.md) | — | Giao việc qua form Tạo, hoặc đổi người/hạn/ưu tiên qua form Sửa, cũng  |
 | `S20-TASK-DUEREMIND-1` | 🟡 | ✅ xong | [📄](S20-TASK-DUEREMIND-1.md) | — | Nhắc sắp đến hạn/quá hạn chạy đúng cho việc SPEC-06 (quá hạn báo cả ng |
-| `S20-TASK-MYTASKSLOAD-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-MYTASKS-1 | «Việc của tôi» vẫn mở nhanh dù đã xong hàng trăm việc, và mỗi việc hiệ |
+| `S20-TASK-MYTASKSLOAD-1` | 🟡 | 🔵 đang làm | — *(chưa)* | ✅S20-TASK-MYTASKS-1 | «Việc của tôi» vẫn mở nhanh dù đã xong hàng trăm việc, và mỗi việc hiệ |
 | `S20-TASK-ALLOWEDACTIONS-1` | amber | ✅ xong | [📄](S20-TASK-ALLOWEDACTIONS-1.md) | — | Ở việc tôi chỉ theo dõi, trạng thái/hạn/người phụ trách hiện chỉ đọc k |
 | `S20-TASK-WORKLOAD-1` | amber | ✅ xong | [📄](S20-TASK-WORKLOAD-1.md) | ✅S20-TASK-DRAWER-1 | Màn «Đội của tôi»: quản lý thấy số việc đang làm, quá hạn, sắp hạn và  |
 | `S20-TASK-REVIEWQUEUE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-MYTASKSLOAD-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKENTRY-1 ✅S20-TASK-WORKLOAD-1 | Quản lý duyệt nhanh hàng đợi «Chờ duyệt» (Hoàn thành hoặc «Trả lại kèm |
@@ -840,7 +840,7 @@
 | `S20-GOAL-CHECKINPEEK-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-OWNERCHECKIN-1 ⏳S20-GOAL-RISKFLAG-1 ✅S20-GOAL-LISTURL-1 ✅S20-CHAT-DRAFT-1 | Quản lý rà lịch sử check-in cả đội trong drawer ngay trên /goals (có t |
 | `S20-CHAT-MENTIONPIN-1` | 🟡 | ✅ xong | — *(chưa)* | — | Thấy ngay phòng nào có người @nhắc tôi chưa đọc (dấu @ + chip «Nhắc tô |
 | `S20-DASH-QUICKACTION-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S20-TASK-MYTASKS-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKADD-1 | Nút nhanh và con số trên dashboard và /me dẫn đúng chỗ (hết link chết) |
-| `S20-FE-CMDKSEARCH-1` | amber | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 | Ctrl+K tìm được cả việc, dự án và đồng nghiệp theo đúng quyền của ngườ |
+| `S20-FE-CMDKSEARCH-1` | amber | 🔵 đang làm | — *(chưa)* | ✅S20-TASK-DRAWER-1 | Ctrl+K tìm được cả việc, dự án và đồng nghiệp theo đúng quyền của ngườ |
 | `S20-TASK-DMBUTTON-1` | amber | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ALLOWEDACTIONS-1 ✅S20-CHAT-DEEPLINK-1 | Nút «Nhắn tin» cạnh người phụ trách việc và thành viên dự án mở ngay c |
 | `S20-DASH-PENDINGBOX-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-REVIEWQUEUE-1 ✅S20-TASK-DRAWER-1 ✅S20-DASH-TODAY-1 | Hộp «Chờ tôi xử lý» trên dashboard quản lý: đơn nghỉ chờ duyệt và việc |
 | `S20-CHAT-DIRECTORY-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-CHAT-NEWROOM-1 | Danh bạ nhẹ cho chat: endpoint riêng của CHAT trả đúng 4 trường (userI |
@@ -854,13 +854,13 @@
 | `S20-TASK-ALLOWEDACTIONS-2` | amber | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ALLOWEDACTIONS-1 | Phần còn lại của khoá theo allowedActions: nhãn · checklist · việc con |
 | `S20-TASK-SCOPECTX-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ALLOWEDACTIONS-1 | Chi tiết việc không mở kết nối DB lồng khi tính phạm vi quyền: checkTa |
 | `S20-TASK-COMMENTJUMP-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-NOTI-TARGETURL-1 ✅S20-TASK-ALLOWEDACTIONS-1 | Bấm thông báo bình luận khi drawer việc đang ở tab khác ⇒ tự chuyển về |
-| `S20-GOAL-SUGGEST-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 ✅S20-TASK-QUICKADD-1 | Tạo việc tự điền sẵn mục tiêu cá nhân của chính mình, các trường hợp k |
+| `S20-GOAL-SUGGEST-1` | 🟡 | 🔵 đang làm | — *(chưa)* | ✅S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 ✅S20-TASK-QUICKADD-1 | Tạo việc tự điền sẵn mục tiêu cá nhân của chính mình, các trường hợp k |
 | `S20-GOAL-BULKLINK-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 | Tab «Công việc gắn» gợi ý hàng loạt «N việc trong kỳ chưa gắn mục tiêu |
 | `S20-SEC-TASKLEGACYREAD-1` | 🔴 | ✅ xong | [📄](S20-SEC-TASKLEGACYREAD-1.md) | — | Ba route đọc việc đời cũ (board · theo dự án · theo nhóm) — gỡ nếu khô |
 | `S20-SEC-TASKPATCHGATE-1` | 🔴 | ✅ xong | [📄](S20-SEC-TASKPATCHGATE-1.md) | — | Đối chiếu cổng quyền của form Sửa việc với các thao tác chuyên trách ( |
 | `S20-SEC-GOALLINKGATE-1` | 🔴 | ✅ xong | [📄](S20-SEC-GOALLINKGATE-1.md) | — | Gắn việc vào mục tiêu kiểm cả mục tiêu đang giữ việc đó (quyền ghi · c |
 | `S20-SEC-GOALNAMEDTO-1` | 🔴 | ✅ xong | [📄](S20-SEC-GOALNAMEDTO-1.md) | — | Tên/mã mục tiêu đi kèm dữ liệu việc theo đúng quyền xem mục tiêu — chố |
-| `S20-SEC-LEAVETYPEMASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Lịch nghỉ cấp đội chỉ hiện «Nghỉ» + khoảng ngày; loại nghỉ cụ thể chỉ  |
+| `S20-SEC-LEAVETYPEMASK-1` | 🔴 | 🔵 đang làm | — *(chưa)* | — | Lịch nghỉ cấp đội chỉ hiện «Nghỉ» + khoảng ngày; loại nghỉ cụ thể chỉ  |
 | `S20-TASK-PROJTOOLBARURL-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-TASK-PROJECTENTRY-1 | Workspace dự án: toolbar và rail người phụ trách lên URL (q · status · |
 | `S20-FE-TOAST-2` | 🟢 | ✅ xong | [📄](S20-FE-TOAST-2.md) | ✅S20-FE-TOAST-1 | Thông báo nổi cho apps/auth + apps/console, dọn thông báo khi đăng xuấ |
 | `S20-NOTI-PRIORITYFILTER-1` | 🟡 | ✅ xong | [📄](S20-NOTI-PRIORITYFILTER-1.md) | ✅S20-NOTI-LISTNAV-1 | Lọc thông báo theo mức ưu tiên khớp hiển thị: hàng priority NULL tính  |

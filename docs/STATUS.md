@@ -1,26 +1,76 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-12 01:39Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-11-12 07:04Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-###  S16-SOCIAL-FE-2D — FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qua SOCIAL-API-054/055 · @mention thành link hồ sơ từ mảng `mentions` (BE-1D) · hiện `droppedMentions` của bình luận
+###  S16-SOCIAL-FEGROUPBADGE-1 — Badge «N bài mới» THEO NHÓM — tiêu thụ biến thể `audience:'group'` của `feed:post.created` (room `co:{c}:feedgroup:{g}` có từ BE-2C) ở trang nhóm + «Nhóm của tôi»; viết lại docblock `GroupPostsTab.tsx` đang tả trạng thái TRƯỚC BE-2C
 - **zone**: amber · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/app/src/routes/social/**`, `apps/app/src/i18n/**`, `packages/web-core/**`, `packages/contracts/**`, `docs/plans/**`, `harness/backlog.mjs`
-- **phụ thuộc**: S16-SOCIAL-BE-1C✓, S16-SOCIAL-BE-1D✓, S16-SOCIAL-FE-2✓
+- **sửa ở đâu (paths)**: `apps/app/src/hooks/use-feed-realtime*`, `apps/app/src/routes/social/groups/**`, `apps/app/src/routes/social/feed/components/MyGroupsWidget*.tsx`, `apps/app/src/routes/social/feed/components/NewFeedPostsBadge*.tsx`, `apps/app/src/i18n/locales/vi/social-groups.ts`, `docs/plans/S16-SOCIAL-FEGROUPBADGE-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-BE-2C✓
 - **done_when (đích hội tụ)**:
-  - [ ] Đính kèm: đúng luồng upload-url → PUT storage → confirm → attachmentIds; trần 10 ảnh/1 video/20MB (ERR-007) kiểm phía client + hiện 422; url null (presign bị từ chối) KHÔNG vẽ ô ảnh vỡ
-  - [ ] Mention link chỉ với phần tử withheld:false; withheld:true giữ SPAN; response 006 không mang mentions ⇒ giữ mảng cũ khi merge cache
+  - [ ] Đếm theo `groupId` của payload ĐÃ `safeParse` (không đọc khoá thô); payload sai hợp đồng ⇒ không đếm (khuôn `use-feed-realtime.ts`); bấm badge ⇒ refetch `001?groupId=` của đúng nhóm
+  - [ ] Badge nhóm A KHÔNG tăng khi bài thuộc nhóm B (ca test hai nhóm) · badge feed chính KHÔNG tăng vì bài nhóm (giữ Q-FE (a) của BE-2C — ca hồi quy)
+  - [ ] Viết lại docblock `GroupPostsTab.tsx:11-13` theo hiện trạng sau BE-2C (union `audience` · room nhóm có cổng membership + sàn scope Company)
+  - [ ] Loading/error/empty như mọi màn FE; không hard-code quyền (badge chỉ có nghĩa khi socket đã qua cổng `view:feed` @Company — server quyết, client không suy diễn)
 
-###  S16-SOCIAL-FILEOPENUX-1 — 7 màn đang «mở xem ở tab mới» cho tệp không phải ảnh/video nay nhận phản hồi dạng TẢI XUỐNG (sau `S16-SOCIAL-FILEDISPOSITION-1`) — đổi nhãn/cách mở cho khớp; phiếu lương + CV bỏ bước mở tab trắng trước; lọc sớm loại tệp không được nhận ở form tải
+###  S16-SOCIAL-FEADMINSIGNAL-1 — Lượt ghi của hai màn quản trị SOCIAL (049 tạo · 050 sửa/bật lại · 051 ngừng dùng huy hiệu) và lượt xuất 053 chưa nhận signal: hết hạn chờ 30 giây màn được nhả nhưng yêu cầu vẫn chạy trên dây; riêng 053 server vẫn ghi một dòng audit cho lượt đã bị bỏ và «Thử lại» thêm một dòng nữa
 - **zone**: amber · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/app/src/components/chat/**`, `apps/app/src/routes/hr/**`, `apps/app/src/routes/recruit/**`, `apps/app/src/routes/payroll/**`, `apps/app/src/routes/system/files/**`, `apps/app/src/i18n/**`, `packages/web-core/src/**`, `docs/plans/**`, `harness/backlog.mjs`, `apps/app/src/lib/**`, `apps/app/src/routes/tasks/**`
-- **phụ thuộc**: S16-SOCIAL-FILEDISPOSITION-1✓
+- **sửa ở đâu (paths)**: `packages/web-core/src/lib/social-kudos-api*.ts`, `packages/web-core/src/lib/social-stats-api*.ts`, `apps/app/src/routes/social/badges/**`, `apps/app/src/routes/social/stats/components/ExportEngagementButton*.tsx`, `apps/app/src/routes/social/social-wiring.spec.ts`, `docs/plans/S16-SOCIAL-FEADMINSIGNAL-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-FE-3B✓, S16-SOCIAL-FE-3C✓
 - **done_when (đích hội tụ)**:
-  - [ ] ĐIỀU KIỆN MERGE (FE lên Pages ngay khi merge, API deploy tay): chỉ merge SAU khi API PROD chứa `S16-SOCIAL-FILEDISPOSITION-1` — đo `git merge-base --is-ancestor <sha merge WO đó> <data.build.commit của GET /api/v1/health>` exit 0. KHÔNG tương thích ngược với API cũ (ở đó tệp vẫn hiển thị trực tiếp)
-  - [ ] 7 màn: nhãn và hành vi nút khớp «tải xuống» (không còn hứa «mở xem»); phiếu lương PDF/ZIP + CV không để lại tab trắng; tên tệp tải về đúng tên gốc (đo trên trình duyệt thật, tên có dấu tiếng Việt)
-  - [ ] Form tải: báo sớm ở client khi loại/đuôi tệp thuộc nhóm server luôn từ chối (UX — server vẫn là lưới chính, không hard-code quyền); test cạnh nguồn cho từng màn đổi
-  - [ ] N9 (helper chung): tải `attachment` qua `openSignedUrlInNewTab` KHÔNG để lại tab trắng cho TASK · 3 nút phiếu lương · CV; cách phục vụ lấy từ quyết định của SERVER (`resolveServeDirectives`), FE không đoán theo đuôi tệp; tệp `inline` vẫn mở tab mới; tab vẫn mở ĐỒNG BỘ trong onClick; đo lại bằng trình duyệt thật
+  - [ ] Bốn hàm client nhận `signal` và useGuardedMutation của ba nơi gọi truyền signal theo khuôn 027 / 029 của PR-A; ca đo yêu cầu BỊ HUỶ khi hết hạn chờ (signal.aborted) đứng cạnh ca đối chứng lượt thành công không bị huỷ
+  - [ ] Hành vi `outcomeUnknown` của lượt ghi giữ nguyên (huỷ trên dây KHÔNG chứng minh server chưa ghi ⇒ vẫn đọc lại); build lại web-core; test FE + typecheck/build xanh
+
+###  S16-SOCIAL-FESTATSBUSY-1 — Màn Thống kê tương tác: trong lúc tải khoảng mới thanh bộ lọc dựng từ response CŨ (bấm ‹ / › lần hai trước khi phản hồi về không dịch thêm · ô «Số tuần» bật về giá trị cũ); phần dư focus của hai màn quản trị (nút lối thoát tự gỡ chính nó ⇒ focus về body · 403 của hộp thoại sửa huy hiệu kéo focus về dải dù hàng không đổi); nút «Xuất Excel» chưa báo «đã tải xong» cho trình đọc màn hình
+- **zone**: amber · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/social/stats/**`, `apps/app/src/routes/social/admin/**`, `apps/app/src/routes/social/badges/**`, `apps/app/src/i18n/locales/vi/social-admin-stats.ts`, `docs/plans/S16-SOCIAL-FESTATSBUSY-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-FE-3B✓, S16-SOCIAL-FE-3C✓
+- **done_when (đích hội tụ)**:
+  - [ ] Hai cú bấm ‹ / › liên tiếp trước khi phản hồi về dịch ĐÚNG hai bước (hoặc bước thứ hai bị chặn có chủ ý bằng `aria-disabled`, KHÔNG `disabled` trên nút đang giữ focus); ô «Số tuần» giữ giá trị vừa chọn suốt lượt tải — ca RED trước, mutant đỏ đúng thông điệp
+  - [ ] Sau mỗi lối thoát («Bỏ lọc đơn vị» · «Về mặc định» · «Thử lại») và sau 403 của hộp thoại sửa, focus nằm ở phần tử có nghĩa (không phải body); xuất xong có thông báo `role="status"`; đã nhìn trên trình duyệt thật ở cả bàn phím lẫn chuột
+
+### 🟡 S20-TASK-MYTASKSLOAD-1 — «Việc của tôi» vẫn mở nhanh dù đã xong hàng trăm việc, và mỗi việc hiện chip mục tiêu bấm được để lọc /tasks theo mục tiêu đó
+- **zone**: yellow · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/tasks/task-core.*`, `apps/api/src/tasks/task-my-*`, `apps/api/src/tasks/tasks.controller*.ts`, `apps/api/src/tasks/tasks.dto*.ts`, `packages/contracts/src/task.ts`, `packages/contracts/src/task-my*.ts`, `packages/contracts/src/index.ts`, `packages/web-core/src/lib/task-core-api*.ts`, `packages/web-core/src/lib/query-keys*.ts`, `apps/app/src/routes/tasks/MyTasksPage*.tsx`, `apps/app/src/routes/tasks/my-tasks-groups*.ts`, `apps/app/src/routes/tasks/TaskListPage*.tsx`, `apps/app/src/routes/tasks/task-list-search*.ts`, `apps/app/src/routes/tasks/TaskKanbanPage*.tsx`, `apps/app/src/routes/tasks/KanbanCard*.tsx`, `apps/app/src/routes/tasks/task-columns*.tsx`, `apps/app/src/routes/tasks/TaskGoalChip*.tsx`, `apps/app/src/routes/leave/LeaveTaskHandoff*.tsx`, `apps/app/src/i18n/locales/vi/tasks-workux.ts`, `apps/api/test/integration/s20-task-mytasks*.int-spec.ts`, `docs/API Design/API-06_TASK_API_Design.md`, `docs/plans/S20-TASK-MYTASKSLOAD-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S20-TASK-MYTASKS-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] `GET /tasks/my` nhận `includeClosed` (mặc định false, khuôn `taskCoreOptionalBooleanParam`): 500 Done + 15 mở ⇒ 15; `includeClosed=true` ⇒ có việc đã đóng nhưng không vượt trần hằng số, có tín hiệu bị cắt; `includeClosed=abc` ⇒ 400 (không 500); phản hồi vẫn là mảng trần, FE cũ parse được
+  - [ ] `GET /tasks` nhận `goalId` (uuid, optional) nối `filter.goalId` trong phạm vi đọc task của người gọi: không phải uuid ⇒ 400; công ty khác/không tồn tại/ngoài phạm vi `view:goal` ⇒ danh sách rỗng, không 500
+  - [ ] `goalName/goalCode` trả theo quyền xem mục tiêu của người xem (che ở server): đọc được việc nhưng không có `view:goal` với G ⇒ null, không có chip; xác minh đường /me/tasks và board thật sự điền `goalName`
+  - [ ] FE: chip mã + tên mục tiêu trên dòng /tasks/my-tasks, dòng danh sách và thẻ board (cắt gọn, có title, không vỡ ở 375px); bấm chip ⇒ `/tasks?goalId=<id>` kèm nhãn «Đang lọc theo mục tiêu …» và nút bỏ lọc; việc đã đóng chỉ tải khi bật «Hiện việc đã xong»
+  - [ ] Int-spec với `LANE_DB` (cross-tenant cho cả hai tham số) + test FE; `bash harness/check.sh` xanh
+
+###  S20-FE-CMDKSEARCH-1 — Ctrl+K tìm được cả việc, dự án và đồng nghiệp theo đúng quyền của người dùng, không chỉ tên ứng dụng
+- **zone**: amber · **skills**: security-review, frontend-design, code-review
+- **sửa ở đâu (paths)**: `apps/app/src/layouts/home/AppSwitcher*.tsx`, `apps/app/src/layouts/home/use-command-search*`, `packages/web-core/src/i18n/locales/vi/nav.ts`, `docs/plans/S20-FE-CMDKSEARCH-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S20-TASK-DRAWER-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] RED trước (test FE deny-path): không có quyền đọc hồ sơ nhân viên ⇒ không có nhóm «Đồng nghiệp» và KHÔNG có request tới HR; mỗi nhóm chỉ gọi và chỉ hiện khi `useCan` cho phép đọc; dưới 2 ký tự ⇒ không gọi API nào
+  - [ ] `AppSwitcher` thành bảng lệnh: debounce 250ms, gọi song song endpoint tìm sẵn có (task `search`, project `search`, HR employees `q`), tối đa 5 kết quả mỗi nhóm, mũi tên + Enter; việc mở drawer `?task=`, người mở hồ sơ; chỉ hiện mục server trả theo data-scope
+  - [ ] Nhóm «Đồng nghiệp» chỉ render tên/ảnh/phòng ban dù endpoint trả thêm; không lưu truy vấn/kết quả vào storage, không «tìm gần đây» bền
+  - [ ] Một endpoint lỗi/timeout ⇒ nhóm đó «Không tải được», nhóm khác vẫn hiện; không có kết quả ⇒ «Không tìm thấy “…”» kèm gợi ý trang tìm của module; Ctrl+K khi focus ở ô soạn chat không chặn CHAT-DEC-027 (cách xử lý ghi trong plan)
+  - [ ] security-reviewer PASS (gom dữ liệu nhiều module, có HR); test FE + typecheck/build xanh
+
+### 🟡 S20-GOAL-SUGGEST-1 — Tạo việc tự điền sẵn mục tiêu cá nhân của chính mình, các trường hợp khác gợi ý một chạm; việc con đề xuất «Tính vào mục tiêu của việc cha» — không còn phải mở lại việc để gắn
+- **zone**: yellow · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/goals/goal-suggest*.ts`, `apps/app/src/routes/goals/use-goal-suggestions*.ts`, `apps/app/src/routes/tasks/TaskFormDrawer*.tsx`, `apps/app/src/routes/tasks/TaskListPage*.tsx`, `apps/app/src/routes/tasks/KanbanQuickCreate*.tsx`, `apps/app/src/routes/tasks/TaskQuickAdd*.tsx`, `apps/app/src/routes/tasks/task-form-schema*.ts`, `apps/app/src/routes/tasks/TaskGoalField*.tsx`, `apps/app/src/routes/tasks/TaskSubtaskDialogs*.tsx`, `apps/app/src/routes/tasks/TaskSubtaskPanel*.tsx`, `apps/app/src/i18n/locales/vi/goals.ts`, `apps/app/src/i18n/locales/vi/tasks-workux.ts`, `docs/plans/S20-GOAL-SUGGEST-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S20-GOAL-LINKEDTASKS-1✓, S20-FE-TOAST-1✓, S20-FE-COMPANYTZ-1✓, S20-TASK-QUICKADD-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Helper thuần `goal-suggest` (ứng viên theo neo: cá nhân của người phụ trách > dự án > phòng; chỉ mục tiêu Active, chưa chốt, cách đo «theo việc gắn», kỳ chứa hạn việc theo giờ công ty) + hook truy vấn GET /goals có lọc ở server (không còn giới hạn 200 mục tiêu đầu); chỉ bật khi có cả update:goal và update:task
+  - [ ] Form Tạo việc: đúng 1 ứng viên là mục tiêu cá nhân của chính người tạo ⇒ chọn sẵn kèm nhãn «Gợi ý»; 1 ứng viên khác ⇒ chip một chạm; nhiều ứng viên ⇒ dropdown, không chọn sẵn. Lưu = POST /tasks rồi POST /goals/:id/tasks; bước 2 lỗi (403/404/GOAL-ERR-005/008) ⇒ việc vẫn còn, hiện «Đã tạo việc ‹mã› nhưng chưa gắn: ‹lý do›» + «Thử gắn lại», không báo thành công giả; thành công ⇒ toast «Đã gắn vào ‹G› · Gỡ»
+  - [ ] Tạo nhanh một dòng + KanbanQuickCreate: toast «Đã tạo ‹mã› · Tính vào ‹G›?» khi có đúng 1 ứng viên; chi tiết việc chưa gắn: chip một chạm; việc đang gắn mục tiêu khác: KHÔNG gợi ý chuyển
+  - [ ] Thêm việc con: ô «Tính vào ‹mục tiêu của việc cha›» (mặc định theo Q28), khoá kèm lý do khi mục tiêu cá nhân mà người phụ trách khác/trống, ẩn khi thiếu quyền hoặc mục tiêu đã chốt/huỷ; gỡ được bằng «Gỡ» trên toast (audit GoalTaskUnlinked ghi người bấm)
+  - [ ] Test cạnh file gồm ca từ chối (thiếu quyền ⇒ không có ô, không gọi GET /goals), ca chốt kỳ giữa chừng, ca không ứng viên; KPI #26: đo ≤ 3 thao tác, 0 chuyển trang trong trình duyệt thật với API giả lập (Cách kiểm KPI §4), ghi sổ vết plan + mô tả PR; check xanh
+
+### 🔴 S20-SEC-LEAVETYPEMASK-1 — Lịch nghỉ cấp đội chỉ hiện «Nghỉ» + khoảng ngày; loại nghỉ cụ thể chỉ người duyệt thấy — che ở server (Q23 = B)
+- **zone**: red · **skills**: security-review, code-review
+- **sửa ở đâu (paths)**: `apps/api/src/dashboard/dashboard-widget-*.ts`, `apps/api/src/dashboard/dashboard.module.ts`, `apps/api/src/leave/**`, `packages/contracts/src/dashboard*.ts`, `packages/contracts/src/leave*.ts`, `apps/app/src/components/dashboard/**`, `apps/app/src/routes/leave/LeaveCalendar*.tsx`, `apps/api/test/integration/dashboard-*.int-spec.ts`, `apps/api/test/integration/*leave*.int-spec.ts`, `docs/permission-matrix-spec.md`, `docs/API Design/API-08_DASH_API_Design.md`, `docs/API Design/API-05_LEAVE_API_Design.md`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] ĐO TRƯỚC: mọi đường trả loại nghỉ cho người KHÔNG phải người duyệt/HR (widget lịch nghỉ đội · lịch nghỉ · roster nếu có)
+  - [ ] Server trả «Nghỉ» + khoảng ngày cho người xem cấp đội; loại nghỉ chỉ cho người duyệt đơn đó/HR theo phạm vi; RED trước int-spec với LANE_DB + ca ALLOW đứng cạnh; payload WS (nếu có) qua cùng masking
+  - [ ] FE hiển thị đúng thứ server trả, không tự suy loại nghỉ
+  - [ ] FULL gate PASS; check xanh
 
 ## Hàng đợi
 
@@ -28,7 +78,6 @@
 - 🟡 `S7-GOAL-PROJTAB-2` Tab «Mục tiêu» trong workspace dự án — lát B: endpoint `GET /goals/project-coverage` phủ mục tiêu của việc (gồm việc CHƯA gắn) + gắn việc tại chỗ qua GoalTaskPickerDialog
 - 🔴 `S16-SOCIAL-IDXDEDUP-1` `file_links_company_id_idx` (mig 0433) thành TIỀN TỐ DƯ của `file_links_company_file_idx` (mig 0587) — cân drop, bán kính là MỌI module dùng `file_links`
 - 🔴 `S16-SOCIAL-RTGROUPCR-1` Fan-out `feed:comment.created` / `feed:reaction.changed` của bài `audience='group'` vào room nhóm `co:{c}:feedgroup:{groupId}` — hôm nay hai sự kiện đó CHỈ phát cho bài company (fail-closed có chủ đích của BE-2C, Q-CR)
--  `S16-SOCIAL-FEGROUPBADGE-1` Badge «N bài mới» THEO NHÓM — tiêu thụ biến thể `audience:'group'` của `feed:post.created` (room `co:{c}:feedgroup:{g}` có từ BE-2C) ở trang nhóm + «Nhóm của tôi»; viết lại docblock `GroupPostsTab.tsx` đang tả trạng thái TRƯỚC BE-2C
 -  `S17-CHAT-UUIDCANON-1` Chuẩn hoá uuid (chữ thường) ở biên REST bằng một pipe dùng chung — payload sự kiện, audit và khoá phụ của CHAT/CALL dùng dạng chuẩn tắc thay vì id nguyên văn của route
 - 🟡 `S17-CHAT-ADAPTERPUBLISH-1` Bọc adapter realtime (Valkey) để lỗi publish của room-op/emit được bắt và ghi log — không thành `unhandledRejection`
 - 🔴 `S12-AUTH-SEVERLOCAL-1` Thu hồi phiên (`severUserSessions`): ngắt socket CỤC BỘ trước lệnh toàn cụm — cùng khuôn `leaveLocally` của S17-CHAT-RTROOMOPS-1 — ở cả namespace chính lẫn `/ws-call`
@@ -47,8 +96,6 @@
 - 🟡 `S4-DASH-HROVERVIEW-COUNT-1` Widget DASH `HR_OVERVIEW`: đếm `headcount` · `byStatus` · `byOrgUnit` phía DB trong MỘT vị từ scope (method đếm của `HrReadService`) thay vì đếm trên trang danh sách đầu — tổng các dòng trạng thái luôn khớp `headcount` ở mọi cỡ công ty
 - 🔴 `S4-DASH-SIBLINGFLOOR-1` Sàn scope cho hai widget DASH anh em cùng cặp đọc nhân sự (`EMPLOYEE_SUMMARY` · `NEW_EMPLOYEES`) theo ma trận quyền §7 — cùng khuôn sàn đã làm cho `HR_OVERVIEW`
 - 🔴 `S16-SOCIAL-FEMODSCOPE-1` Cổng FE của nút «Xử lý» / hành động kèm ở màn Kiểm duyệt chỉ hỏi CÓ cặp manage:feed-report / manage:feed-post, trong khi server đòi sàn Company cho 029 ⇒ người có cặp ở scope hẹp thấy nút rồi nhận 403 (fail-closed, đã có chữ); đóng hẳn cần đưa scope của /auth/me vào auth store + hook kiểm sàn
--  `S16-SOCIAL-FEADMINSIGNAL-1` Lượt ghi của hai màn quản trị SOCIAL (049 tạo · 050 sửa/bật lại · 051 ngừng dùng huy hiệu) và lượt xuất 053 chưa nhận signal: hết hạn chờ 30 giây màn được nhả nhưng yêu cầu vẫn chạy trên dây; riêng 053 server vẫn ghi một dòng audit cho lượt đã bị bỏ và «Thử lại» thêm một dòng nữa
--  `S16-SOCIAL-FESTATSBUSY-1` Màn Thống kê tương tác: trong lúc tải khoảng mới thanh bộ lọc dựng từ response CŨ (bấm ‹ / › lần hai trước khi phản hồi về không dịch thêm · ô «Số tuần» bật về giá trị cũ); phần dư focus của hai màn quản trị (nút lối thoát tự gỡ chính nó ⇒ focus về body · 403 của hộp thoại sửa huy hiệu kéo focus về dải dù hàng không đổi); nút «Xuất Excel» chưa báo «đã tải xong» cho trình đọc màn hình
 -  `S16-SOCIAL-FEADMINSHARED-1` Dọn thứ dùng chung của cụm quản trị SOCIAL: DoneNotice · useOutcomeFocus · list-states · DialogActions · claimsListRefreshed · invalidatePostSurfaces còn nằm dưới moderation/** dù màn huy hiệu + thống kê cùng dùng; khung chờ SKELETON_ROWS.map 4 bản · helper «lời gọi treo» 2 bản · FIRST_PAGE = 1 4 bản; ba spec PR-A còn khuôn hai fireEvent rời để mutant «bỏ khoá đồng bộ» sống; BadgeSettingsPage() vượt mốc 50 dòng / hàm
 -  `S16-SOCIAL-FEPOSTSWITCH-1` Trang chi tiết bài (`PostDetailPage`) giữ state của bài CŨ khi chỉ `$postId` đổi (router không mount lại trang): dòng «đang trả lời …» + nháp ô soạn bình luận sống sang bài khác ⇒ lượt gửi 015 mang `parentCommentId` của bài kia và bị server từ chối (404, dải lỗi chung); lượt đọc lại NỀN của bài hỏng thì cả trang bị thay bằng khối lỗi ⇒ hộp thoại đang mở + nháp mất im lặng
 -  `S16-SOCIAL-FECROSSOPEN-1` Mở ứng dụng ở tên miền khác (LMS · Đăng bài Facebook) từ BỐN nơi — dải ô liên kết nhanh · mục rail «Đăng bài Facebook» · AppSwitcher · nút «Mở LMS» của trang Đào tạo — đều gọi `void opener(fallback)` không có trạng thái «đang mở»: bấm xong không có phản hồi, bấm lại phát thêm yêu cầu SSO, lời gọi không có hạn chờ nên kết quả về muộn vẫn kéo người dùng rời màn đang đứng
@@ -92,10 +139,8 @@
 - 🟡 `S20-TASK-DEADLINEPOLISH-1` Chọn nhanh hạn: Chủ Nhật không hiện hai chip cùng một ngày, nút hạn gọn trên dòng việc đủ lớn để bấm
 - 🟡 `S20-TASK-LEAVEPICKER-1` Quản lý bàn giao quanh kỳ nghỉ: từ đơn đang duyệt một chạm tới danh sách việc trong kỳ nghỉ để chuyển hàng loạt; picker người phụ trách hiện «Nghỉ dd/MM–dd/MM» trước khi chọn
 - 🟢 `S20-FE-MOBILEDAILY-1` Công việc và Mục tiêu dùng được trên điện thoại 375px: danh sách thành thẻ không cuộn ngang, mở việc toàn màn rồi Back về chỗ cũ, đổi trạng thái/check-in 2–3 chạm không bị bàn phím ảo hay toast che
-- 🟡 `S20-TASK-MYTASKSLOAD-1` «Việc của tôi» vẫn mở nhanh dù đã xong hàng trăm việc, và mỗi việc hiện chip mục tiêu bấm được để lọc /tasks theo mục tiêu đó
 - 🟡 `S20-TASK-REPORTCOUNTS-1` Tab Báo cáo dự án cho biết mỗi người bao nhiêu việc quá hạn, sắp hạn và phân bổ theo ưu tiên; bấm vào số mở ngay bảng đã lọc
 - 🟡 `S20-GOAL-RISKFLAG-1` Mỗi mục tiêu tự hiện cờ «Chậm/Rủi ro» kèm lý do; quản lý lọc nhanh «Chỉ mục tiêu rủi ro» và widget dashboard hiện số rủi ro
--  `S20-FE-CMDKSEARCH-1` Ctrl+K tìm được cả việc, dự án và đồng nghiệp theo đúng quyền của người dùng, không chỉ tên ứng dụng
 -  `S20-TASK-DMBUTTON-1` Nút «Nhắn tin» cạnh người phụ trách việc và thành viên dự án mở ngay cuộc trò chuyện riêng trong drawer chat
 - 🔴 `S20-CHAT-DIRECTORY-1` Danh bạ nhẹ cho chat: endpoint riêng của CHAT trả đúng 4 trường (userId · tên hiển thị · ảnh ký ngắn hạn · phòng ban) cho người có cặp chat sẵn có — «Tin nhắn mới» tìm được mọi đồng nghiệp đang làm việc để mở DM
 - 🔴 `S20-CHAT-MENTIONALL-1` CHAT-DEC mới về tư cách theo loại phòng (group: admin phòng · department: `update:org_unit` với đơn vị neo · project: quản lý dự án · direct: không ai) — áp cho «@cả phòng» (ngoại lệ có hàng rào của CHAT-DEC-010, tái dùng `CHAT_MENTIONED`, 1 lần/phòng/15 phút) và cho quyền ghim tin ở phòng phòng ban/dự án
@@ -108,9 +153,7 @@
 - 🟡 `S20-TASK-COMMENTJUMP-1` Bấm thông báo bình luận khi drawer việc đang ở tab khác ⇒ tự chuyển về «Bình luận» (không focus ô soạn); bình luận được làm nổi nhận focus để bàn phím và trình đọc màn hình biết
 - 🟡 `S19-QA-WEBCORESLOW-1` Bộ test packages/web-core chạy sát ngưỡng 5 s trên runner CI ⇒ đỏ ngẫu nhiên (session.spec · hr-master-data-contract.spec) — tìm gốc chậm, không chỉ nâng timeout
 - 🟡 `S19-QA-LOCALGITLEAKS-1` check.sh --all quét gitleaks đúng cấu hình CI trên phần commit của nhánh trước khi mở PR (dương tính giả của #671 lọt lên master làm mọi PR đỏ secret-scan)
-- 🟡 `S20-GOAL-SUGGEST-1` Tạo việc tự điền sẵn mục tiêu cá nhân của chính mình, các trường hợp khác gợi ý một chạm; việc con đề xuất «Tính vào mục tiêu của việc cha» — không còn phải mở lại việc để gắn
 - 🟡 `S20-GOAL-BULKLINK-1` Tab «Công việc gắn» gợi ý hàng loạt «N việc trong kỳ chưa gắn mục tiêu» — gắn 8 việc từ 11 thao tác còn 3; việc đang gắn mục tiêu khác hiện rõ và chỉ chuyển qua bước gỡ-rồi-gắn
-- 🔴 `S20-SEC-LEAVETYPEMASK-1` Lịch nghỉ cấp đội chỉ hiện «Nghỉ» + khoảng ngày; loại nghỉ cụ thể chỉ người duyệt thấy — che ở server (Q23 = B)
 - 🔴 `S20-CHAT-MENTIONIDX-1` Đo truy vấn đếm @ chưa đọc của danh sách phòng trên dữ liệu cỡ PROD; cần thì thêm chỉ mục (migration nối tiếp head)
 - 🔴 `S14-SEC-CAPWILDCARD-DEBT-1` Nợ sau S14-SEC-CAPWILDCARD-1 (N-G1…N-G9, plan §15.10): ratchet cờ sensitive ở call-site · trần tuổi + một nguồn nạp cho ảnh chụp catalog · tín hiệu suy biến capabilities · sàn thử-lại khi nạp lỗi · keyset scopes khi suy biến một phía · tách permission.service.ts ≤ 800 · khối catch anh em dùng serializeErrorChain · ca helper khẳng định giá trị
 - 🟡 `S20-TASK-WORKLOADHOME-1` Lối tắt «Đội của tôi» ngay trên trang chủ cho người có quyền xem việc — từ trang chủ tới /tasks/team chỉ 1 lần chuyển trang (KPI #12)
@@ -135,6 +178,10 @@
 - `S20-GOAL-CHECKINREMIND-1` Nhắc check-in hằng tuần (một thông báo gộp mỗi người mỗi tuần) và báo quản lý phạm vi khi mục tiêu mới chuyển «Chậm» — 2 NOTI-EVENT mới (seed catalog ở hai bảng) + job hệ thống theo giờ công ty + `/goals/{id}?checkin=1` tự mở hộp check-in; CHỈ mở sau khi nhãn «Cần check-in» chạy 2–4 tuần (Q18 = B) ⏳ cần: S20-GOAL-RISKFLAG-1
 
 **🛑 BLOCKED:**
+- `S16-SOCIAL-FE-2D` FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qua SOCIAL-API-054/055 · @mention thành link hồ sơ từ mảng `mentions` (BE-1D) · hiện `droppedMentions` của bình luận
+  - **vì sao chặn**: PR #580 mở, chờ storage PROD tới được từ máy khác (chuyển R2 — S19-OPS-STORAGEPUBLIC-1) rồi mới merge
+- `S16-SOCIAL-FILEOPENUX-1` 7 màn đang «mở xem ở tab mới» cho tệp không phải ảnh/video nay nhận phản hồi dạng TẢI XUỐNG (sau `S16-SOCIAL-FILEDISPOSITION-1`) — đổi nhãn/cách mở cho khớp; phiếu lương + CV bỏ bước mở tab trắng trước; lọc sớm loại tệp không được nhận ở form tải
+  - **vì sao chặn**: PR #600 mở (draft), chờ R2 (S19-OPS-STORAGEPUBLIC-1) hoặc owner chấp nhận rủi ro rồi mới merge
 - `S19-OPS-STORAGEPUBLIC-1` Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có hostname nào trỏ tới nó ⇒ URL ký do API phát (tải lên · xem · tải về tệp) chỉ dùng được TRÊN CHÍNH MÁY CHỦ: chuyển storage PROD sang Cloudflare R2 (bucket riêng tư · URL ký trên miền S3 API của nhà cung cấp · CORS theo bucket) + di trú dữ liệu, KHÔNG đổi mã ký — để đính kèm chat · avatar · tệp hồ sơ · đính kèm SOCIAL chạy với người dùng ở máy khác
   - **vì sao chặn**: CAP NHAT 23/10: #583 DA MERGE 16/10 (a9bdc3db); L4 + C1-C3 DAT 16/10; O1/O2 xong. Con owner: O3 (khung ~30 phut cho C5-C7) · C0 (thu gui tep tu may khac/4G) · dau vao C4 (minio-prod.conf + danh sach id cong ty). Sau do …
 
@@ -142,7 +189,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 260 — `0593_s20notitargeturl1_target_url_record` (261 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -151,6 +198,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `2a0c7a56` | 2026-11-12 | chore(backlog): paths Đợt 5 theo tệp thật — MYTASKSLOAD (task-core.* · query-keys · LeaveTaskHandoff · tasks-workux · API-06) · SUGGEST (tasks-workux thay vi/tasks.ts · TaskQuickAdd) · LEAVETYPEMASK (leave-calendar FE · int-spec leave · API-05/08) · FEGROUPBADGE thu hẹp (không chạm tệp của #580) · FEADMINSIGNAL bỏ registry.ts · FESTATSBUSY · CMDKSEARCH thêm web-core nav.ts |
+| `1fa38ebf` | 2026-11-12 | chore(backlog): sổ hậu merge Đợt 4 — 5 WO đóng dấu từ #677 · #678 · #679 · gieo 5 WO nợ (WORKLOADHOME · WORKLOADLINKS · OVERDUEPRED · GROUPLOCKS-2 · CHUNKIPC) + N3 vào GROUPLOCKTIMEOUT-1 · regen STATUS + INDEX |
 | `ecc83100` | 2026-11-12 | refactor(files): S16-SOCIAL-FILESVCSPLIT-1 — tách files.service theo trách nhiệm (1.000 → 736 dòng), giữ nguyên hành vi (#679) |
 | `b0f98a20` | 2026-11-12 | feat(tasks): S20-TASK-WORKLOAD-1 — màn «Đội của tôi»: tải việc theo người trong phạm vi (GET /tasks/workload + /tasks/team) (#677) |
 | `9d7bbc58` | 2026-11-12 | fix(social): S16-SOCIAL-POSTGROUPTOCTOU-1 · S16-SOCIAL-GROUPPOSTDEL-1 · S16-SOCIAL-GROUPDELRACE-1 — thứ tự khoá ở cổng ghi vào nhóm (#678) |
@@ -161,8 +210,6 @@
 | `35a2f84d` | 2026-11-10 | feat(goals): S20-GOAL-OWNERCHECKIN-1 — mục tiêu hiện người phụ trách + check-in cuối (Q14 = B); DataTable sắp: tên cột + aria-sort (#676) |
 | `994e73e7` | 2026-11-10 | feat(tasks): S20-TASK-ALLOWEDACTIONS-1 — chi tiết việc trả allowedActions theo cổng thật; FE khoá ô + lý do (#674) |
 | `63520729` | 2026-11-10 | fix(social): S16-SOCIAL-FEMODINVAL-1 + FESTALELISTS-1 — một nguồn tập khoá làm mới danh sách bài, «Hiện lại» huỷ được yêu cầu treo (#673) |
-| `97df58de` | 2026-11-10 | ci(gitleaks): ghim dương tính giả của #671 |
-| `dbca65ee` | 2026-11-09 | chore(backlog): OWNERCHECKIN paths thêm DataTable dùng chung (tên trợ năng nút sắp + aria-sort) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
