@@ -464,6 +464,7 @@ export default {
       reason: "Lý do",
     },
     reasonMasked: "— (riêng tư)",
+    leaveTypeMasked: "Nghỉ",
     empty: {
       title: "Không có lịch nghỉ",
       description: "Không có đơn nghỉ nào trong khoảng thời gian đã chọn.",

@@ -51,10 +51,20 @@ vi.mock("@mediaos/ui", async (importOriginal) => {
         {children}
       </div>
     ),
-    DataTable: ({ data }: { data: unknown[] }) => (
+    DataTable: ({
+      data,
+      columns,
+    }: {
+      data: unknown[];
+      columns: Array<{ cell?: (ctx: { row: { original: unknown } }) => React.ReactNode }>;
+    }) => (
       <div data-testid="data-table">
-        {data.map((_, i) => (
-          <div key={i} data-testid="table-row" />
+        {data.map((original, i) => (
+          <div key={i} data-testid="table-row">
+            {columns.map((c, j) => (
+              <span key={j}>{c.cell?.({ row: { original } })}</span>
+            ))}
+          </div>
         ))}
       </div>
     ),
@@ -171,6 +181,38 @@ describe("LeaveCalendarPage", () => {
 
     // Scope toggle should show "Nhóm" (team) option since canViewTeam=true.
     expect(screen.getByRole("button", { name: "Nhóm" })).toBeInTheDocument();
+  });
+
+  // ── Loại nghỉ bị server che ─────────────────────────────────────────────────
+
+  describe("cột loại nghỉ theo thứ server trả", () => {
+    async function renderWith(entry: Record<string, unknown>) {
+      mockUseCan.mockReturnValue(true);
+      mockUseCanExact.mockReturnValue(false);
+      mockGetCalendar.mockResolvedValue({ scope: "own", items: [entry] });
+      renderPage(buildQC());
+      await waitFor(() => {
+        expect(screen.getAllByTestId("table-row")).toHaveLength(1);
+      });
+      return screen.getByTestId("table-row").textContent ?? "";
+    }
+
+    it("leaveTypeMasked=true (kèm tên loại trong fixture) → hiển thị «Nghỉ», cờ thắng, không suy loại", async () => {
+      const text = await renderWith({ ...MASKED_TEAM_ENTRY, leaveTypeMasked: true });
+      expect(text).toContain("Nghỉ");
+      expect(text).not.toContain("Nghỉ phép năm");
+      expect(text).not.toContain("ANNUAL");
+    });
+
+    it("leaveTypeMasked=false → hiển thị tên loại", async () => {
+      const text = await renderWith({ ...OWN_ENTRY, leaveTypeMasked: false });
+      expect(text).toContain("Nghỉ phép năm");
+    });
+
+    it("thiếu cờ (API bản cũ) → hiển thị tên loại", async () => {
+      const text = await renderWith(OWN_ENTRY);
+      expect(text).toContain("Nghỉ phép năm");
+    });
   });
 
   // ── Error state ──────────────────────────────────────────────────────────────

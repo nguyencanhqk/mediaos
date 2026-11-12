@@ -80,7 +80,10 @@ function useColumns(
       header: t("calendar.columns.leaveType"),
       cell: ({ row }) => (
         <span className="text-sm">
-          {row.original.leaveTypeName ?? row.original.leaveTypeCode ?? "—"}
+          {/* Server che loại nghỉ ⇒ leaveTypeMasked=true: hiển thị đúng thứ server trả, KHÔNG tự suy loại. */}
+          {row.original.leaveTypeMasked === true
+            ? t("calendar.leaveTypeMasked")
+            : (row.original.leaveTypeName ?? row.original.leaveTypeCode ?? "—")}
         </span>
       ),
     },
