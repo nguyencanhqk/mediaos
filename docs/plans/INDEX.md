@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**751 WO** · có micro-plan: **389/751** · ⬜ 106 chờ · 🔵 2 đang làm · ✅ 642 xong · 🔴 1 chặn
+**756 WO** · có micro-plan: **391/756** · ⬜ 106 chờ · 🔵 2 đang làm · ✅ 647 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -597,7 +597,7 @@
 | `S16-SOCIAL-BE-2B-2` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2B-2.md) | ✅S16-SOCIAL-BE-2B-1 | BE track B/2b — SÁNG KIẾN · VINH DANH (SOCIAL-API-045..048 + nhánh typ |
 | `S16-SOCIAL-BE-2C` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2C.md) | ✅S16-SOCIAL-BE-2A | BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUser |
 | `S16-SOCIAL-RTGROUPCR-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Fan-out `feed:comment.created` / `feed:reaction.changed` của bài `audi |
-| `S16-SOCIAL-GROUPPOSTDEL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Đua `034` xoá nhóm ↔ `002` đăng bài nhóm: cổng ghi `002` đọc nhóm KHÔN |
+| `S16-SOCIAL-GROUPPOSTDEL-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Đua `034` xoá nhóm ↔ `002` đăng bài nhóm: cổng ghi `002` đọc nhóm KHÔN |
 | `S16-SOCIAL-FEGROUPBADGE-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2C | Badge «N bài mới» THEO NHÓM — tiêu thụ biến thể `audience:'group'` của |
 | `S16-SOCIAL-FE-2` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 ✅S16-SOCIAL-FE-1 | FE track B / lát A: SOC-SCREEN-007 Bình chọn (composer · khối poll tro |
 | `S16-SOCIAL-FE-2B` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2B.md) | ✅S16-SOCIAL-FE-2 | FE track B / lát B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm = feed |
@@ -605,8 +605,8 @@
 | `S16-SOCIAL-GROUPERR-FEFALLBACK-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | Gỡ nhánh LEGACY-PREFIX của `groups/lib/group-errors.ts` (đọc tiền tố ` |
 | `S16-SOCIAL-GROUPTOCTOU-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-GROUPTOCTOU-1.md) | ✅S16-SOCIAL-GROUPERR-1 | `039` mời ra KHÔNG đọc lại vai ACTOR sau `lockGroupRowTx` (cùng lớp TO |
 | `S16-SOCIAL-GROUPLOCKTIMEOUT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPTOCTOU-1 | Route nhóm `033`–`039` (+ `002` bài nhóm) chờ khoá hàng `feed_groups`  |
-| `S16-SOCIAL-GROUPDELRACE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPTOCTOU-1 | `038`/`039` vẫn ghi thành viên vào nhóm bị XOÁ MỀM giữa chừng — `lockG |
-| `S16-SOCIAL-POSTGROUPTOCTOU-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPTOCTOU-1 | `002` đăng bài vào nhóm: `assertWriteAudience` đọc membership KHÔNG kh |
+| `S16-SOCIAL-GROUPDELRACE-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-GROUPTOCTOU-1 | `038`/`039` vẫn ghi thành viên vào nhóm bị XOÁ MỀM giữa chừng — `lockG |
+| `S16-SOCIAL-POSTGROUPTOCTOU-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-GROUPTOCTOU-1 | `002` đăng bài vào nhóm: `assertWriteAudience` đọc membership KHÔNG kh |
 | `S16-SOCIAL-SCOPEDENIEDCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | `SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH |
 | `S16-SOCIAL-BE-2D` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2D.md) | ✅S16-SOCIAL-BE-2B-2 | BE mở khoá lát C — (1) khối `kudos?` (người nhận · huy hiệu · lời nhắn |
 | `S16-SOCIAL-FE-2C` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2C.md) | ✅S16-SOCIAL-FE-2 ✅S16-SOCIAL-BE-2D | FE track B / lát C: SOC-SCREEN-009 Vinh danh — composer kudos (chọn ≤1 |
@@ -623,7 +623,7 @@
 | `S16-SOCIAL-FILESETTINGKEY-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Validate theo KHOÁ lúc LƯU setting `file.allowed_mime_types` / `file.b |
 | `S16-SOCIAL-STORAGETESTGATE-1` | 🟡 | ✅ xong | [📄](S16-SOCIAL-STORAGETESTGATE-1.md) | ✅S16-SOCIAL-FILEDISPOSITION-1 | Các int-spec storage có sẵn (`files-e2e-confirm` · `hr-employee-avatar |
 | `S16-SOCIAL-FILEDEBT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl`  |
-| `S16-SOCIAL-FILESVCSPLIT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Tách apps/api/src/foundation/files/files.service.ts (~1.000 dòng) và f |
+| `S16-SOCIAL-FILESVCSPLIT-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-FILESVCSPLIT-1.md) | ✅S16-SOCIAL-FILEDISPOSITION-1 | Tách apps/api/src/foundation/files/files.service.ts (~1.000 dòng) và f |
 | `S16-SOCIAL-BE-3A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3A.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 | BE track C/1 — resolve báo cáo KÈM HÀNH ĐỘNG (SOCIAL-API-029: ẩn bài · |
 | `S16-SOCIAL-GROUPMOD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A | Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong n |
 | `S16-SOCIAL-BE-3B` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3B.md) | ✅S16-SOCIAL-BE-3A | BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · th |
@@ -668,6 +668,7 @@
 | `S16-SOCIAL-STORAGEPORTPIN-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-STORAGETESTGATE-1 | Chốt hồ sơ storage `live` của int-spec xét cả cổng của endpoint loopba |
 | `S16-SOCIAL-GUARDNOSUMMARY-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-STORAGETESTGATE-1 | `lane-db-guard` chế độ strict không trả `ok` khi log không có dòng tổn |
 | `S16-SOCIAL-PDFBATCHLEAK-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-STORAGETESTGATE-1 | Int-spec gọi `PAYROLL-API-085` (lô PDF phiếu lương chạy nền, trả 202)  |
+| `S16-SOCIAL-GROUPLOCKS-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-POSTGROUPTOCTOU-1 ✅S16-SOCIAL-GROUPPOSTDEL-1 ✅S16-SOCIAL-GROUPDELRACE-1 | Dọn sau khi thống nhất khoá nhóm: gom bộ dựng giữ khoá dùng chung cho  |
 
 ## Sprint 17
 
@@ -780,6 +781,7 @@
 | `S19-OPS-ZOD4-1` | 🔴 | ✅ xong | [📄](S19-OPS-ZOD4-1.md) | ✅S19-OPS-AUDITDOS-1 | Nâng zod 3 → 4 (≥ 4.6.6) toàn monorepo — api · app · contracts (nguồn  |
 | `S19-QA-WEBCORESLOW-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Bộ test packages/web-core chạy sát ngưỡng 5 s trên runner CI ⇒ đỏ ngẫu |
 | `S19-QA-LOCALGITLEAKS-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | check.sh --all quét gitleaks đúng cấu hình CI trên phần commit của nhá |
+| `S19-QA-CHUNKIPC-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | chunk-test xếp sập «Channel closed» (ERR_IPC_CHANNEL_CLOSED của tinypo |
 
 ## Sprint 20
 
@@ -829,9 +831,9 @@
 | `S20-TASK-DUEREMIND-1` | 🟡 | ✅ xong | [📄](S20-TASK-DUEREMIND-1.md) | — | Nhắc sắp đến hạn/quá hạn chạy đúng cho việc SPEC-06 (quá hạn báo cả ng |
 | `S20-TASK-MYTASKSLOAD-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-MYTASKS-1 | «Việc của tôi» vẫn mở nhanh dù đã xong hàng trăm việc, và mỗi việc hiệ |
 | `S20-TASK-ALLOWEDACTIONS-1` | amber | ✅ xong | [📄](S20-TASK-ALLOWEDACTIONS-1.md) | — | Ở việc tôi chỉ theo dõi, trạng thái/hạn/người phụ trách hiện chỉ đọc k |
-| `S20-TASK-WORKLOAD-1` | amber | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 | Màn «Đội của tôi»: quản lý thấy số việc đang làm, quá hạn, sắp hạn và  |
-| `S20-TASK-REVIEWQUEUE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-MYTASKSLOAD-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKENTRY-1 ⏳S20-TASK-WORKLOAD-1 | Quản lý duyệt nhanh hàng đợi «Chờ duyệt» (Hoàn thành hoặc «Trả lại kèm |
-| `S20-TASK-REPORTCOUNTS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-WORKLOAD-1 ✅S20-TASK-DRAWER-1 | Tab Báo cáo dự án cho biết mỗi người bao nhiêu việc quá hạn, sắp hạn v |
+| `S20-TASK-WORKLOAD-1` | amber | ✅ xong | [📄](S20-TASK-WORKLOAD-1.md) | ✅S20-TASK-DRAWER-1 | Màn «Đội của tôi»: quản lý thấy số việc đang làm, quá hạn, sắp hạn và  |
+| `S20-TASK-REVIEWQUEUE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-MYTASKSLOAD-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKENTRY-1 ✅S20-TASK-WORKLOAD-1 | Quản lý duyệt nhanh hàng đợi «Chờ duyệt» (Hoàn thành hoặc «Trả lại kèm |
+| `S20-TASK-REPORTCOUNTS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-WORKLOAD-1 ✅S20-TASK-DRAWER-1 | Tab Báo cáo dự án cho biết mỗi người bao nhiêu việc quá hạn, sắp hạn v |
 | `S20-TASK-PROJLISTSTATS-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S20-TASK-REPORTCOUNTS-1 | Danh sách dự án có số việc, số xong, số quá hạn, % tiến độ và lọc «Có  |
 | `S20-GOAL-OWNERCHECKIN-1` | amber | ✅ xong | [📄](S20-GOAL-OWNERCHECKIN-1.md) | ✅S20-FE-COMPANYTZ-1 ✅S20-GOAL-LISTURL-1 ✅S20-GOAL-QUICKSTART-1 | Mục tiêu hiện tên người phụ trách, tên người check-in và lần check-in  |
 | `S20-GOAL-RISKFLAG-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-GOAL-OWNERCHECKIN-1 | Mỗi mục tiêu tự hiện cờ «Chậm/Rủi ro» kèm lý do; quản lý lọc nhanh «Ch |
@@ -866,6 +868,9 @@
 | `S20-CHAT-FEDEBT-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-CHAT-MENTIONPIN-1 | Nợ FE CHAT sau S20: hook nạp cửa sổ ngữ cảnh dùng chung (nhảy tới tin  |
 | `S20-CHAT-DOCSYNC-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-CHAT-MENTIONPIN-1 ✅S20-CHAT-NEWROOM-1 | Đồng bộ tài liệu CHAT theo S20: API-13 §7 (sự kiện ghim/bỏ ghim realti |
 | `S20-TASK-FEDEBT-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-TASK-BOARDMOVE-1 ✅S20-TASK-PROJECTENTRY-1 ✅S20-TASK-QUICKENTRY-1 | Nợ FE TASK sau S20: tách thẻ/cột Kanban khỏi TaskKanbanPage.tsx (797/8 |
+| `S20-TASK-WORKLOADHOME-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-WORKLOAD-1 | Lối tắt «Đội của tôi» ngay trên trang chủ cho người có quyền xem việc  |
+| `S20-TASK-WORKLOADLINKS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-WORKLOAD-1 | «Đội của tôi»: ba cột «Chưa giao» · «Đang làm» · «Sắp hạn 7 ngày» bấm  |
+| `S20-TASK-OVERDUEPRED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-WORKLOAD-1 | Một nguồn cho «quá hạn» và phạm vi người được giao: isOverdue của TASK |
 
 ---
 

@@ -18084,6 +18084,7 @@ export const backlog = [
     done_when: [
       "`SET LOCAL lock_timeout` trên mọi tx route nhóm khoá `feed_groups` + dịch `55P03` ⇒ 409 mã sentinel (khuôn `029` REPORT_BUSY) + census mã lỗi + FE xử lý; ca tất định (harness `test/helpers/lock-wait.ts`): holder giữ khoá quá trần ⇒ 409 đúng mã, không 500, không treo",
       "N6 (database-reviewer, FULL gate lượt 1 của GROUPTOCTOU-1): đo rồi quyết hạ `lockGroupRowTx` xuống `FOR NO KEY UPDATE` — `FOR UPDATE` xung đột `FOR KEY SHARE` của RI khi `002`/`035` INSERT ⇒ từ GROUPTOCTOU-1 `033`/`034` chờ MỌI bài nhóm đang đăng và bài mới xếp hàng sau chúng (probe: holder INSERT `feed_group_members` chưa commit ⇒ `SELECT … FOR UPDATE` 55P03 sau 704ms ở `lock_timeout` 700ms; `FOR NO KEY UPDATE` qua). Ca LM-1 (`social-group-access.int.spec.ts` — hai `lockGroupRowTx` PHẢI chặn nhau) phải còn XANH; hạ mode thì vá N2 (`S16-SOCIAL-POSTGROUPTOCTOU-1`) PHẢI khoá nhóm bằng `FOR SHARE` (KEY SHARE không xung đột NO KEY UPDATE)",
+      "N3 của PR #678 (12/11/2026): phủ cả `lockGroupRowForShareTx` (khoá FOR SHARE ở cổng ghi bài vào nhóm) — cùng `SET LOCAL lock_timeout` + 409 sentinel, kèm ca chờ khoá quá hạn",
     ],
     notes: [
       "🔴 FULL gate. Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (plan §6 D4 — owner ký (a): WO riêng). Bề mặt khoá rộng thêm từ GROUPTOCTOU-1: `033`/`034` nay cũng `FOR UPDATE` hàng nhóm trước khi đọc vai.",
@@ -25412,7 +25413,12 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S20-TASK-MYTASKSLOAD-1", "S20-TASK-DRAWER-1", "S20-TASK-QUICKENTRY-1", "S20-TASK-WORKLOAD-1"],
+    depends_on: [
+      "S20-TASK-MYTASKSLOAD-1",
+      "S20-TASK-DRAWER-1",
+      "S20-TASK-QUICKENTRY-1",
+      "S20-TASK-WORKLOAD-1",
+    ],
     src: [
       "docs/plans/S20-WORKUX-STORIES.md — US-TASK-QL-08 + US-TASK-QL-12 · SPEC-06 §5.2, §13.5, §14.16 · DECISIONS-03 (D-18) · TASK-ERR-CHECKLIST-REQUIRED · KPI #14 §4",
       "§7 Q8 = A (owner chọn khuyến nghị 23/10/2026): mọi người có `update:task` bật/tắt cờ, kèm lịch sử hoạt động; khoá theo vai trò dự án là red, không làm ở đây",
@@ -26186,7 +26192,9 @@ export const backlog = [
       "Ca canh giữ QUY TẮC DƯƠNG: mọi lớp text-/bg-/border-/ring-/fill-/stroke- màu trong apps/*/src + packages/ui/src phải thuộc bảng màu chuẩn Tailwind hoặc có --color-<tên> trong theme.css; đỏ khi cố ý thêm một lớp ma",
       "chunk-test 5 gói FE xanh",
     ],
-    notes: ["🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Nhỏ, chỉ FE, ước 30–60 USD."],
+    notes: [
+      "🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Nhỏ, chỉ FE, ước 30–60 USD.",
+    ],
   },
   {
     id: "S20-TASK-ALLOWEDACTIONS-2",
@@ -26223,7 +26231,9 @@ export const backlog = [
       "Một chỗ invalidate detail dùng chung (taskCoreInvalidation) cho mọi đường đổi trạng thái/huỷ/khôi phục; ca đếm query bị invalidate",
       "chunk-test 5 gói FE xanh; react-reviewer + typescript-reviewer",
     ],
-    notes: ["🟠 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Chỉ FE (server đã trả allowedActions từ #674). Ước 90–150 USD."],
+    notes: [
+      "🟠 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Chỉ FE (server đã trả allowedActions từ #674). Ước 90–150 USD.",
+    ],
   },
   {
     id: "S20-TASK-SCOPECTX-1",
@@ -26252,7 +26262,9 @@ export const backlog = [
       "Ca bảng so can() với resolveStrongestScope cho mọi cặp seed của TASK (cùng kết quả ALLOW/DENY)",
       "Int-spec deny-path/cross-tenant cũ của ALLOWEDACTIONS-1 + task-core xanh trên LANE_DB; FULL gate (security-reviewer + database-reviewer + silent-failure-hunter)",
     ],
-    notes: ["🔴 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Vùng phạm vi quyền ⇒ crown: plan + plan-reviewer trước khi code. Ước 150–250 USD."],
+    notes: [
+      "🔴 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Vùng phạm vi quyền ⇒ crown: plan + plan-reviewer trước khi code. Ước 150–250 USD.",
+    ],
   },
   {
     id: "S20-TASK-COMMENTJUMP-1",
@@ -26280,7 +26292,9 @@ export const backlog = [
       "Bình luận làm nổi nhận focus (tabIndex=-1 + focus, preventScroll khi đã scrollIntoView) — ca toHaveFocus; không cướp focus khi người dùng đang gõ ở chỗ khác",
       "chunk-test 5 gói FE xanh",
     ],
-    notes: ["🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Chỉ FE. Ước 40–80 USD."],
+    notes: [
+      "🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Chỉ FE. Ước 40–80 USD.",
+    ],
   },
   {
     id: "S19-QA-WEBCORESLOW-1",
@@ -26309,7 +26323,9 @@ export const backlog = [
       "Sửa gốc để ca chậm nhất trên CI < 1,5 s; KHÔNG chỉ nâng testTimeout (nếu có nâng thì kèm số đo và lý do)",
       "5 lượt CI liên tiếp xanh job web-core",
     ],
-    notes: ["🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Đỏ ngẫu nhiên trên master làm mọi PR phải chạy lại. Ước 40–90 USD."],
+    notes: [
+      "🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Đỏ ngẫu nhiên trên master làm mọi PR phải chạy lại. Ước 40–90 USD.",
+    ],
   },
   {
     id: "S19-QA-LOCALGITLEAKS-1",
@@ -26337,7 +26353,9 @@ export const backlog = [
       "Đòi «N commits scanned» với N ≥ 1 khi nhánh có commit; «~0 bytes» hoặc thiếu docker ⇒ cảnh báo (tier thường) / ĐỎ (tier strict), không bao giờ XANH rỗng",
       "Ca node --test: nhánh có một dòng dương tính giả cố ý ⇒ ĐỎ; nhánh sạch ⇒ XANH",
     ],
-    notes: ["🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Chỉ harness. Ước 40–80 USD."],
+    notes: [
+      "🟡 Seed 10/11/2026 ở sổ hậu merge Đợt 3 (#673 · #674 · #675 · #676). Chỉ harness. Ước 40–80 USD.",
+    ],
   },
   // ════════════════════ S20-WORKUX §5.5 — liên kết tự động Việc ↔ Mục tiêu, hướng 1+2 (seed 2026-10-23) ════════════════════
   {
@@ -26821,5 +26839,158 @@ export const backlog = [
     notes: [
       "🔴 Seed 23/10/2026 tối. Cùng tệp `permission/*` với S14-SEC-OPPLANEREVOKE-1 ⇒ không chạy song song; owner chọn thứ tự. Ước 300–450 USD.",
     ],
+  },
+  {
+    id: "S20-TASK-WORKLOADHOME-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Lối tắt «Đội của tôi» ngay trên trang chủ cho người có quyền xem việc — từ trang chủ tới /tasks/team chỉ 1 lần chuyển trang (KPI #12)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/layouts/home/**",
+      "apps/app/src/test/layout*.spec.tsx",
+      "apps/app/src/i18n/locales/vi/**",
+      "packages/web-core/src/lib/registry*.ts",
+      "packages/web-core/src/i18n/locales/vi/nav.ts",
+      "docs/plans/S20-TASK-WORKLOADHOME-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-TASK-WORKLOAD-1"],
+    src: [
+      "PR #677 — đo KPI #12 trên Chrome headless (API giả lập): 2 lượt bấm (đạt) nhưng 2 lần chuyển trang (KPI đòi ≤1) vì trang chủ (HomePortalLayout) không có sidebar Công việc.",
+    ],
+    done_when: [
+      "Trang chủ có lối vào «Đội của tôi» hiện theo `useCan` cùng cặp với mục sidebar `task.team` (không hard-code quyền); người không có quyền KHÔNG thấy (ca DENY + ca ALLOW)",
+      "Đo lại KPI #12 trên trình duyệt thật: từ trang chủ tới bảng «Đội của tôi» ≤1 lần chuyển trang, ≤2 lượt bấm; ghi số đo vào plan",
+      "a11y: liên kết có tên trợ năng; snapshot/registry spec cập nhật đúng một mục",
+    ],
+    notes: ["🟡 Seed 12/11/2026 ở sổ hậu merge Đợt 4 (#677 · #678 · #679). Ước 30–60 USD."],
+  },
+  {
+    id: "S20-TASK-WORKLOADLINKS-1",
+    module: "TASK",
+    layer: "BE",
+    title:
+      "«Đội của tôi»: ba cột «Chưa giao» · «Đang làm» · «Sắp hạn 7 ngày» bấm được sang danh sách việc lọc đúng tập đó (thêm bộ lọc danh sách tương ứng) + mã màn hình SPEC-06",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/test/integration/s20-task-workload*.int-spec.ts",
+      "apps/api/test/integration/s20-task-workloadlinks*.int-spec.ts",
+      "packages/contracts/src/task*.ts",
+      "apps/app/src/routes/tasks/**",
+      "apps/app/src/i18n/locales/vi/**",
+      "docs/spec/SPEC-06*.md",
+      "docs/plans/S20-TASK-WORKLOADLINKS-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-TASK-WORKLOAD-1"],
+    src: [
+      "docs/plans/S20-TASK-WORKLOAD-1.md §6: «Chưa giao» không bấm được (GET /tasks chưa có bộ lọc chưa giao); activeCount/dueSoon7dCount không có liên kết (danh sách chưa có bộ lọc «chỉ việc mở», dueFrom/dueTo của URL là NGÀY); SPEC-06 chưa có mã màn hình (đang dùng TASK-SCREEN-TEAM-WORKLOAD).",
+    ],
+    done_when: [
+      "GET /tasks thêm bộ lọc «chưa giao» và «chỉ việc mở» (+ cửa sổ hạn theo giờ công ty dùng CHUNG hằng với workload); validate đầu vào; phạm vi đọc giữ nguyên bộ dựng hiện có",
+      "Int-spec: với mỗi người, số ở cột == số dòng danh sách khi bấm liên kết (khuôn ca khớp số của WORKLOAD-1), kèm ca DENY người ngoài phạm vi",
+      "FE: ba cột thành liên kết có tên trợ năng riêng từng người; trạng thái rỗng/lỗi giữ nguyên",
+      "SPEC-06 có mã màn hình chính thức cho «Đội của tôi»; FE + plan dùng mã đó",
+    ],
+    notes: ["🟡 Seed 12/11/2026 ở sổ hậu merge Đợt 4 (#677 · #678 · #679). Ước 80–150 USD."],
+  },
+  {
+    id: "S20-TASK-OVERDUEPRED-1",
+    module: "TASK",
+    layer: "BE",
+    title:
+      "Một nguồn cho «quá hạn» và phạm vi người được giao: isOverdue của TASK_CORE_SELECT dùng taskOverduePredicate; buildReadScopeExists dùng lại buildAssigneeScopeExists — có hồi quy đủ mọi người gọi",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/task-core.repository.ts",
+      "apps/api/src/tasks/task-workload.predicates*.ts",
+      "apps/api/src/tasks/task-scope*.ts",
+      "apps/api/src/tasks/**/*.spec.ts",
+      "apps/api/test/integration/**task*.int-spec.ts",
+      "docs/plans/S20-TASK-OVERDUEPRED-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S20-TASK-WORKLOAD-1"],
+    src: [
+      "docs/plans/S20-TASK-WORKLOAD-1.md §6: isOverdue trong TASK_CORE_SELECT vẫn viết tay (task-core.repository.ts) — gom về taskOverduePredicate (đụng mọi projection); buildReadScopeExists vẫn tự chứa nhánh người được giao — gộp là WO riêng có hồi quy đủ 9 người gọi (H3b).",
+    ],
+    done_when: [
+      "Plan + plan-review trước (chạm bộ dựng phạm vi đọc dùng bởi 9 người gọi, có đường ghi) — liệt kê từng người gọi + ca hồi quy của nó",
+      "isOverdue mọi projection tính từ taskOverduePredicate; ca so cờ isOverdue của chi tiết/danh sách với bộ lọc overdue=true",
+      "buildReadScopeExists gọi buildAssigneeScopeExists; unit neo chéo cũ chuyển thành ca tương đương SQL; deny-path + cross-tenant xanh",
+      "FULL gate (security + database + silent-failure) trước PR; `bash harness/check.sh --all --lane-db` xanh",
+    ],
+    notes: [
+      "🔴 Seed 12/11/2026 ở sổ hậu merge Đợt 4 (#677 · #678 · #679). Vùng phạm vi quyền ⇒ FULL gate. Ước 150–250 USD.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPLOCKS-2",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Dọn sau khi thống nhất khoá nhóm: gom bộ dựng giữ khoá dùng chung cho các int-spec đua của nhóm · thông báo của thao tác nhóm dùng tên nhóm đọc sau khoá · xem lại các đường ghi còn lại trên bài nhóm",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/helpers/**",
+      "apps/api/test/integration/social-group*.int-spec.ts",
+      "apps/api/src/social/**",
+      "docs/plans/S16-SOCIAL-GROUPLOCKS-2.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [
+      "S16-SOCIAL-POSTGROUPTOCTOU-1",
+      "S16-SOCIAL-GROUPPOSTDEL-1",
+      "S16-SOCIAL-GROUPDELRACE-1",
+    ],
+    src: ["Nợ N1 · N2 · N4 của PR #678 (plan giữ ngoài repo)."],
+    done_when: [
+      "N1: các hàm giữ khoá/đua trùng nhau giữa hai int-spec đua của nhóm gom về `apps/api/test/helpers/`; số ca và kỳ vọng giữ nguyên, hai tệp vẫn xanh trên LANE_DB",
+      "N2: thông báo phát từ thao tác đổi vai/thành viên dùng tên nhóm đọc SAU khi khoá (ca: đổi tên đồng thời ⇒ thông báo mang tên mới)",
+      "N4: rà các đường ghi còn lại trên bài nhóm (bình luận · phản ứng · sửa bài); ghi quyết định có/không cần khoá kèm lý do vào plan; nếu cần thì có ca RED trước",
+    ],
+    notes: [
+      "🟡 Seed 12/11/2026 ở sổ hậu merge Đợt 4 (#677 · #678 · #679). N3 ghi vào S16-SOCIAL-GROUPLOCKTIMEOUT-1. Ước 60–120 USD.",
+    ],
+  },
+  {
+    id: "S19-QA-CHUNKIPC-1",
+    module: "QA",
+    layer: "DEVOPS",
+    title:
+      "chunk-test xếp sập «Channel closed» (ERR_IPC_CHANNEL_CLOSED của tinypool) vào crash hạ tầng ⇒ chạy lại + chia đôi, thay vì «0 test ĐỎ THẬT» làm mất trọn 40 tệp khỏi cổng strict",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "harness/chunk-test.mjs",
+      "harness/chunk-bisect.mjs",
+      "harness/chunk-bisect.test.mjs",
+      "harness/chunk-test*.test.mjs",
+      "harness/check.sh",
+      "docs/plans/S19-QA-CHUNKIPC-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Cổng strict nhánh #679 (11/11/2026): chunk 21/23 chết ở CẢ 2 lượt với `Unhandled Rejection: Error: Channel closed` / `ERR_IPC_CHANNEL_CLOSED`; chunk-test in «0 test ĐỎ THẬT», không chạy lại, không chia ⇒ «880/920 file chạy» + guard storage báo thiếu nhãn. Đối chứng xen kẽ: cùng 40 tệp + storage live chết 2/3 lượt ở CẢ nhánh không đụng vùng đó ⇒ lỗi hạ tầng.",
+    ],
+    done_when: [
+      "Bộ phân loại kết quả chunk coi `ERR_IPC_CHANNEL_CLOSED` / «Channel closed» (và lỗi chỉ gồm Unhandled Rejection hạ tầng, 0 ca × ) là crash hạ tầng ⇒ đi nhánh chạy lại + chia đôi của rescueRun",
+      "Ca test tất định trong chunk-bisect.test.mjs với đầu ra giả của tinypool: trước vá đỏ, sau vá xanh; ca đỏ thật (có ×) vẫn KHÔNG bị chạy lại",
+      "Ghi số đo trước/sau vào plan; không đổi chunk-size/max-forks trong WO này",
+    ],
+    notes: ["🟡 Seed 12/11/2026 ở sổ hậu merge Đợt 4 (#677 · #678 · #679). Ước 40–80 USD."],
   },
 ];
