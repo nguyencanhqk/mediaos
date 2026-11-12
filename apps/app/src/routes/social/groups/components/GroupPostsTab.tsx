@@ -8,9 +8,11 @@
  *    server trả 200 RỖNG ở đây (manage không nới đọc bài), nên «Nhóm chưa có bài» sẽ là câu SAI;
  *  - còn lại ⇒ không feed (không tới được thực tế: nhóm kín không thuộc thì `032` đã 404).
  *
- * 🔴 KHÔNG `useFeedRealtime`, KHÔNG `NewFeedPostsBadge` (done_when #3): WS chỉ có room CÔNG TY
- * (`wsFeedPostCreatedEventSchema.audience = literal('company')`, `emitPostCreated` bỏ bài nhóm) — gắn
- * vào đây là badge đếm bài CÔNG TY trong trang nhóm. Badge theo nhóm chờ `S16-SOCIAL-BE-2C`.
+ * Badge «N bài mới» THEO NHÓM (S16-SOCIAL-FEGROUPBADGE-1): `useGroupFeedRealtime` đếm biến thể
+ * `audience:'group'` của `feed:post.created` (`wsFeedPostCreatedEventSchema` là union `company | group`) theo
+ * `groupId` của payload đã parse. Room `co:{c}:feedgroup:{g}` do server join, có cổng membership `active` +
+ * sàn scope Company (`view:feed`) — client chỉ lắng nghe, không suy diễn quyền. KHÔNG dùng `useFeedRealtime`
+ * ở đây: hook đó chỉ đếm bài công ty (badge feed chính loại bài nhóm). Bấm badge ⇒ refetch feed đúng nhóm.
  *
  * Khoá query và lời gọi dùng CÙNG một object `{groupId, sort}` (plan §8 M1 — `sort:'newest'` từng lọt
  * vào plan dù API chỉ nhận `active|latest`). Khoá nằm dưới `feed.allOf()` ⇒ đăng/xoá/ẩn bài tự làm mới.
@@ -22,6 +24,8 @@ import { useTranslation } from "react-i18next";
 import { ShieldCheck } from "lucide-react";
 import { socialApi, socialKeys } from "@mediaos/web-core";
 import type { FeedGroupDto, FeedPostDto } from "@mediaos/contracts";
+import { useGroupFeedRealtime } from "@/hooks/use-feed-realtime-groups";
+import { NewFeedPostsBadge } from "../../feed/components/NewFeedPostsBadge";
 import { ActionErrorBanner } from "../../feed/components/ActionErrorBanner";
 import { CreatePostNotices } from "../../feed/components/CreatePostNotices";
 import { FeedComposer } from "../../feed/components/FeedComposer";
@@ -43,7 +47,10 @@ export function GroupPostsTab({ group, caps }: GroupPostsTabProps): React.ReactE
   const actions = useFeedActions();
   const createPost = useCreatePost({ groupId: group.id });
 
-  const feedParams = React.useMemo(() => ({ groupId: group.id, sort: "latest" as const }), [group.id]);
+  const feedParams = React.useMemo(
+    () => ({ groupId: group.id, sort: "latest" as const }),
+    [group.id],
+  );
   const feedQuery = useInfiniteQuery({
     queryKey: socialKeys.feed.list(feedParams),
     initialPageParam: undefined as string | undefined,
@@ -52,6 +59,13 @@ export function GroupPostsTab({ group, caps }: GroupPostsTabProps): React.ReactE
     enabled: caps.canReadPosts,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
+
+  const realtime = useGroupFeedRealtime();
+  const { reset: resetGroupBadge } = realtime;
+  const onBadgeClick = React.useCallback(() => {
+    void feedQuery.refetch();
+    resetGroupBadge(group.id);
+  }, [feedQuery, resetGroupBadge, group.id]);
 
   const posts: FeedPostDto[] = React.useMemo(
     () => (feedQuery.data?.pages ?? []).flatMap((p) => p.data),
@@ -97,7 +111,11 @@ export function GroupPostsTab({ group, caps }: GroupPostsTabProps): React.ReactE
       />
 
       {caps.canPost && (
-        <FeedComposer groupId={group.id} onSubmit={createPost.submit} isSubmitting={createPost.isPending} />
+        <FeedComposer
+          groupId={group.id}
+          onSubmit={createPost.submit}
+          isSubmitting={createPost.isPending}
+        />
       )}
       {/* Chỉ khi THỰC SỰ bấm «Tham gia» được: hàng `pending` trên nhóm public (sau khi nhóm kín đổi
           sang công khai, `033` không tự duyệt) chỉ có «Huỷ yêu cầu» — mời «tham gia» là 409. */}
@@ -106,6 +124,8 @@ export function GroupPostsTab({ group, caps }: GroupPostsTabProps): React.ReactE
           {t("groups.actions.publicNonMemberHint")}
         </p>
       )}
+
+      <NewFeedPostsBadge count={realtime.countFor(group.id)} onClick={onBadgeClick} />
 
       <FeedPostList
         posts={posts}
