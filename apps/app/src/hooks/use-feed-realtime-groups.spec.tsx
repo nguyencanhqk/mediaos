@@ -103,6 +103,20 @@ describe("useGroupFeedRealtime", () => {
     expect(result.current.countFor(GROUP_B)).toBe(1);
   });
 
+  it("hai instance cùng mount: reset ở một nơi xoá đếm nhóm đó ở cả hai", () => {
+    const rail = renderHook(() => useGroupFeedRealtime());
+    const tab = renderHook(() => useGroupFeedRealtime());
+    act(() => {
+      emit(groupPost(GROUP_A));
+      emit(groupPost(GROUP_B));
+    });
+    expect(rail.result.current.countFor(GROUP_A)).toBe(1);
+    act(() => tab.result.current.reset(GROUP_A));
+    expect(tab.result.current.countFor(GROUP_A)).toBe(0);
+    expect(rail.result.current.countFor(GROUP_A)).toBe(0);
+    expect(rail.result.current.countFor(GROUP_B)).toBe(1);
+  });
+
   it("bài công ty và payload sai hợp đồng không được đếm", () => {
     const { result } = renderHook(() => useGroupFeedRealtime());
     act(() => {

@@ -21,3 +21,6 @@
 
 ## Nợ
 - Widget không tự refetch khi đang đứng sẵn trong trang nhóm đó (số vẫn tăng tới khi bấm dòng). Không có đếm lúc ngoại tuyến/khởi động (chỉ từ lúc kết nối).
+
+## Sổ vết (vá review)
+- [LOW] react-a11y — hai instance `useGroupFeedRealtime` (rail + tab) đếm riêng, badge rail kẹt ở nhóm đang xem: đã vá bằng kênh reset dùng chung ở mức module (reset ở một nơi ⇒ xoá ở mọi instance mount); ca `hai instance cùng mount` trong `use-feed-realtime-groups.spec.tsx` (đỏ trên mã cũ, xanh sau vá).

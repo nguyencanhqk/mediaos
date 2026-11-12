@@ -20,15 +20,32 @@ export interface GroupFeedRealtime {
   reset: (groupId: string) => void;
 }
 
+/**
+ * Mọi instance đang mount (rail «Nhóm của tôi» + tab bài của nhóm) cùng nghe một kênh reset: xoá đếm ở
+ * MỘT nơi ⇒ xoá ở MỌI nơi, nên badge rail không còn kẹt ở nhóm mà người dùng đang xem.
+ */
+const resetListeners = new Set<(groupId: string) => void>();
+
 export function useGroupFeedRealtime(): GroupFeedRealtime {
   const canViewFeed = useCan("view", "feed");
   const [counts, setCounts] = useState<Readonly<Record<string, number>>>({});
 
-  const reset = useCallback((groupId: string) => {
+  const resetLocal = useCallback((groupId: string) => {
     setCounts((prev) => {
       if (!(groupId in prev)) return prev;
       return Object.fromEntries(Object.entries(prev).filter(([id]) => id !== groupId));
     });
+  }, []);
+
+  useEffect(() => {
+    resetListeners.add(resetLocal);
+    return () => {
+      resetListeners.delete(resetLocal);
+    };
+  }, [resetLocal]);
+
+  const reset = useCallback((groupId: string) => {
+    for (const fn of resetListeners) fn(groupId);
   }, []);
 
   const countFor = useCallback((groupId: string) => counts[groupId] ?? 0, [counts]);
