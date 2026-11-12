@@ -76,14 +76,14 @@ describe("khoảng tuần", () => {
 
   it("› khoá khi khoảng đang kết thúc ở tuần hiện tại; bấm không phát gì", () => {
     const { onRangeChange } = renderFilters();
-    expect(button("Tiến 8 tuần")).toBeDisabled();
+    expect(button("Tiến 8 tuần")).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(button("Tiến 8 tuần"));
     expect(onRangeChange).not.toHaveBeenCalled();
   });
 
   it("🔴 biên múi giờ: khoảng kết thúc 04/10 — 00:30 thứ Hai giờ VN thì › MỞ (tuần hiện tại đã là 05–11/10)", () => {
     const { onRangeChange } = renderFilters({ range: TWO_WEEKS, isCustomRange: true });
-    expect(button("Tiến 2 tuần")).toBeEnabled();
+    expect(button("Tiến 2 tuần")).not.toHaveAttribute("aria-disabled");
     fireEvent.click(button("Tiến 2 tuần"));
     expect(onRangeChange).toHaveBeenCalledWith({ from: "2026-09-28", to: "2026-10-11" });
   });
@@ -91,7 +91,7 @@ describe("khoảng tuần", () => {
   it("đối chứng: 23:59 Chủ nhật 04/10 giờ VN thì › KHOÁ với cùng khoảng đó", () => {
     vi.setSystemTime(VN_SUNDAY);
     renderFilters({ range: TWO_WEEKS, isCustomRange: true });
-    expect(button("Tiến 2 tuần")).toBeDisabled();
+    expect(button("Tiến 2 tuần")).toHaveAttribute("aria-disabled", "true");
   });
 
   it("› đưa về đúng khoảng mặc định (8 tuần tới hết tuần hiện tại) ⇒ phát `null` (không ghi lên URL)", () => {
@@ -146,7 +146,7 @@ describe("ô số tuần", () => {
 describe("«Về hiện tại»", () => {
   it("đang ở mặc định ⇒ khoá", () => {
     const { onRangeChange } = renderFilters();
-    expect(button(RESET)).toBeDisabled();
+    expect(button(RESET)).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(button(RESET));
     expect(onRangeChange).not.toHaveBeenCalled();
   });
@@ -183,5 +183,27 @@ describe("ô đơn vị", () => {
   it("không có đơn vị nào trong phạm vi ⇒ ô chỉ còn «Tất cả đơn vị»", () => {
     renderFilters({ units: [] });
     expect(optionTexts(unitSelect())).toEqual(["Tất cả đơn vị"]);
+  });
+});
+
+describe("nút đang giữ focus KHÔNG tự `disabled` (focus không rơi về BODY)", () => {
+  it.each([["Tiến 8 tuần"], [RESET]])(
+    "«%s» ở trạng thái khoá: focus được, kích hoạt không phát gì, vẫn giữ focus",
+    (name) => {
+      const { onRangeChange } = renderFilters();
+      const target = button(name);
+      target.focus();
+      expect(target).toHaveFocus();
+      fireEvent.click(target);
+      expect(target).toHaveFocus();
+      expect(target).toHaveAttribute("aria-disabled", "true");
+      expect(target).not.toHaveAttribute("disabled");
+      expect(onRangeChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("«Lùi 8 tuần» luôn mở (không có khoảng khoá) ⇒ không aria-disabled", () => {
+    renderFilters();
+    expect(button("Lùi 8 tuần")).not.toHaveAttribute("aria-disabled");
   });
 });

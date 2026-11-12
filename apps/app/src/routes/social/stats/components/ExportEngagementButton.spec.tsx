@@ -149,7 +149,7 @@ describe("ALLOW — xuất đúng thứ đang xem", () => {
   it("nút KHÔNG có cổng quyền riêng: chỉ `view:feed` vẫn thấy nút (052 và 053 chung cặp — cổng là của route)", () => {
     setCaps({ "view:feed": true });
     renderButton();
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
   });
 });
 
@@ -159,15 +159,35 @@ describe("đang xuất · chưa có dữ liệu", () => {
     renderButton();
     clickExport();
     const busy = await screen.findByRole("button", { name: EXPORTING });
-    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute("aria-disabled", "true");
+    expect(busy).not.toHaveAttribute("disabled");
     expect(busy.getAttribute("aria-busy")).toBe("true");
 
     await act(async () => {
       pending.resolve(fileResult());
       await Promise.resolve();
     });
-    await waitFor(() => expect(exportButton()).toBeEnabled());
+    await waitFor(() => expect(exportButton()).not.toHaveAttribute("aria-disabled"));
     expect(triggerBlobDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it("kích hoạt bằng bàn phím: nút giữ focus suốt lượt xuất; bấm lại khi đang xuất ⇒ không request thứ hai", async () => {
+    const pending = hangExport();
+    renderButton();
+    exportButton().focus();
+    clickExport();
+    const busy = await screen.findByRole("button", { name: EXPORTING });
+    expect(busy).toHaveFocus();
+    fireEvent.click(busy);
+    expect(exportEngagement).toHaveBeenCalledTimes(1);
+    expect(busy).toHaveFocus();
+
+    await act(async () => {
+      pending.resolve(fileResult());
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(exportButton()).not.toHaveAttribute("aria-disabled"));
+    expect(exportButton()).toHaveFocus();
   });
 
   it("bấm 2 lần trong CÙNG một nhịp ⇒ đúng 1 lời gọi", async () => {
@@ -184,7 +204,7 @@ describe("đang xuất · chưa có dữ liệu", () => {
 
   it("chưa có dữ liệu (`range: null`) ⇒ nút khoá, bấm không gọi gì", () => {
     renderButton({ range: null });
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute("aria-disabled", "true");
     clickExport();
     expect(exportEngagement).not.toHaveBeenCalled();
   });
@@ -203,7 +223,7 @@ describe("DENY / lỗi — có dải lỗi, KHÔNG tải tệp", () => {
     expect(document.body.textContent).not.toContain(err.message);
     expect(triggerBlobDownload).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
   });
 
   it("403 tầng quyền ⇒ `forbidden`, không nút «Thử lại», 0 lần tải", async () => {
@@ -282,12 +302,15 @@ describe("yêu cầu treo", () => {
     clickExport();
     await advanceFakeTimers(TIMEOUT_MS - 1);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("button", { name: EXPORTING })).toBeDisabled();
+    expect(screen.getByRole("button", { name: EXPORTING })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
 
     await advanceFakeTimers(1);
     await advanceFakeTimers(0);
     expect(alertReason()).toBe("generic");
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
 
     pending.resolve(fileResult());
     await advanceFakeTimers(0);

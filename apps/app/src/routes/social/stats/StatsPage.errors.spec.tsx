@@ -155,7 +155,7 @@ describe("T6 — hai loại 403 tách nhau", () => {
     expect(alert).not.toHaveTextContent("Forbidden resource");
     expect(recoveryButtons()).toEqual([]);
     expectNoStaleData();
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute("aria-disabled", "true");
   });
 });
 
@@ -215,7 +215,7 @@ describe("T6 — đang lỗi thì KHÔNG còn số liệu cũ", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveAttribute("data-reason", "generic");
     expectNoStaleData();
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("cache CÒN số liệu của đúng khoá đó nhưng lượt đọc lại hỏng ⇒ vẫn ẩn số liệu; «Thử lại» đang chạy thì nút khoá", async () => {
@@ -257,7 +257,7 @@ describe("Giữ số liệu cũ lúc đang tải — CHỈ khi cùng bộ lọc 
     expect(screen.queryByRole("status", { name: LOADING })).toBeNull();
     expect(screen.getByTestId("stats-data")).toHaveAttribute("aria-busy", "true");
     // Tham số đã đổi nhưng số liệu trên màn còn của khoảng cũ ⇒ không cho xuất «thứ đang xem».
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute("aria-disabled", "true");
 
     next.resolve(
       makeEngagement({ range: { from: "2026-09-07", to: "2026-09-20", weeks: 2 }, rows: [] }),
@@ -265,7 +265,7 @@ describe("Giữ số liệu cũ lúc đang tải — CHỈ khi cùng bộ lọc 
 
     expect(await within(await filters()).findByText("07/09/2026 – 20/09/2026")).toBeInTheDocument();
     expect(screen.getByTestId("stats-data")).not.toHaveAttribute("aria-busy");
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
   });
 
   it("DENY — đổi ĐƠN VỊ ⇒ KHÔNG giữ SỐ LIỆU của bộ lọc cũ (khung chờ thay cho bảng / thẻ / biểu đồ), nhưng thanh bộ lọc CÒN và ô «Đơn vị» vẫn giữ focus", async () => {

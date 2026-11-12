@@ -85,7 +85,7 @@ describe("Thanh bộ lọc dựng từ khoảng ĐÃ YÊU CẦU, không từ res
 
     fireEvent.click(back);
     await waitFor(() => expect(lastArg()).toStrictEqual({ from: "2026-09-07", to: "2026-09-20" }));
-    expect(back).not.toBeDisabled();
+    expect(back).not.toHaveAttribute("aria-disabled");
     expect(back).toHaveFocus();
     fireEvent.click(within(await filters()).getByRole("button", { name: "Lùi 2 tuần" }));
 

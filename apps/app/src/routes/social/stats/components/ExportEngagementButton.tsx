@@ -160,9 +160,10 @@ export function ExportEngagementButton({
         type="button"
         variant="outline"
         size="sm"
-        disabled={isPending || range === null}
+        aria-disabled={isPending || range === null ? true : undefined}
+        className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         aria-busy={isPending ? true : undefined}
-        onClick={runExport}
+        onClick={isPending || range === null ? undefined : runExport}
         data-testid="stats-export-button"
       >
         {isPending ? (
