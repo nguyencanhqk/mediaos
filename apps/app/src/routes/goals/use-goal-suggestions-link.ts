@@ -17,15 +17,26 @@ export interface LinkTarget {
   readonly projectId: string | null;
 }
 
-/** Khử trùng khoá theo JSON — mỗi prefix invalidate đúng một lần (tránh hủy-và-nạp-lại trùng). */
-function uniqueKeys(keys: readonly QueryKey[]): QueryKey[] {
-  const seen = new Set<string>();
-  return keys.filter((k) => {
-    const id = JSON.stringify(k);
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
+/** k có phải tiền tố (theo từng phần tử, so JSON) của other — invalidate theo tiền tố đã phủ other. */
+function isPrefixOf(k: QueryKey, other: QueryKey): boolean {
+  return (
+    k.length <= other.length &&
+    k.every((part, i) => JSON.stringify(part) === JSON.stringify(other[i]))
+  );
+}
+
+/**
+ * Khử trùng khoá: bỏ khoá trùng và khoá đã được một khoá tiền tố khác phủ (invalidateQueries khớp theo tiền tố)
+ * — mỗi truy vấn chỉ bị invalidate một lần (tránh hủy-và-nạp-lại trùng).
+ */
+export function uniqueKeys(keys: readonly QueryKey[]): QueryKey[] {
+  const out: QueryKey[] = [];
+  for (const k of keys) {
+    if (out.some((o) => isPrefixOf(o, k))) continue;
+    for (let i = out.length - 1; i >= 0; i -= 1) if (isPrefixOf(k, out[i])) out.splice(i, 1);
+    out.push(k);
+  }
+  return out;
 }
 
 export async function refresh(queryClient: QueryClient, target: LinkTarget): Promise<void> {
