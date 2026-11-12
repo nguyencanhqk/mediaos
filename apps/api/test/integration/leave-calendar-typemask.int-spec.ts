@@ -262,10 +262,14 @@ describe.skipIf(!runIsolatedDb)("S20-SEC-LEAVETYPEMASK-1 che loại nghỉ ở s
 
   it("R2 DENY: widget lịch nghỉ — người xem cấp đội không duyệt thấy mục không có loại", async () => {
     const { items } = await widgetItems(A, p.v);
-    const masked = items.filter((i) => i.leaveTypeName === null && i.leaveTypeMasked === true);
-    expect(masked.length).toBeGreaterThanOrEqual(1);
-    // tên loại chỉ có thể xuất hiện ở đơn của chính người xem (nhánh đơn của mình).
-    expect(items.filter((i) => i.leaveTypeName === typeNameA).length).toBeLessThanOrEqual(1);
+    // đơn của cấp dưới trực tiếp (ngoài quyền xem loại) bị che — chỉ đích danh dòng.
+    const subordinate = entry(items, p.ev.leaveId);
+    expect(subordinate.leaveTypeName).toBeNull();
+    expect(subordinate.leaveTypeMasked).toBe(true);
+    // đơn của chính người xem đứng cạnh vẫn thấy loại.
+    const own = entry(items, p.v.leaveId);
+    expect(own.leaveTypeMasked).toBe(false);
+    expect(own.leaveTypeName).toBe(typeNameA);
   });
 
   it("R2 ALLOW cạnh: manager chuẩn (view + approve @Team) thấy tên loại trong widget", async () => {
