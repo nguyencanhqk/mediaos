@@ -67,6 +67,8 @@ export default {
     allSources: "Tất cả nguồn",
     sources: { assigned: "Được giao", created: "Tôi tạo", watched: "Theo dõi" },
     showDone: "Hiện việc đã xong",
+    closedCapped: "Chỉ hiện tối đa {{count}} việc đã xong gần nhất.",
+    closedLoadError: "Không tải được việc đã xong. Danh sách việc đang mở vẫn hiển thị.",
     quickFilterLabel: "Lọc nhanh theo tiêu đề",
     quickFilterPlaceholder: "Lọc nhanh theo tiêu đề… (phím /)",
     due: "Hạn {{value}}",
@@ -96,6 +98,12 @@ export default {
     watcherOnly: "Bạn chỉ theo dõi việc này.",
   },
   // S20-SEC-GOALNAMEDTO-1 — việc gắn mục tiêu mà người xem không có quyền xem (server chỉ trả cờ).
+  // S20-TASK-MYTASKSLOAD-1 (US-GOAL-NV-07) — chip mục tiêu trên dòng việc + nhãn lọc /tasks?goalId=.
+  goalChip: {
+    filtering: "Đang lọc theo mục tiêu {{label}}",
+    filteringUnknown: "Đang lọc theo một mục tiêu",
+    clear: "Bỏ lọc mục tiêu",
+  },
   goalRef: {
     restricted: "Có mục tiêu",
     restrictedHint: "Việc này đang gắn một mục tiêu mà bạn không có quyền xem.",
@@ -241,8 +249,14 @@ export default {
     days: "{{count}} ngày",
     unknownName: "(Không rõ tên)",
     unassigned: "Chưa giao",
-    empty: { title: "Đội đang không có việc mở", description: "Mọi việc trong phạm vi của bạn đã xong hoặc chưa có việc nào." },
-    error: { title: "Không tải được dữ liệu việc của đội", description: "Kiểm tra kết nối rồi thử lại." },
+    empty: {
+      title: "Đội đang không có việc mở",
+      description: "Mọi việc trong phạm vi của bạn đã xong hoặc chưa có việc nào.",
+    },
+    error: {
+      title: "Không tải được dữ liệu việc của đội",
+      description: "Kiểm tra kết nối rồi thử lại.",
+    },
     loading: "Đang tải dữ liệu việc của đội…",
     tableLabel: "Số việc đang mở theo từng người",
     overdueLinkFor: "{{label}} — {{name}}",

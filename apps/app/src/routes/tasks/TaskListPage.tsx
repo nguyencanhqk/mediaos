@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
@@ -9,6 +9,7 @@ import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { useTaskReadColumns } from "./task-columns";
 import { TaskListToolbar } from "./TaskListToolbar";
+import { TaskGoalFilterNotice } from "./TaskGoalChip";
 import { hasActiveTaskListFilters, toTaskListQuery } from "./task-list-search";
 import { useTaskListSearch } from "./use-task-list-search";
 import { TaskFormDrawer } from "./TaskFormDrawer";
@@ -62,7 +63,18 @@ export function TaskListPage() {
     staleTime: 30_000,
   });
 
-  const items = data ?? [];
+  // S20-TASK-MYTASKSLOAD-1 — lọc phòng thủ: API cũ (chưa hiểu `goalId`) bỏ khoá lạ và trả danh sách KHÔNG lọc;
+  // chặn để nhãn «Đang lọc theo mục tiêu» không sai. No-op trên API mới (server chỉ trả việc của mục tiêu đó).
+  const items = useMemo(
+    () => (data ?? []).filter((r) => !search.goalId || r.goalId === search.goalId),
+    [data, search.goalId],
+  );
+  const goalRow = search.goalId ? items.find((r) => r.goalCode) : undefined;
+  const goalLabel = goalRow
+    ? goalRow.goalName
+      ? `${goalRow.goalCode} — ${goalRow.goalName}`
+      : (goalRow.goalCode ?? null)
+    : null;
   // S20-TASK-BULKACTIONS-1 — cột chọn chỉ có khi người dùng làm được ÍT NHẤT một hành động hàng loạt.
   const bulkPerms = useTaskBulkPermissions();
   const canBulk = bulkPerms.canAssign || bulkPerms.canDeadline || bulkPerms.canStatus;
@@ -158,6 +170,10 @@ export function TaskListPage() {
       >
         <TaskListToolbar search={search} update={update} />
       </PageHeader>
+
+      {search.goalId && (
+        <TaskGoalFilterNotice label={goalLabel} onClear={() => update({ goalId: undefined })} />
+      )}
 
       <DataTable
         columns={columns}

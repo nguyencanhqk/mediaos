@@ -30,6 +30,8 @@ export interface TaskListSearch {
   assignee?: string;
   project?: string;
   department?: string;
+  /** S20-TASK-MYTASKSLOAD-1 — lọc theo mục tiêu (uuid); chip mục tiêu trên dòng việc dẫn tới đây. */
+  goalId?: string;
   dueFrom?: string;
   dueTo?: string;
   overdue?: true;
@@ -44,6 +46,7 @@ export const TASK_LIST_FILTER_KEYS = [
   "assignee",
   "project",
   "department",
+  "goalId",
   "dueFrom",
   "dueTo",
   "overdue",
@@ -101,6 +104,7 @@ export function validateTaskListSearch(raw: Record<string, unknown>): TaskListSe
     ["assignee", uuidParam(raw.assignee)],
     ["project", uuidParam(raw.project)],
     ["department", uuidParam(raw.department)],
+    ["goalId", uuidParam(raw.goalId)],
     ["dueFrom", dateParam(raw.dueFrom)],
     ["dueTo", dateParam(raw.dueTo)],
     ["overdue", flagParam(raw.overdue)],
@@ -126,6 +130,7 @@ export function toTaskListQuery(
     assigneeEmployeeId: search.assignee,
     projectId: search.project,
     departmentId: search.department,
+    goalId: search.goalId,
     dueFrom: search.dueFrom ? new Date(search.dueFrom).toISOString() : undefined,
     dueTo: search.dueTo ? new Date(search.dueTo).toISOString() : undefined,
     overdue: search.overdue,

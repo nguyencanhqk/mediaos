@@ -4,6 +4,7 @@ import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
 import { TaskRowDeadlineControl, TaskRowStatusControl } from "./TaskRowQuickEdit";
 import { useTaskDrawer } from "./task-drawer-nav";
+import { TaskGoalChip } from "./TaskGoalChip";
 
 /**
  * useTaskReadColumns — 7 cột ĐỌC dùng chung cho bảng công việc (TASK-SCREEN-005 danh sách + SCREEN-010
@@ -25,13 +26,20 @@ export function useTaskReadColumns(): ColumnDef<TaskCoreResponseDto>[] {
       accessorKey: "title",
       header: t("tasks.list.columns.title"),
       cell: ({ row }) => (
-        <button
-          type="button"
-          className="font-medium text-foreground underline-offset-2 hover:underline"
-          onClick={() => openTask(row.original.id)}
-        >
-          {row.original.title}
-        </button>
+        <div className="flex min-w-0 flex-col items-start gap-1">
+          <button
+            type="button"
+            className="font-medium text-foreground underline-offset-2 hover:underline"
+            onClick={() => openTask(row.original.id)}
+          >
+            {row.original.title}
+          </button>
+          <TaskGoalChip
+            goalId={row.original.goalId}
+            goalCode={row.original.goalCode}
+            goalName={row.original.goalName}
+          />
+        </div>
       ),
     },
     {

@@ -451,7 +451,11 @@ export const taskKeys = {
   list: (params?: Record<string, unknown>) => [...rootKeys.tasks, "list", params] as const,
   detail: (id: string) => [...rootKeys.tasks, "detail", id] as const,
   // S4-FE-TASK-2 — GET /tasks/my (TASK-API-210, MyTasksPage). Không tham số (gộp 3 nguồn server-side).
-  my: () => [...rootKeys.tasks, "my"] as const,
+  // S20-TASK-MYTASKSLOAD-1: `includeClosed` đổi khoá (mặc định/false CHUẨN HOÁ về khoá không tham số).
+  my: (params?: { includeClosed?: boolean }) =>
+    params?.includeClosed === true
+      ? ([...rootKeys.tasks, "my", { includeClosed: true }] as const)
+      : ([...rootKeys.tasks, "my"] as const),
   // S20-TASK-WORKLOAD-1 — GET /tasks/workload («Đội của tôi»), khoá theo bộ lọc dự án/phòng ban.
   workload: (params?: Record<string, unknown>) => [...rootKeys.tasks, "workload", params] as const,
   projects: {

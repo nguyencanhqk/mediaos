@@ -59,6 +59,12 @@ import {
 } from "./task-core.mapper";
 import { decorateTaskRows, reloadTaskDtoTx, type GoalRefSource } from "./task-row-decorations";
 import { TaskGoalRefPolicy, type GoalRefUser, type GoalRefViewer } from "./task-goal-ref.policy";
+import { isGoalFilterVisibleTx } from "./task-core.goal-filter";
+import {
+  loadMyTasksForListTx,
+  selectMyTasksTx,
+  type MyTasksListResult,
+} from "./task-my-tasks.query";
 import {
   allowedActionRequests,
   computeTaskAllowedActions,
@@ -186,8 +192,14 @@ export class TaskCoreService {
   ): Promise<TaskCoreResponseDto[]> {
     const limit = this.clampLimit(query.limit);
     const offset = query.offset && query.offset > 0 ? query.offset : 0;
+    // S20-TASK-MYTASKSLOAD-1 — bộ lọc mục tiêu: viewer resolve NGOÀI tx, chỉ khi có `goalId`.
+    const goalViewer = query.goalId ? await this.goalRefs.resolveViewer(user) : undefined;
     const rows = await this.db.withTenant(user.companyId, async (tx) => {
       const scopeExists = await this.resolveReadScopeExists(tx, user);
+      if (query.goalId && goalViewer) {
+        const ok = await isGoalFilterVisibleTx(this.goalRefs, tx, goalViewer, query.goalId);
+        if (!ok) return [];
+      }
       return this.repo.listTx(
         tx,
         user.companyId,
@@ -206,6 +218,7 @@ export class TaskCoreService {
           // sách của vỏ workspace dự án bật để giữ parity; list toàn cục + /my + quá hạn KHÔNG bật
           // (D-37 "danh sách ≠ con số").
           parentOnly: query.parentOnly,
+          goalId: query.goalId,
           limit,
           offset,
         },
@@ -388,11 +401,39 @@ export class TaskCoreService {
 
   async getMyTasks(user: RequestUser): Promise<MyTaskItemDto[]> {
     // Gate read:task (TASK-API-210 — /my vẫn cần quyền đọc task); KHÔNG lọc scope (task CỦA CHÍNH MÌNH).
+    // Người gọi nội bộ (dashboard · /me) — giữ nguyên: MỌI việc, kể cả đã đóng.
     await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "task");
     const rows = await this.db.withTenant(user.companyId, async (tx) => {
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-      return this.repo.findMyTasksTx(tx, user.companyId, user.id, actorEmp?.id ?? null);
+      return selectMyTasksTx(tx, user.companyId, user.id, actorEmp?.id ?? null, "all");
     });
+    return this.decorateMyRows(user, rows);
+  }
+
+  /** GET /tasks/my cho FE (S20-TASK-MYTASKSLOAD-1): mở + (tuỳ chọn) tối đa N việc đóng; cùng đường trang trí/che. */
+  async getMyTasksForList(
+    user: RequestUser,
+    opts: { includeClosed: boolean },
+  ): Promise<{ items: MyTaskItemDto[]; truncated: boolean; total: number }> {
+    await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "task");
+    const res: MyTasksListResult = await this.db.withTenant(user.companyId, async (tx) => {
+      const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+      return loadMyTasksForListTx(
+        tx,
+        user.companyId,
+        user.id,
+        actorEmp?.id ?? null,
+        opts.includeClosed,
+      );
+    });
+    return {
+      items: await this.decorateMyRows(user, res.items),
+      truncated: res.truncated,
+      total: res.total,
+    };
+  }
+
+  private async decorateMyRows(user: RequestUser, rows: MyTaskRow[]): Promise<MyTaskItemDto[]> {
     const deco = await this.resolveSignedUrls(user.companyId, rows, { user });
     return rows.map((r) => this.toMyDto(r, signedUrlsForRow(r, deco)));
   }

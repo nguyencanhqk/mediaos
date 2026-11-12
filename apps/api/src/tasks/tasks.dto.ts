@@ -16,6 +16,7 @@ import {
   createTaskSchema,
   listTaskActivityQuerySchema,
   listTaskCoreQuerySchema,
+  myTasksQuerySchema,
   moveTaskStateRequestSchema,
   updateLabelSchema,
   updateProjectStateSchema,
@@ -64,6 +65,9 @@ export class UpdateLabelDto extends createZodDto(updateLabelSchema) {}
 
 /** GET /tasks — filter status/priority/assignee/project/due-range/overdue + pagination (read:task). */
 export class ListTaskCoreQueryDto extends createZodDto(listTaskCoreQuerySchema) {}
+
+/** S20-TASK-MYTASKSLOAD-1 — query GET /tasks/my (`includeClosed` chặt: rác ⇒ 400). */
+export class MyTasksQueryDto extends createZodDto(myTasksQuerySchema) {}
 
 /** GET /tasks/workload — lọc projectId/departmentId (S20-TASK-WORKLOAD-1; id rác ⇒ 400). */
 export class TaskWorkloadQueryDto extends createZodDto(taskWorkloadQuerySchema) {}

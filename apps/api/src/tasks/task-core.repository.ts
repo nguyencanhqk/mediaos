@@ -194,7 +194,7 @@ export interface TaskCorePatchValues {
 }
 
 // Projection dùng chung cho list/detail/my — cột thô + join tên. `is_overdue` tính tại DB (now() UTC).
-const TASK_CORE_SELECT = sql`
+export const TASK_CORE_SELECT = sql`
   tk.id                        AS id,
   tk.company_id                AS "companyId",
   tk.title                     AS title,
@@ -235,7 +235,7 @@ const TASK_CORE_SELECT = sql`
 // trong mệnh đề ON: phòng thủ chiều sâu — FK `(company_id, goal_id)` đã là FK GHÉP cùng-tenant từ
 // migration 0535 (trước đó là FK đơn cột, finding gate S5-GOAL-DB-1); giữ vế này để JOIN tự đúng tenant
 // kể cả khi ràng buộc DB đổi.
-const TASK_CORE_JOINS = sql`
+export const TASK_CORE_JOINS = sql`
   from tasks tk
   left join projects pr          on pr.id = tk.project_id
   left join employee_profiles ae on ae.id = tk.main_assignee_employee_id
@@ -560,55 +560,6 @@ export class TaskCoreRepository {
        returning id
     `);
     return (res.rows as unknown as { id: string }[])[0];
-  }
-
-  /**
-   * GET /tasks/my (TASK-API-210) — 3 nguồn hợp nhất, DEDUPE theo task.id (join 1:1 ⇒ không nhân dòng):
-   *   assigned = main_assignee_employee_id=actorEmployeeId OR assignee_user_id=actorUserId (back-compat);
-   *   created  = creator_user_id=actorUserId;
-   *   watched  = EXISTS task_watchers (employee_id=actorEmployeeId, status∈Active/Muted, chưa xoá).
-   * source ưu tiên assigned > created > watched. Sort: quá hạn lên đầu → due_at ASC NULLS LAST → mới nhất.
-   */
-  async findMyTasksTx(
-    tx: TenantTx,
-    companyId: string,
-    actorUserId: string,
-    actorEmployeeId: string | null,
-  ): Promise<MyTaskRow[]> {
-    const assignedPredicate = actorEmployeeId
-      ? sql`(tk.main_assignee_employee_id = ${actorEmployeeId} or tk.assignee_user_id = ${actorUserId})`
-      : sql`tk.assignee_user_id = ${actorUserId}`;
-    const createdPredicate = sql`tk.creator_user_id = ${actorUserId}`;
-    const watchedExists = actorEmployeeId
-      ? sql`exists (
-          select 1 from task_watchers tw
-           where tw.company_id = ${companyId}
-             and tw.task_id = tk.id
-             and tw.employee_id = ${actorEmployeeId}
-             and tw.status in ('Active','Muted')
-             and tw.deleted_at is null
-        )`
-      : sql`false`;
-
-    const sourceExpr = sql`case
-        when ${assignedPredicate} then 'assigned'
-        when ${createdPredicate}  then 'created'
-        else 'watched'
-      end`;
-
-    const res = await tx.execute(sql`
-      select ${TASK_CORE_SELECT}, ${sourceExpr} as source
-      ${TASK_CORE_JOINS}
-      where tk.company_id = ${companyId}
-        and tk.deleted_at is null
-        and (${assignedPredicate} or ${createdPredicate} or ${watchedExists})
-      order by
-        (tk.due_at is not null and tk.due_at < now()
-           and (tk.task_status is null or tk.task_status not in ('Done','Cancelled'))) desc,
-        tk.due_at asc nulls last,
-        tk.created_at desc
-    `);
-    return res.rows as unknown as MyTaskRow[];
   }
 
   // ── Actor / employee lookup ──────────────────────────────────────────────────

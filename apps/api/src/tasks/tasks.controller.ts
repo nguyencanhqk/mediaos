@@ -1,3 +1,5 @@
+import { paginated } from "../common/pagination";
+import { buildMyTasksPagination } from "./task-my-tasks.query";
 import {
   Body,
   Controller,
@@ -40,6 +42,7 @@ import {
   CreateTaskCoreDto,
   ListTaskActivityQueryDto,
   ListTaskCoreQueryDto,
+  MyTasksQueryDto,
   MoveTaskStateDto,
   UpdateTaskChecklistDto,
   UpdateTaskChecklistItemDto,
@@ -104,8 +107,13 @@ export class TasksController {
   @Get("my")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "task")
-  getMyTasks(@Req() req: AuthenticatedRequest) {
-    return this.taskCore.getMyTasks(req.user);
+  async getMyTasks(@Req() req: AuthenticatedRequest, @Query() query: MyTasksQueryDto) {
+    // S20-TASK-MYTASKSLOAD-1 — mặc định CHỈ việc mở; `includeClosed=true` thêm tối đa MY_TASKS_CLOSED_LIMIT
+    // việc đã đóng + khối `pagination` (has_next = bị cắt). `data` luôn là MẢNG TRẦN (FE cũ parse được).
+    const includeClosed = query.includeClosed === true;
+    const res = await this.taskCore.getMyTasksForList(req.user, { includeClosed });
+    if (!includeClosed) return res.items;
+    return paginated(res.items, buildMyTasksPagination(res.items.length, res.total, res.truncated));
   }
 
   /**
