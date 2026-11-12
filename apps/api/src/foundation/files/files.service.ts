@@ -1,6 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -8,7 +6,6 @@ import {
   Logger,
   NotFoundException,
   PayloadTooLargeException,
-  UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import {
@@ -25,20 +22,24 @@ import {
 import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../../storage/storage-adapter.port";
-import { buildFileKey, InvalidStorageKeyError } from "../../storage/file-storage-key";
-import { UnsupportedAttachmentError } from "../../storage/object-storage.service";
 import type { FileLink, FileRecord, NewFileLink, NewFileRecord } from "../../db/schema/files";
 import { SettingService } from "../settings/setting.service";
 import { FileAccessLogService } from "./file-access-log.service";
 import {
-  CONFIRM_FAILURE_ERROR_CODE,
   MALFORMED_EXTENSION_MESSAGE,
-  confirmContentTypeFailure,
-  describeSignRejection,
   registerContentRejection,
   resolveRegisterExtension,
-  type ConfirmFailureReason,
 } from "./file-content-guard";
+import { FileConfirmFlow } from "./file-confirm-flow";
+import { logFileDeny, type FileDenyLogEntry } from "./file-deny-log";
+import {
+  buildKeyOrThrow,
+  loadUploadLimits,
+  mimeRejected,
+  newFileId,
+  sanitizeFilename,
+  signUploadOrReject,
+} from "./file-upload-support";
 import { fileDownloadStateDenyReason, type FileDownloadDenyReason } from "./file-download-state";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
@@ -77,13 +78,6 @@ interface RequestUser {
   companyId: string;
 }
 
-/** system_settings keys (precedence company > system > default via SettingService). */
-const SETTING_MAX_UPLOAD_MB = "file.max_upload_size_mb";
-const SETTING_ALLOWED_MIME = "file.allowed_mime_types";
-const SETTING_BLOCKED_EXT = "file.blocked_extensions";
-const BYTES_PER_MB = 1024 * 1024;
-const DEFAULT_MAX_UPLOAD_MB = 25; // mirror setting-defaults.ts — only used if resolve returns non-number.
-
 /**
  * TODO(S2-FND-JOBS-1) — TEMP_FILE_CLEANUP: file register ở trạng thái 'Pending' mà client KHÔNG bao giờ
  * PUT + confirm sẽ mồ côi (is_temporary/expires_at + index đã sẵn ở schema/files.ts). WO S2-FND-JOBS-1
@@ -109,6 +103,7 @@ const DEFAULT_MAX_UPLOAD_MB = 25; // mirror setting-defaults.ts — only used if
 @Injectable()
 export class FileService {
   private readonly logger = new Logger(FileService.name);
+  private readonly confirmFlow: FileConfirmFlow;
 
   constructor(
     private readonly db: DatabaseService,
@@ -119,7 +114,16 @@ export class FileService {
     private readonly policy: FilePolicyService,
     private readonly settings: SettingService,
     @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
-  ) {}
+  ) {
+    this.confirmFlow = new FileConfirmFlow({
+      db,
+      fileRepo,
+      accessLog,
+      audit,
+      storage,
+      logger: this.logger,
+    });
+  }
 
   // ─── Upload ────────────────────────────────────────────────────────────────
 
@@ -137,16 +141,17 @@ export class FileService {
   async upload(user: RequestUser, input: UploadFileInput): Promise<RegisterFileResponse> {
     // 0. Kiểu bị từ chối CỨNG — xét TRƯỚC khi đọc cấu hình công ty (allowlist có mở cũng không qua).
     if (registerContentRejection(input.declaredMimeType, null) === "active-mime") {
-      throw this.mimeRejected(input.declaredMimeType);
+      throw mimeRejected(input.declaredMimeType);
     }
 
     // 1. Validate MIME ∈ allowlist + size ≤ ceiling (TẦNG SERVICE, từ settings). Sai → 4xx, KHÔNG ghi.
-    const { allowedMime, maxBytes, blockedExtensions } = await this.loadUploadLimits(
+    const { allowedMime, maxBytes, blockedExtensions } = await loadUploadLimits(
+      this.settings,
       user.companyId,
     );
     if (!allowedMime.has(input.declaredMimeType)) {
       // FOUNDATION-FILE-ERR-MIME: MIME ngoài allowlist (server không tin Content-Type client).
-      throw this.mimeRejected(input.declaredMimeType);
+      throw mimeRejected(input.declaredMimeType);
     }
     if (input.sizeBytes > maxBytes) {
       // FOUNDATION-FILE-ERR-SIZE: vượt trần dung lượng.
@@ -157,7 +162,7 @@ export class FileService {
     }
 
     // 2. Sanitize originalName (chống path-traversal).
-    const safeName = this.sanitizeFilename(input.originalName);
+    const safeName = sanitizeFilename(input.originalName);
 
     // 2b. Đuôi của tên sẽ phát ra khi tải về: phải đúng dạng, rồi mới so MỌI dạng tên với setting
     //     file.blocked_extensions HỢP tập chặn CỨNG trong code (file-content-guard.ts). Reject TRƯỚC khi ghi.
@@ -187,8 +192,8 @@ export class FileService {
     }
 
     // 3. Server-derive storage key {companyId}/files/{fileId} — client KHÔNG cấp path.
-    const fileId = randomUUID();
-    const storageKey = this.buildKeyOrThrow(user.companyId, fileId, safeName);
+    const fileId = newFileId();
+    const storageKey = buildKeyOrThrow(user.companyId, fileId, safeName);
 
     const moduleCode = input.moduleCode ?? FOUNDATION_FILE_MODULE;
     const entityType = input.entityType ?? FOUNDATION_FILE_ENTITY;
@@ -248,7 +253,7 @@ export class FileService {
 
       // Presign PUT SAU khi ghi metadata (bên trong tx: presign lỗi ⇒ rollback insert/audit/log). Key
       // server-derived, adapter re-assert prefix tenant + clamp TTL; URL ephemeral (KHÔNG persist — #2.3).
-      const signed = await this.signUploadOrReject(created);
+      const signed = await signUploadOrReject(this.storage, this.logger, created);
 
       return {
         fileId: created.id,
@@ -259,172 +264,15 @@ export class FileService {
     });
   }
 
-  /** 415 FOUNDATION-FILE-ERR-MIME — chung cho lưới cứng, allowlist công ty và trần kiểu của tầng ký. */
-  private mimeRejected(declaredMimeType: string): UnsupportedMediaTypeException {
-    return new UnsupportedMediaTypeException({
-      code: FOUNDATION_FILE_ERROR_CODES.MIME,
-      message: `${FOUNDATION_FILE_ERROR_CODES.MIME}: MIME không được phép: ${declaredMimeType}`,
-    });
-  }
-
-  /** Ký PUT cho hàng vừa ghi. Trần cứng của tầng ký ⇒ 415/413; lỗi khác ném lại nguyên. LUÔN ném ⇒ tx rollback hàng. */
-  private async signUploadOrReject(row: FileRecord): ReturnType<StorageAdapter["signedUrl"]> {
-    const { storagePath: key, mimeType: contentType, fileSizeBytes: sizeBytes } = row;
-    try {
-      return await this.storage.signedUrl({ key, contentType, sizeBytes });
-    } catch (err) {
-      if (!(err instanceof UnsupportedAttachmentError)) throw err;
-      // 4xx dưới đây trùng thông điệp với allowlist công ty ⇒ để lại dấu vết riêng cho nguyên nhân này.
-      this.logger.warn(describeSignRejection(row.companyId, contentType, err));
-      if (err.kind === "content-type") throw this.mimeRejected(contentType);
-      throw new PayloadTooLargeException({
-        code: FOUNDATION_FILE_ERROR_CODES.SIZE,
-        message: `${FOUNDATION_FILE_ERROR_CODES.SIZE}: kích thước file ngoài giới hạn của tầng lưu trữ.`,
-      });
-    }
-  }
-
   // ─── Confirm (S2-FND-FILE-2) ───────────────────────────────────────────────────
 
-  /**
-   * POST /foundation/files/:id/confirm — pha 3 của upload E2E. Gate `upload:foundation-file` ép ở controller.
-   * CHỈ file 'Pending' trong tenant (RLS + WHERE company_id + upload_status='Pending'). Verify object THẬT ở
-   * storage: tồn tại + ContentLength == size khai báo + kiểu đang LƯU khớp MIME đã đăng ký; checksum_sha256 tính
-   * server-side từ bytes (KHÔNG tin client). Khớp → 'Uploaded' + persist checksum. Absent → 'Failed'+lý do → 422
-   * CONFIRM_ABSENT. Size/kiểu lệch → 'Failed'+lý do → 409 CONFIRM_MISMATCH (KHÔNG persist checksum). Đã 'Uploaded'
-   * → idempotent 200. Non-Pending khác (Failed/Deleted) → 409 NOT_PENDING. Audit ghi CÙNG tx withTenant (#1/#2).
-   */
-  async confirmUpload(
+  /** POST /foundation/files/:id/confirm — pha 3 của upload E2E; thân ở `file-confirm-flow.ts`. */
+  confirmUpload(
     user: RequestUser,
     fileId: string,
-    _input: ConfirmUploadInput,
+    input: ConfirmUploadInput,
   ): Promise<ConfirmUploadResponse> {
-    const row = await this.db.withTenant(user.companyId, (tx) =>
-      this.fileRepo.findByIdTx(user.companyId, fileId, tx),
-    );
-    if (!row) throw new NotFoundException("File không tồn tại");
-    // Tệp TẠM hệ thống sinh tự chốt qua ServerFileService (S15-PAYROLL-BE-5B); chỉ CHỦ tệp xác nhận (S19-SEC-
-    // FILEMETAGATE-1; wrapper module kiểm chủ trước). Cả hai ⇒ 404 như tệp vắng: không lộ tồn tại/cỡ, không đổi trạng thái.
-    if (row.isTemporary || row.ownerUserId !== user.id)
-      throw new NotFoundException("File không tồn tại");
-
-    // Idempotent: đã Uploaded → trả trạng thái hiện tại (confirm gọi lại vô hại). Non-Pending khác → 409.
-    if (row.uploadStatus === "Uploaded") {
-      return { fileId: row.id, uploadStatus: "Uploaded", sizeBytes: row.fileSizeBytes };
-    }
-    if (row.uploadStatus !== "Pending") {
-      throw new ConflictException({
-        code: FOUNDATION_FILE_ERROR_CODES.NOT_PENDING,
-        message: `${FOUNDATION_FILE_ERROR_CODES.NOT_PENDING}: file không ở trạng thái Pending (hiện: ${row.uploadStatus}).`,
-      });
-    }
-
-    // Verify object THẬT ở storage (HEAD) — không throw khi absent (adapter trả exists=false).
-    const stat = await this.storage.stat({ key: row.storagePath, companyId: user.companyId });
-    if (!stat.exists) {
-      await this.failConfirm(user, row, "object-absent");
-      throw new UnprocessableEntityException({
-        code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_ABSENT,
-        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_ABSENT}: object chưa tồn tại ở storage (client chưa PUT?).`,
-      });
-    }
-    if (stat.sizeBytes !== row.fileSizeBytes) {
-      await this.failConfirm(user, row, "size-mismatch");
-      throw new ConflictException({
-        code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
-        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: size storage (${stat.sizeBytes}) khác khai báo (${row.fileSizeBytes}).`,
-      });
-    }
-    // Kiểu storage đang LƯU phải khớp kiểu đã đăng ký; lệch HOẶC storage không trả kiểu ⇒ Failed (fail-closed),
-    // mỗi trường hợp một lý do riêng + một dòng warn (không mang khoá object).
-    const typeFailure = confirmContentTypeFailure(row, stat.contentType);
-    if (typeFailure !== null) {
-      this.logger.warn(typeFailure.logLine);
-      await this.failConfirm(user, row, typeFailure.reason);
-      throw new ConflictException({
-        code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
-        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: ${typeFailure.message}`,
-      });
-    }
-
-    // Đọc bytes + tính checksum server-side (KHÔNG tin client). NOT dùng cho download (chỉ checksum).
-    const bytes = await this.storage.getBytes({ key: row.storagePath, companyId: user.companyId });
-    const checksum = createHash("sha256").update(bytes).digest("hex");
-
-    return this.db.withTenant(user.companyId, async (tx) => {
-      const affected = await this.fileRepo.markUploadedTx(
-        user.companyId,
-        fileId,
-        { checksumSha256: checksum, sizeBytes: row.fileSizeBytes },
-        tx,
-      );
-      // Race: một request khác đã đổi trạng thái giữa chừng → coi như không còn Pending → 409 (không audit).
-      if (affected === 0) {
-        throw new ConflictException({
-          code: FOUNDATION_FILE_ERROR_CODES.NOT_PENDING,
-          message: `${FOUNDATION_FILE_ERROR_CODES.NOT_PENDING}: file không còn ở trạng thái Pending.`,
-        });
-      }
-
-      // Audit 'file'/FileUploadConfirmed — CÙNG tx (BẤT BIẾN #2). checksum KHÔNG đưa vào after (masker che
-      // + tránh lộ; after chỉ metadata trạng thái). storage_path CỐ Ý không đưa vào.
-      await this.audit.record(tx, {
-        action: "FileUploadConfirmed",
-        objectType: "file",
-        objectId: fileId,
-        actorUserId: user.id,
-        actorType: "User",
-        resultStatus: "Success",
-        dataScope: "Company",
-        before: { uploadStatus: row.uploadStatus },
-        after: { uploadStatus: "Uploaded", fileSizeBytes: row.fileSizeBytes },
-      });
-
-      await this.accessLog.record(tx, {
-        fileId,
-        action: "Upload",
-        accessGranted: true,
-        actorUserId: user.id,
-        permissionCode: "FOUNDATION.FILE.UPLOAD",
-      });
-
-      return { fileId, uploadStatus: "Uploaded", sizeBytes: row.fileSizeBytes };
-    });
-  }
-
-  /**
-   * Ghi confirm THẤT BẠI: Pending → Failed + lý do (KHÔNG persist checksum) + audit CÙNG tx. Row đã đổi
-   * trạng thái (affected=0) → bỏ qua audit (không ghi trạng thái sai). Mã lỗi tra theo lý do (bảng đủ khoá).
-   */
-  private async failConfirm(
-    user: RequestUser,
-    row: FileRecord,
-    reason: ConfirmFailureReason,
-  ): Promise<void> {
-    await this.db.withTenant(user.companyId, async (tx) => {
-      const affected = await this.fileRepo.markFailedTx(user.companyId, row.id, reason, tx);
-      if (affected === 0) return;
-      await this.audit.record(tx, {
-        action: "FileUploadFailed",
-        objectType: "file",
-        objectId: row.id,
-        actorUserId: user.id,
-        actorType: "User",
-        resultStatus: "Failure",
-        dataScope: "Company",
-        before: { uploadStatus: row.uploadStatus },
-        after: { uploadStatus: "Failed" },
-        errorCode: CONFIRM_FAILURE_ERROR_CODE[reason],
-      });
-      await this.accessLog.record(tx, {
-        fileId: row.id,
-        action: "Upload",
-        accessGranted: false,
-        actorUserId: user.id,
-        deniedReason: reason,
-        permissionCode: "FOUNDATION.FILE.UPLOAD",
-      });
-    });
+    return this.confirmFlow.confirmUpload(user, fileId, input);
   }
 
   // ─── Read (metadata) ──────────────────────────────────────────────────
@@ -844,89 +692,6 @@ export class FileService {
     }
   }
 
-  /**
-   * Sanitize originalName chống path-traversal: bỏ NUL + ASCII control chars, lấy basename (phần sau dấu
-   * phân tách cuối '/' hoặc '\\'), từ chối tên rút gọn về '.'/'..'/rỗng. Trả tên an toàn để LƯU METADATA
-   * (KHÔNG dùng cho key — key luôn server-derive bằng fileId UUID, không bao giờ chứa tên này → mọi mưu
-   * đồ path-traversal qua originalName là vô hại với storage_path).
-   */
-  private sanitizeFilename(name: string): string {
-    // Bỏ NUL + ASCII control chars (0x00–0x1F, 0x7F) theo char-code (KHÔNG dùng control-char regex literal).
-    let noControl = "";
-    for (const ch of name) {
-      const code = ch.charCodeAt(0);
-      if (code <= 0x1f || code === 0x7f) continue;
-      noControl += ch;
-    }
-    // Lấy basename: phần sau dấu phân tách cuối cùng ('/' hoặc '\\').
-    const base = noControl.split(/[/\\]/).pop() ?? "";
-    const trimmed = base.trim();
-    if (trimmed === "" || trimmed === "." || trimmed === "..") {
-      throw new BadRequestException({
-        code: FOUNDATION_FILE_ERROR_CODES.FILENAME,
-        message: `${FOUNDATION_FILE_ERROR_CODES.FILENAME}: tên file không hợp lệ sau khi chuẩn hoá.`,
-      });
-    }
-    return trimmed.slice(0, 500);
-  }
-
-  /** Build key server-side; InvalidStorageKeyError → 400 (không lộ chi tiết). */
-  private buildKeyOrThrow(companyId: string, fileId: string, originalName: string): string {
-    try {
-      return buildFileKey({ companyId, fileId, originalName });
-    } catch (err) {
-      if (err instanceof InvalidStorageKeyError) {
-        throw new BadRequestException({
-          code: FOUNDATION_FILE_ERROR_CODES.KEY,
-          message: `${FOUNDATION_FILE_ERROR_CODES.KEY}: không thể tạo storage key hợp lệ.`,
-        });
-      }
-      throw err;
-    }
-  }
-
-  /**
-   * Đọc giới hạn upload từ system_settings (precedence company > system > default qua SettingService —
-   * S1-FND-SETTING-1). Nếu resolve trả kiểu rác → fallback default size; allowlist FAIL-CLOSED (thiếu
-   * allowlist ⇒ Set rỗng ⇒ mọi MIME bị từ chối, KHÔNG fail-open).
-   */
-  private async loadUploadLimits(companyId: string): Promise<{
-    allowedMime: Set<string>;
-    maxBytes: number;
-    blockedExtensions: Set<string>;
-  }> {
-    const resolved = await this.settings.resolveMany(companyId, [
-      SETTING_ALLOWED_MIME,
-      SETTING_MAX_UPLOAD_MB,
-      SETTING_BLOCKED_EXT,
-    ]);
-    const byKey = new Map(resolved.map((r) => [r.key, r.value]));
-
-    const mimeValue = byKey.get(SETTING_ALLOWED_MIME);
-    const allowedMime = new Set<string>(
-      Array.isArray(mimeValue)
-        ? (mimeValue as unknown[]).filter((v): v is string => typeof v === "string")
-        : [],
-    );
-
-    const sizeValue = byKey.get(SETTING_MAX_UPLOAD_MB);
-    const maxMb =
-      typeof sizeValue === "number" && sizeValue > 0 ? sizeValue : DEFAULT_MAX_UPLOAD_MB;
-
-    // blocked_extensions normalize về lowercase, không dấu chấm (khớp resolveRegisterExtension). Thiếu setting →
-    // Set rỗng (không chặn theo extension; MIME-allowlist + extension↔MIME vẫn là hàng rào).
-    const blockedValue = byKey.get(SETTING_BLOCKED_EXT);
-    const blockedExtensions = new Set<string>(
-      Array.isArray(blockedValue)
-        ? (blockedValue as unknown[])
-            .filter((v): v is string => typeof v === "string")
-            .map((v) => v.replace(/^\./, "").toLowerCase())
-        : [],
-    );
-
-    return { allowedMime, maxBytes: maxMb * BYTES_PER_MB, blockedExtensions };
-  }
-
   private async loadLinkContext(
     user: RequestUser,
     fileId: string,
@@ -961,40 +726,11 @@ export class FileService {
   }
 
   /** Ghi 1 dòng file_access_log DENY (access_granted=false + denied_reason) trong tx tenant RIÊNG. */
-  private async logDeny(
-    user: FileDecisionActor,
-    entry: {
-      fileId: string;
-      action: Parameters<FileAccessLogService["record"]>[1]["action"];
-      permissionCode: string;
-      reason: string;
-      moduleCode?: string;
-      entityType?: string;
-      entityId?: string;
-      fileLinkId?: string;
-      /** `fileId` do client gửi, chưa nạp hàng: chỉ ghi khi hàng có trong tenant (FK của log kiểm vượt RLS). */
-      unverifiedFileId?: boolean;
-    },
-  ): Promise<void> {
-    await this.db.withTenant(user.companyId, async (tx) => {
-      if (
-        entry.unverifiedFileId &&
-        !(await this.fileRepo.findByIdTx(user.companyId, entry.fileId, tx))
-      ) {
-        return;
-      }
-      await this.accessLog.record(tx, {
-        fileId: entry.fileId,
-        action: entry.action,
-        accessGranted: false,
-        actorUserId: user.id,
-        deniedReason: entry.reason,
-        permissionCode: entry.permissionCode,
-        moduleCode: entry.moduleCode,
-        entityType: entry.entityType,
-        entityId: entry.entityId,
-        fileLinkId: entry.fileLinkId,
-      });
-    });
+  private logDeny(user: FileDecisionActor, entry: FileDenyLogEntry): Promise<void> {
+    return logFileDeny(
+      { db: this.db, fileRepo: this.fileRepo, accessLog: this.accessLog },
+      user,
+      entry,
+    );
   }
 }
