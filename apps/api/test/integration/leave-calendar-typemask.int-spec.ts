@@ -147,10 +147,10 @@ describe.skipIf(!runIsolatedDb)("S20-SEC-LEAVETYPEMASK-1 che loại nghỉ ở s
     return { items, raw: JSON.stringify(res.body) };
   }
 
-  function entry(items: CalItem[], leaveId: string): CalItem {
+  function entry<T extends { id?: unknown }>(items: T[], leaveId: string): T {
     const found = items.find((i) => i.id === leaveId);
     expect(found, `đơn ${leaveId} phải có trong lịch`).toBeDefined();
-    return found as CalItem;
+    return found as T;
   }
 
   function expectMasked(it: CalItem) {
