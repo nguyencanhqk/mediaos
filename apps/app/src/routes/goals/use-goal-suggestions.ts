@@ -91,14 +91,23 @@ export function useGoalSuggestions(
 
   const candidates = useMemo(
     () =>
-      enabled
+      enabled && !combined.isError
         ? rankCandidates(
             combined.goals,
             { projectId, assigneeEmployeeId, departmentId, dueAt },
             date,
           )
         : [],
-    [enabled, combined.goals, projectId, assigneeEmployeeId, departmentId, dueAt, date],
+    [
+      enabled,
+      combined.isError,
+      combined.goals,
+      projectId,
+      assigneeEmployeeId,
+      departmentId,
+      dueAt,
+      date,
+    ],
   );
 
   return {
@@ -113,23 +122,28 @@ export function useGoalSuggestions(
 
 /**
  * Bản mệnh lệnh của cùng truy vấn (dùng sau «tạo nhanh», khi chưa có ô nào mount): cùng khoá cache ⇒ ấm
- * thì không gọi lại. Lỗi mạng ⇒ mảng rỗng (gợi ý là phần thêm — không được làm hỏng việc vừa tạo).
+ * thì không gọi lại. Một truy vấn lỗi ⇒ mảng rỗng (gợi ý là phần thêm — không được làm hỏng việc vừa tạo).
  */
 export async function fetchGoalCandidates(
   queryClient: QueryClient,
   ctx: GoalSuggestContext,
 ): Promise<GoalCoreResponseDto[]> {
   const date = suggestionDate(ctx);
-  const lists = await Promise.all(
+  const settled = await Promise.allSettled(
     goalQueryParams(ctx, date).map((params: Partial<ListGoalsQueryRequest>) =>
-      queryClient
-        .fetchQuery({
-          queryKey: goalKeys.list(params),
-          queryFn: () => goalApi.listGoals(params),
-          staleTime: GOAL_SUGGEST_STALE_MS,
-        })
-        .catch(() => [] as GoalCoreResponseDto[]),
+      queryClient.fetchQuery({
+        queryKey: goalKeys.list(params),
+        queryFn: () => goalApi.listGoals(params),
+        staleTime: GOAL_SUGGEST_STALE_MS,
+      }),
     ),
   );
+  // Một truy vấn neo hỏng ⇒ không biết có ứng viên khác hay không ⇒ KHÔNG đề xuất (tránh «chỉ một» sai).
+  const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failed) {
+    console.warn("[goal-suggest] tải ứng viên lỗi — bỏ qua đề xuất", failed.reason);
+    return [];
+  }
+  const lists = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
   return rankCandidates(lists.flat(), ctx, date);
 }

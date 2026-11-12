@@ -122,6 +122,46 @@ describe("TaskQuickAdd — gợi ý mục tiêu sau khi tạo", () => {
     expect(screen.queryByText(/Đã gắn vào/)).toBeNull();
   });
 
+  it("một truy vấn ứng viên hỏng ⇒ KHÔNG đề xuất (tránh «chỉ một» sai) và có log", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockList.mockImplementation(async (q: { projectId?: string }) => {
+      if (q.projectId) return [GOAL];
+      throw new Error("boom");
+    });
+    renderQuickAdd();
+    typeAndEnter("Gọi khách");
+    await waitFor(() => expect(mockList.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(screen.queryByText(/Tính vào/)).toBeNull();
+    warn.mockRestore();
+  });
+
+  it("server trả cảnh báo mềm ⇒ toast cảnh báo kèm nội dung, không «Đã gắn vào» trơn", async () => {
+    mockLink.mockResolvedValue({
+      goalId: "g-prj",
+      linked: 1,
+      alreadyLinked: 0,
+      warnings: [
+        { taskId: "t-9", taskCode: null, message: "Việc không thuộc phòng của mục tiêu." },
+      ],
+    });
+    renderQuickAdd();
+    typeAndEnter("Gọi khách");
+    fireEvent.click(await screen.findByRole("button", { name: "Tính vào" }));
+    expect(
+      await screen.findByText(/Đã gắn vào G-0007. Lưu ý: Việc không thuộc phòng của mục tiêu./),
+    ).toBeInTheDocument();
+  });
+
+  it("linked = 0 (đã gắn từ trước) ⇒ không báo «Đã gắn vào» giả", async () => {
+    mockLink.mockResolvedValue({ goalId: "g-prj", linked: 0, alreadyLinked: 1, warnings: [] });
+    renderQuickAdd();
+    typeAndEnter("Gọi khách");
+    fireEvent.click(await screen.findByRole("button", { name: "Tính vào" }));
+    expect(await screen.findByText(/đã được gắn vào G-0007 từ trước/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Đã gắn vào/)).toBeNull();
+  });
+
   it("không ứng viên ⇒ không toast gợi ý", async () => {
     mockList.mockResolvedValue([]);
     renderQuickAdd();

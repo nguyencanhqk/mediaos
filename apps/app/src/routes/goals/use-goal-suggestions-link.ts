@@ -72,12 +72,21 @@ export function useGoalSuggestLink() {
   /** Gắn rồi báo toast «Đã gắn · Gỡ». Ném lỗi khi server từ chối (không toast thành công). */
   const link = useCallback(
     async (target: LinkTarget): Promise<void> => {
-      await goalApi.linkTasks(target.goalId, { taskIds: [target.taskId] });
+      const result = await goalApi.linkTasks(target.goalId, { taskIds: [target.taskId] });
       await refresh(queryClient, target);
-      toast.success(t("goalSuggest.linked", { goal: target.goalCode }), {
-        key: `goal-suggest-linked:${target.taskId}`,
-        action: { label: t("goalSuggest.undo"), onClick: () => void undo(target) },
-      });
+      const goal = target.goalCode;
+      const key = `goal-suggest-linked:${target.taskId}`;
+      if (result.linked === 0) {
+        toast.warning(t("goalSuggest.alreadyLinked", { goal }), { key });
+        return;
+      }
+      const warnings = result.warnings.map((w) => w.message).join(" ");
+      const action = { label: t("goalSuggest.undo"), onClick: () => void undo(target) };
+      if (warnings) {
+        toast.warning(t("goalSuggest.linkedWarning", { goal, warning: warnings }), { key, action });
+        return;
+      }
+      toast.success(t("goalSuggest.linked", { goal }), { key, action });
     },
     [queryClient, t, undo],
   );

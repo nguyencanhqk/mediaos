@@ -661,6 +661,8 @@ export default {
   // S20-GOAL-SUGGEST-1 (US-GOAL-NV-92/93) — gợi ý gắn việc vào mục tiêu khi tạo việc: toast + lý do «chưa gắn».
   goalSuggest: {
     linked: "Đã gắn vào {{goal}}",
+    linkedWarning: "Đã gắn vào {{goal}}. Lưu ý: {{warning}}",
+    alreadyLinked: "Việc này đã được gắn vào {{goal}} từ trước",
     undo: "Gỡ",
     undoFailed: "Chưa gỡ được khỏi {{goal}}. Mở chi tiết việc để gỡ.",
     offer: "Đã tạo «{{code}}» · Tính vào {{goal}}?",

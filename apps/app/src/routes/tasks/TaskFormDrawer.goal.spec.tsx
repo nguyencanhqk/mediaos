@@ -68,7 +68,7 @@ function goal(over: Partial<GoalCoreResponseDto>): GoalCoreResponseDto {
 
 const CREATED = {
   id: "t-new",
-  
+
   title: "Việc mới",
   projectId: null,
 } as unknown as TaskCoreResponseDto;
@@ -154,6 +154,26 @@ describe("TaskFormDrawer (tạo) — ô Mục tiêu", () => {
     await waitFor(() => expect(mockLink).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(CREATED));
     expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("đang «Thử gắn lại» thì Esc KHÔNG đóng hộp thoại giữa chừng (onSuccess chưa gọi)", async () => {
+    mockLink.mockRejectedValueOnce(new ApiError(422, "GOAL-ERR-005", "Kỳ đã chốt."));
+    let finish: (v: unknown) => void = () => {};
+    mockLink.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+    const onSuccess = renderCreate();
+    const select = (await screen.findByLabelText(/Mục tiêu/)) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("g-me"));
+    submitWithTitle("Việc mới");
+    await screen.findByTestId("task-created-unlinked");
+
+    fireEvent.click(screen.getByRole("button", { name: "Thử gắn lại" }));
+    await waitFor(() => expect(mockLink).toHaveBeenCalledTimes(2));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(screen.getByTestId("task-created-unlinked")).toBeInTheDocument();
+
+    finish({ goalId: "g-me", linked: 1, alreadyLinked: 0, warnings: [] });
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(CREATED));
   });
 
   it("bước gắn 404 ⇒ «bạn không có quyền ghi việc này vào mục tiêu»", async () => {

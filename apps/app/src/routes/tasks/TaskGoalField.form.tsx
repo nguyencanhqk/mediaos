@@ -176,7 +176,9 @@ export function TaskCreatedUnlinkedDialog({
   return (
     <Dialog
       open
-      onClose={onClose}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
       title={t("goalSuggest.createdTitle", { code })}
       footer={
         <>
