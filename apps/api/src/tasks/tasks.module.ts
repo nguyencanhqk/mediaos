@@ -16,6 +16,8 @@ import { TaskActivityService } from "./task-activity.service";
 // S4-TASK-BE-2 (additive) — Task core (SPEC-06): CRUD + my-tasks + filter, tách khỏi Task Hub legacy.
 import { TaskCoreService } from "./task-core.service";
 import { TaskCoreRepository } from "./task-core.repository";
+import { TaskWorkloadService } from "./task-workload.service";
+import { TaskWorkloadRepository } from "./task-workload.repository";
 // S20-SEC-TASKPATCHGATE-1 (additive) — cổng trường của PATCH /tasks/:taskId (hạn · ưu tiên · người phụ trách).
 import { TaskPatchFieldGate } from "./task-patch-field-gate";
 // S20-TASK-ASSIGNNOTI-1 (additive) — bộ phát sự kiện giao việc dùng chung (form Tạo/Sửa + route chuyên trách).
@@ -98,6 +100,9 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     // S4-TASK-BE-2 — Task core stack (tái dùng TasksRepository cho project guard + TaskActivityService).
     TaskCoreService,
     TaskCoreRepository,
+    // S20-TASK-WORKLOAD-1 (additive) — «Đội của tôi».
+    TaskWorkloadService,
+    TaskWorkloadRepository,
     TaskPatchFieldGate,
     TaskAssignEvents,
     // S4-TASK-BE-3 — Task actions crown-FSM stack (tái dùng TaskCoreRepository/DataScope/Outbox/Setting).

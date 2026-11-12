@@ -213,6 +213,8 @@ export default {
     socialPolls: "Bình chọn",
     socialIdeas: "Sáng kiến",
     socialGroups: "Nhóm",
+    // S20-TASK-WORKLOAD-1 — «Đội của tôi» (route `/tasks/team`, ROUTE_REGISTRY — khai Ở ĐÂY như SOCIAL).
+    taskTeam: "Đội của tôi",
     socialGroupDetail: "Trang nhóm",
     socialKudos: "Vinh danh",
     socialModeration: "Kiểm duyệt",

@@ -41,6 +41,7 @@ leave.audit-logs | mod=LEAVE | label=Audit log nghỉ phép | path=/leave/audit-
 ### TASK
 task.overview | mod=TASK | label=Danh sách công việc | path=/tasks | icon=kanban-square | group=overview | order=10 | any=[TASK.TASK.VIEW,TASK.PROJECT.VIEW]
 task.my-tasks | mod=TASK | label=Việc của tôi | path=/tasks/my-tasks | icon=check-square | group=operation | order=20 | any=[TASK.TASK.VIEW]
+task.team | mod=TASK | label=Đội của tôi | path=/tasks/team | icon=users | group=operation | order=22 | any=[TASK.TASK.VIEW]
 task.overdue | mod=TASK | label=Task quá hạn | path=/tasks/overdue | icon=alert-triangle | group=operation | order=25 | any=[TASK.TASK.VIEW]
 task.projects | mod=TASK | label=Dự án | path=/tasks/projects | icon=folder-kanban | group=operation | order=30 | any=[TASK.PROJECT.VIEW]
 ### NOTI

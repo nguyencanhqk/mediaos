@@ -20,6 +20,7 @@ import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { TasksService } from "./tasks.service";
 import { TaskCoreService } from "./task-core.service";
+import { TaskWorkloadService } from "./task-workload.service";
 import { TaskActionsService } from "./task-actions.service";
 // S4-TASK-BE-4 (additive) — comment/mention · checklist/items · activity feed (Kanban move tái dùng
 // CHÍNH TaskActionsService.changeStatus ở trên, KHÔNG service riêng).
@@ -44,6 +45,7 @@ import {
   UpdateTaskChecklistItemDto,
   UpdateTaskCommentDto,
   ReorderSubtasksDto,
+  TaskWorkloadQueryDto,
   UpdateTaskCoreDto,
   UpdateTaskStatusDto,
 } from "./tasks.dto";
@@ -76,6 +78,8 @@ export class TasksController {
     private readonly taskActivityFeed: TaskActivityFeedService,
     // S5-TASK-DETAIL-1 (GAP 4) — GET watchers tách service riêng (task-actions chạm trần 800 dòng).
     private readonly taskWatchers: TaskWatchersService,
+    // S20-TASK-WORKLOAD-1 — «Đội của tôi». CUỐI (khuôn các service thêm sau).
+    private readonly taskWorkload: TaskWorkloadService,
   ) {}
 
   /**
@@ -102,6 +106,19 @@ export class TasksController {
   @RequirePermission("read", "task")
   getMyTasks(@Req() req: AuthenticatedRequest) {
     return this.taskCore.getMyTasks(req.user);
+  }
+
+  /**
+   * GET /tasks/workload — «Đội của tôi» (S20-TASK-WORKLOAD-1, US-TASK-QL-04): số việc mở/quá hạn/sắp hạn/
+   * chờ duyệt theo từng người trong phạm vi của người xem. Gate read:task (cặp sẵn có). ĐỌC TỔNG HỢP trên
+   * CÙNG biểu thức phạm vi đọc của GET /tasks (`TaskCoreService.resolveReadScope`), không phải đường danh
+   * sách thứ hai. PHẢI khai TRƯỚC @Get(":taskId") (route tĩnh trước route tham số).
+   */
+  @Get("workload")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
+  getTeamWorkload(@Req() req: AuthenticatedRequest, @Query() query: TaskWorkloadQueryDto) {
+    return this.taskWorkload.getWorkload(req.user, query);
   }
 
   /**

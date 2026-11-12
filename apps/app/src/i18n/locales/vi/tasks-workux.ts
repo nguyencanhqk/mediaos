@@ -218,4 +218,34 @@ export default {
       description: "Thử chọn dự án hoặc người khác, hoặc xoá bộ lọc để xem lại toàn bộ.",
     },
   },
+  // S20-TASK-WORKLOAD-1 (US-TASK-QL-04) — màn «Đội của tôi» (/tasks/team).
+  teamWorkload: {
+    title: "Đội của tôi",
+    description:
+      "Số việc đang mở của từng người trong phạm vi bạn được xem, xuyên mọi dự án. Người quá hạn nhiều nhất ở trên cùng.",
+    forbidden: {
+      title: "Bạn không có quyền xem công việc",
+      description: "Liên hệ quản trị viên để được cấp quyền xem công việc.",
+    },
+    filters: { project: "Dự án", allProjects: "Tất cả dự án" },
+    columns: {
+      person: "Người",
+      active: "Đang làm",
+      overdue: "Quá hạn",
+      dueSoon: "Sắp hạn 7 ngày",
+      review: "Chờ duyệt",
+      maxOverdueDays: "Trễ lâu nhất",
+    },
+    overdueLink: "Quá hạn: {{count}}",
+    reviewLink: "Chờ duyệt: {{count}}",
+    days: "{{count}} ngày",
+    unknownName: "(Không rõ tên)",
+    unassigned: "Chưa giao",
+    empty: { title: "Đội đang không có việc mở", description: "Mọi việc trong phạm vi của bạn đã xong hoặc chưa có việc nào." },
+    error: { title: "Không tải được dữ liệu việc của đội", description: "Kiểm tra kết nối rồi thử lại." },
+    loading: "Đang tải dữ liệu việc của đội…",
+    tableLabel: "Số việc đang mở theo từng người",
+    overdueLinkFor: "{{label}} — {{name}}",
+    truncated: "Chỉ hiện {{max}} người đầu. Lọc theo dự án hoặc phòng ban để xem đủ.",
+  },
 };

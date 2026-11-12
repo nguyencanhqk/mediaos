@@ -1427,6 +1427,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 51.5,
   },
+  // S20-TASK-WORKLOAD-1 — «Đội của tôi» (US-TASK-QL-04). Route TĨNH 2-segment xếp hạng TRÊN
+  // "/tasks/$taskId". SPEC-06 chưa có mã màn hình ⇒ mã ngữ nghĩa (không bịa số). Gate TASK.TASK.VIEW: NV @Own
+  // cũng thấy mục và chỉ thấy dòng của mình (phạm vi do SERVER quyết).
+  {
+    routeKey: "task.team",
+    path: "/tasks/team",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "TASK",
+    screenCode: "TASK-SCREEN-TEAM-WORKLOAD",
+    titleKey: "routeTitle.taskTeam",
+    requiredAnyPermissions: ["TASK.TASK.VIEW"],
+    showInSidebar: true,
+    order: 51.2,
+  },
   // S4-FE-TASK-1 — Project List/Detail (SPEC-06 §13.1/§13.3, TASK-SCREEN-001/003). Cổng route =
   // TASK.PROJECT.VIEW (read:project); nút Create/Edit/Close/Delete/Member gate finer bên trong page qua
   // useCan/PermissionGate (TASK.PROJECT.CREATE/UPDATE/CLOSE/DELETE/MANAGE_MEMBER).
