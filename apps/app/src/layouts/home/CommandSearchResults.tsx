@@ -59,6 +59,9 @@ function ResultRow({
   );
 }
 
+/** Id DOM của listbox — `aria-controls` của ô nhập trỏ vào đây. */
+export const COMMAND_LISTBOX_ID = "cmdk-listbox";
+
 function GroupSection({
   group,
   activeId,
@@ -69,33 +72,50 @@ function GroupSection({
   "activeId" | "onSelect" | "onHover"
 >) {
   const { t } = useTranslation("nav");
+  const headingId = `cmdk-heading-${group.key}`;
   return (
-    <section aria-label={t(`commandSearch.groups.${group.key}`)} className="mb-3">
-      <h3 className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <div role="presentation" className="mb-3">
+      <div
+        id={headingId}
+        aria-hidden="true"
+        className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+      >
         {t(`commandSearch.groups.${group.key}`)}
-      </h3>
-      {group.status === "loading" ? (
-        <p className="px-3 py-2 text-xs text-muted-foreground">{t("commandSearch.loading")}</p>
-      ) : null}
-      {group.status === "error" ? (
-        <p role="alert" className="px-3 py-2 text-xs text-destructive">
-          {t("commandSearch.error")}
-        </p>
-      ) : null}
-      {group.status === "success" ? (
-        <ul role="group">
-          {group.items.map((item) => (
-            <ResultRow
-              key={item.id}
-              item={item}
-              active={activeId === `${item.group}:${item.id}`}
-              onSelect={onSelect}
-              onHover={onHover}
-            />
-          ))}
-        </ul>
-      ) : null}
-    </section>
+      </div>
+      <ul role="group" aria-labelledby={headingId}>
+        {group.items.map((item) => (
+          <ResultRow
+            key={item.id}
+            item={item}
+            active={activeId === `${item.group}:${item.id}`}
+            onSelect={onSelect}
+            onHover={onHover}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Trạng thái đang tải / lỗi của từng nhóm — nằm NGOÀI listbox (listbox chỉ chứa group > option). */
+function GroupStatuses({ groups }: { groups: CommandSearchGroup[] }) {
+  const { t } = useTranslation("nav");
+  return (
+    <>
+      {groups.map((g) => {
+        if (g.status === "success") return null;
+        const name = t(`commandSearch.groups.${g.key}`);
+        return g.status === "loading" ? (
+          <p key={g.key} className="px-3 py-1 text-xs text-muted-foreground">
+            <span className="font-medium">{name}</span> <span>{t("commandSearch.loading")}</span>
+          </p>
+        ) : (
+          <p key={g.key} role="alert" className="px-3 py-1 text-xs text-destructive">
+            <span className="font-medium">{name}</span> <span>{t("commandSearch.error")}</span>
+          </p>
+        );
+      })}
+    </>
   );
 }
 
@@ -109,8 +129,10 @@ export function CommandSearchResults({
   onHover,
 }: CommandSearchResultsProps) {
   const { t } = useTranslation("nav");
+  const withItems = groups.filter((g) => g.status === "success" && g.items.length > 0);
   return (
-    <div role="listbox" aria-label={t("commandSearch.resultsAria")}>
+    <div>
+      <GroupStatuses groups={groups} />
       {isEmpty ? (
         <div className="py-4 text-center">
           <p className="text-sm text-muted-foreground">
@@ -129,8 +151,9 @@ export function CommandSearchResults({
             ))}
           </div>
         </div>
-      ) : (
-        groups.map((g) => (
+      ) : null}
+      <div role="listbox" id={COMMAND_LISTBOX_ID} aria-label={t("commandSearch.resultsAria")}>
+        {withItems.map((g) => (
           <GroupSection
             key={g.key}
             group={g}
@@ -138,8 +161,8 @@ export function CommandSearchResults({
             onSelect={onSelect}
             onHover={onHover}
           />
-        ))
-      )}
+        ))}
+      </div>
     </div>
   );
 }

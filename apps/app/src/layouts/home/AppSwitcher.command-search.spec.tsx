@@ -71,7 +71,7 @@ const ALL_CAPS = {
 };
 
 function type(value: string) {
-  fireEvent.change(screen.getByRole("searchbox"), { target: { value } });
+  fireEvent.change(screen.getByRole("combobox"), { target: { value } });
 }
 const wait = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
 
@@ -169,8 +169,10 @@ describe("AppSwitcher — bảng lệnh tìm kiếm", () => {
     setCaps(ALL_CAPS);
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     renderOpen();
+    type("a");
     type("an");
     await screen.findByText("Nguyễn An");
+    fireEvent.click(screen.getByText("Nguyễn An"));
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
   });
@@ -196,10 +198,10 @@ describe("AppSwitcher — bảng lệnh tìm kiếm", () => {
     expect(screen.getByText("Mở danh sách việc để tìm tiếp")).toBeInTheDocument();
   });
 
-  it("mũi tên + Enter: việc mở drawer ?task=, người mở hồ sơ", async () => {
+  it("mũi tên + Enter mở drawer việc; click mở hồ sơ người", async () => {
     setCaps(ALL_CAPS);
     renderOpen();
-    const input = screen.getByRole("searchbox");
+    const input = screen.getByRole("combobox");
     type("an");
     await screen.findByText("Nguyễn An");
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -214,6 +216,126 @@ describe("AppSwitcher — bảng lệnh tìm kiếm", () => {
     type("an");
     await screen.findByText("Nguyễn An");
     fireEvent.click(screen.getByText("Nguyễn An"));
+    expect(navigateMock).toHaveBeenCalledWith({ to: `/hr/employees/${EMP_ID}` });
+  });
+
+  it("ArrowUp từ trạng thái đầu chọn mục CUỐI; ArrowDown ở cuối quay về đầu", async () => {
+    setCaps(ALL_CAPS);
+    renderOpen();
+    const input = screen.getByRole("combobox");
+    type("an");
+    await screen.findByText("Nguyễn An");
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.getAttribute("aria-activedescendant")).toBe(`cmdk-people-${EMP_ID}`);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-activedescendant")).toBe(`cmdk-tasks-${TASK_ID}`);
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.getAttribute("aria-activedescendant")).toBe(`cmdk-people-${EMP_ID}`);
+  });
+
+  it("combobox ARIA: aria-controls/expanded/autocomplete, aria-activedescendant khớp option, listbox chỉ chứa group", async () => {
+    setCaps(ALL_CAPS);
+    renderOpen();
+    const input = screen.getByRole("combobox");
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    type("an");
+    await screen.findByText("Nguyễn An");
+    const listbox = screen.getByRole("listbox");
+    expect(input.getAttribute("aria-controls")).toBe(listbox.id);
+    expect(input.getAttribute("aria-autocomplete")).toBe("list");
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const activeId = input.getAttribute("aria-activedescendant") ?? "";
+    expect(document.getElementById(activeId)?.getAttribute("role")).toBe("option");
+    expect(document.getElementById(activeId)?.getAttribute("aria-selected")).toBe("true");
+    for (const group of listbox.querySelectorAll(":scope > * > [role=group]")) {
+      expect(group.getAttribute("aria-labelledby")).toBeTruthy();
+    }
+    const bad = Array.from(listbox.querySelectorAll("h3, p, button, section"));
+    expect(bad).toHaveLength(0);
+  });
+
+  it("vùng trạng thái polite báo số kết quả", async () => {
+    setCaps(ALL_CAPS);
+    renderOpen();
+    type("an");
+    await screen.findByText("Nguyễn An");
+    const live = screen.getByRole("status");
+    expect(live.getAttribute("aria-live")).toBe("polite");
+    expect(live.textContent).toBe("3 kết quả");
+  });
+
+  it("không có quyền đọc nào + từ khoá không khớp ứng dụng ⇒ hiện «Không tìm thấy», không để trống", async () => {
+    setCaps({ "DASH.DASHBOARD.VIEW": true });
+    renderOpen();
+    type("zzzzqq");
+    await wait(450);
+    expect(screen.getByText("Không tìm thấy “zzzzqq”")).toBeInTheDocument();
+    expect(listTasksMock).not.toHaveBeenCalled();
+  });
+
+  it("Enter trên người mở hồ sơ (bàn phím, không chỉ chuột)", async () => {
+    setCaps({ "read:employee": true, "DASH.DASHBOARD.VIEW": true });
+    renderOpen();
+    const input = screen.getByRole("combobox");
+    type("an");
+    await screen.findByText("Nguyễn An");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: `/hr/employees/${EMP_ID}` });
+  });
+
+  it("phản hồi về lệch thứ tự: «ab» chậm về sau «abc» không đè kết quả", async () => {
+    setCaps({ "read:task": true, "DASH.DASHBOARD.VIEW": true });
+    let resolveAb: (v: unknown) => void = () => undefined;
+    listTasksMock.mockImplementation(({ search }: { search: string }) =>
+      search === "ab"
+        ? new Promise((r) => {
+            resolveAb = r;
+          })
+        : Promise.resolve([{ id: TASK_ID, title: "Kết quả abc", projectName: null, status: "todo" }]),
+    );
+    renderOpen();
+    type("ab");
+    await wait(300);
+    type("abc");
+    expect(await screen.findByText("Kết quả abc")).toBeInTheDocument();
+    await act(async () => {
+      resolveAb([{ id: EMP_ID, title: "Kết quả ab muộn", projectName: null, status: "todo" }]);
+    });
+    expect(screen.getByText("Kết quả abc")).toBeInTheDocument();
+    expect(screen.queryByText("Kết quả ab muộn")).not.toBeInTheDocument();
+  });
+
+  it("bấm gợi ý «Mở danh sách việc» ⇒ điều hướng /tasks kèm search", async () => {
+    setCaps(ALL_CAPS);
+    listTasksMock.mockResolvedValue([]);
+    listProjectsMock.mockResolvedValue([]);
+    listEmployeesMock.mockResolvedValue({ items: [], meta: { page: 1, pageSize: 5, total: 0 } });
+    renderOpen();
+    type("zzzz");
+    fireEvent.click(await screen.findByText("Mở danh sách việc để tìm tiếp"));
+    expect(navigateMock).toHaveBeenCalledTimes(1);
+    expect(navigateMock.mock.calls[0]?.[0]).toMatchObject({ search: { search: "zzzz" } });
+  });
+
+  it("form dirty: chọn dự án / người phải xác nhận trước khi rời", async () => {
+    setCaps(ALL_CAPS);
+    useLayoutStore.setState({ dirtyFormState: { message: "Chưa lưu" } as never });
+    renderOpen();
+    type("an");
+    fireEvent.click(await screen.findByText("Dự án Alpha"));
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Chưa lưu")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Chuyển ứng dụng" }));
+    expect(navigateMock).toHaveBeenCalledWith({ to: `/tasks/projects/${PROJECT_ID}` });
+
+    navigateMock.mockClear();
+    act(() => useLayoutStore.getState().openAppSwitcher());
+    type("an");
+    fireEvent.click(await screen.findByText("Nguyễn An"));
+    expect(navigateMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Chuyển ứng dụng" }));
     expect(navigateMock).toHaveBeenCalledWith({ to: `/hr/employees/${EMP_ID}` });
   });
 

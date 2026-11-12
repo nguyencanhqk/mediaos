@@ -30,7 +30,7 @@ import { useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
 import { AppCard } from "./AppCard";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { getCrossDomainOpener, isCurrentApp } from "./cross-domain-apps";
-import { CommandSearchResults, commandOptionDomId } from "./CommandSearchResults";
+import { COMMAND_LISTBOX_ID, CommandSearchResults, commandOptionDomId } from "./CommandSearchResults";
 import {
   isChatComposerTarget,
   useCommandSearch,
@@ -266,8 +266,15 @@ export function AppSwitcher() {
     const index = flatItems.findIndex((i) => itemKey(i) === activeId);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const step = e.key === "ArrowDown" ? 1 : -1;
-      const next = (index + step + flatItems.length) % flatItems.length;
+      const last = flatItems.length - 1;
+      const next =
+        e.key === "ArrowDown"
+          ? index < 0 || index >= last
+            ? 0
+            : index + 1
+          : index <= 0
+            ? last
+            : index - 1;
       setActiveId(itemKey(flatItems[next] as CommandSearchItem));
     } else if (e.key === "Enter" && index >= 0) {
       e.preventDefault();
@@ -275,6 +282,16 @@ export function AppSwitcher() {
     }
   };
 
+  const hasOptions = flatItems.length > 0;
+  const noAppOrResult = searchActive && search.groups.length === 0 && filteredApps.length === 0;
+  const anyLoading = search.groups.some((g) => g.status === "loading");
+  const liveStatus = !searchActive
+    ? ""
+    : anyLoading
+      ? t("commandSearch.loading")
+      : search.isEmpty || noAppOrResult
+        ? t("commandSearch.statusNone")
+        : t("commandSearch.resultsCount", { count: flatItems.length });
   const activeItem = flatItems.find((i) => itemKey(i) === activeId);
 
   if (!isAppSwitcherOpen) return null;
@@ -308,6 +325,10 @@ export function AppSwitcher() {
           <input
             ref={searchRef}
             type="search"
+            role="combobox"
+            aria-expanded={hasOptions}
+            aria-controls={searchActive ? COMMAND_LISTBOX_ID : undefined}
+            aria-autocomplete="list"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleInputKeyDown}
@@ -325,6 +346,10 @@ export function AppSwitcher() {
           </button>
         </div>
 
+        <div role="status" aria-live="polite" className="sr-only">
+          {liveStatus}
+        </div>
+
         {/* App grid */}
         <div className="flex-1 overflow-y-auto p-4">
           {apps.length === 0 ? (
@@ -338,7 +363,12 @@ export function AppSwitcher() {
               />
             )
           )}
-          {searchActive ? (
+          {noAppOrResult ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              {t("commandSearch.noResults", { query: search.term })}
+            </p>
+          ) : null}
+          {searchActive && search.groups.length > 0 ? (
             <div className="mt-4">
               <CommandSearchResults
                 term={search.term}

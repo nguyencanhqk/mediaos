@@ -48,6 +48,11 @@ Nguồn: US-X-07 · UI-02 §14.1, §18.1–18.3 · UI-06 §4.2. FE thuần, khô
 - RED trên mã cũ: 9/10 ca đỏ (ca còn lại, «dưới 2 ký tự», xanh vì mã cũ không gọi gì — giữ làm hồi quy).
 - GREEN: 10/10; `src/layouts` + `layout.spec` + `ConversationPanel.spec`: 175 ca xanh; typecheck app + eslint xanh.
 - Sổ vết KPI: (điền sau)
+- Vá review (1 dòng/lỗi):
+  1. [MEDIUM] combobox/listbox ARIA — ô nhập có role=combobox + aria-expanded/controls/autocomplete; listbox chỉ chứa group > option (tiêu đề aria-hidden, nhóm gắn aria-labelledby); trạng thái tải/lỗi/gợi ý chuyển ra ngoài listbox; thêm vùng role=status polite báo tải/số kết quả/rỗng. Ca: «combobox ARIA…», «vùng trạng thái polite».
+  2. [LOW] ArrowUp khi chưa chọn mục nào rơi vào mục kế cuối — xử lý index<0 rõ ràng (Up ⇒ cuối, Down ⇒ đầu, Down ở cuối quay đầu). Ca: «ArrowUp từ trạng thái đầu…».
+  3. [LOW] bảng trống khi không có quyền đọc và không ứng dụng khớp — hiện «Không tìm thấy “…”». Ca: «không có quyền đọc nào + từ khoá không khớp…».
+  4. [LOW] khoảng trống test — thêm: ArrowUp/wrap, aria-activedescendant khớp id option, Enter trên người, phản hồi lệch thứ tự (promise hoãn), bấm gợi ý, xác nhận form dirty cho dự án + người; ca storage thao tác thêm chọn kết quả; đổi tên ca Enter cho đúng nội dung. Ghi chú: RED trên mã cũ phần lớn do đổi role searchbox→combobox (17/18 đỏ).
 
 ## Nợ
 

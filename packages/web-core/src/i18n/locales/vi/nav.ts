@@ -243,6 +243,8 @@ export default {
     groups: { tasks: "Việc", projects: "Dự án", people: "Đồng nghiệp" },
     loading: "Đang tìm…",
     error: "Không tải được",
+    statusNone: "Không có kết quả",
+    resultsCount: "{{count}} kết quả",
     noResults: "Không tìm thấy “{{query}}”",
     untitledTask: "(Không có tiêu đề)",
     unnamedPerson: "(Chưa có tên)",
