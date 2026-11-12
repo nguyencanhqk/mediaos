@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { ApiError, goalApi, goalInvalidation, taskCoreInvalidation } from "@mediaos/web-core";
 import { toast } from "@mediaos/ui";
 import { GOAL_ERR_ANCHOR_MISMATCH, GOAL_ERR_PERIOD_FINALIZED } from "./goal-suggest";
@@ -17,8 +17,19 @@ export interface LinkTarget {
   readonly projectId: string | null;
 }
 
-async function refresh(queryClient: QueryClient, target: LinkTarget): Promise<void> {
-  const keys = [
+/** Khử trùng khoá theo JSON — mỗi prefix invalidate đúng một lần (tránh hủy-và-nạp-lại trùng). */
+function uniqueKeys(keys: readonly QueryKey[]): QueryKey[] {
+  const seen = new Set<string>();
+  return keys.filter((k) => {
+    const id = JSON.stringify(k);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+export async function refresh(queryClient: QueryClient, target: LinkTarget): Promise<void> {
+  const keys = uniqueKeys([
     ...goalInvalidation.linkTasks({
       goalIds: [target.goalId],
       taskId: target.taskId,
@@ -27,7 +38,7 @@ async function refresh(queryClient: QueryClient, target: LinkTarget): Promise<vo
     ...taskCoreInvalidation.detail(target.taskId),
     ...taskCoreInvalidation.list(),
     ...taskCoreInvalidation.my(),
-  ];
+  ]);
   await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }
 
