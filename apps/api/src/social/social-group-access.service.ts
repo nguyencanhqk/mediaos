@@ -169,6 +169,46 @@ export class SocialGroupAccessService {
   }
 
   /**
+   * Khoá CHIA SẺ (`FOR SHARE`) hàng `feed_groups` cho cổng ĐĂNG bài vào nhóm (`002`). Tương thích chéo
+   * giữa các bài đăng (không nối đuôi nhau) nhưng xung đột `FOR UPDATE` / `FOR NO KEY UPDATE` của
+   * `033`..`039` ⇒ mọi đổi thành viên/trạng thái nhóm đã commit TRƯỚC lượt đọc sau khoá của cổng đăng.
+   * Không dùng `FOR KEY SHARE` (không xung đột `FOR NO KEY UPDATE`). Cùng luật `lockGroupRowTx`: KHÔNG
+   * lọc `deleted_at` — «còn sống» kiểm riêng bằng `assertGroupLiveTx` SAU khoá.
+   *
+   * @throws NotFoundException (404 `SOCIAL-ERR-012`) khi câu khoá khớp 0 hàng (khuôn `lockGroupRowTx`).
+   */
+  async lockGroupRowForShareTx(tx: TenantTx, companyId: string, groupId: string): Promise<void> {
+    const locked = await tx.execute(
+      sql`SELECT 1 FROM ${feedGroups}
+           WHERE company_id = ${companyId} AND id = ${groupId}
+           FOR SHARE`,
+    );
+    if (locked.rows.length !== 1) {
+      throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
+    }
+  }
+
+  /**
+   * 404 `SOCIAL-ERR-012` khi nhóm đã xoá mềm. Câu đọc RIÊNG, gọi SAU khoá hàng nhóm: dưới READ COMMITTED
+   * mỗi câu một snapshot mới nên thấy thay đổi của tx giữ khoá đã commit. Luật chung của route GHI vào
+   * nhóm: «nhóm còn sống» kiểm SAU khoá (`lockGroupRowTx` không lọc `deleted_at`).
+   */
+  async assertGroupLiveTx(tx: TenantTx, companyId: string, groupId: string): Promise<void> {
+    const [row] = await tx
+      .select({ id: feedGroups.id })
+      .from(feedGroups)
+      .where(
+        and(
+          eq(feedGroups.companyId, companyId),
+          eq(feedGroups.id, groupId),
+          isNull(feedGroups.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
+  }
+
+  /**
    * 🔴 Cổng vai của MỌI route GHI theo vai nhóm (`033`/`034`/`038`/`039`) — luật 3 ở đầu file: KHOÁ hàng
    * `feed_groups` (`lockGroupRowTx`) RỒI MỚI đọc vai actor (`assertGroupRoleTx`). MỘT lượt đọc, SAU khoá.
    *
@@ -182,6 +222,9 @@ export class SocialGroupAccessService {
    * Luật quyền KHÔNG đổi: vai hàng ∈ `allowedRoles` HOẶC `manage:feed-group` «BẤT KỂ vai trong nhóm»
    * (API-19 §5.1 dòng 107), đánh giá trên hàng đọc SAU khoá (owner ký D1=(a) 02/10/2026). Hàng của actor
    * biến mất giữa chừng ⇒ 403 `ERR-014`, không 404 (D3=(a)): actor đã qua cổng 404 lúc request bắt đầu.
+   *
+   * Thứ tự: khoá → "nhóm còn sống" (`assertGroupLiveTx`) → đọc vai. Một route khôi phục nhóm (nếu có sau
+   * này) cần biến thể riêng không kiểm sống và phải qua plan-review.
    *
    * ⚠️ Gọi SAU `assertGroupVisibleTx` (404 TRƯỚC 403): người ngoài nhóm kín không bao giờ chạm khoá
    * (lưới: U3 thứ tự cổng + ca O-x/P-x của `social-grouptoctou-race.int-spec.ts`).
@@ -200,6 +243,8 @@ export class SocialGroupAccessService {
     allowedRoles: readonly FeedGroupRole[],
   ): Promise<{ membership: SocialGroupMembership | null; viaManage: boolean }> {
     await this.lockGroupRowTx(tx, actor.companyId, groupId);
+    // Nhóm đã xoá mềm trong lúc chờ khoá ⇒ 404 TRƯỚC khi đọc vai (không ghi, không audit).
+    await this.assertGroupLiveTx(tx, actor.companyId, groupId);
     return this.assertGroupRoleTx(tx, actor, groupId, allowedRoles);
   }
 

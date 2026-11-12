@@ -59,6 +59,7 @@ function build(opts: BuildOpts) {
     assertGroupVisibleTx: vi.fn(async () => ({ id: G, name: "Nhóm K" })),
     assertGroupRoleTx: vi.fn(async () => ({ viaManage: false })),
     lockGroupRowTx: vi.fn(async () => undefined),
+    assertGroupLiveTx: vi.fn(async () => undefined),
     assertOwnerRemainsTx: vi.fn(async () => undefined),
     getMembershipTx: vi.fn(async (_t: unknown, _c: string, _g: string, uid: string) =>
       uid === ACTOR

@@ -71,7 +71,8 @@ import type { FeedGroupRole, SocialActor, SocialRequestUser } from "./social.typ
  * │   «gateway đọc trước commit rồi join sau lần leave thứ nhất». Rollback sau leave = mất realtime  │
  * │   tới reconnect (fail-safe). Room-op luỹ đẳng.                                                   │
  * │ • KHÔNG room-op: `035` nhóm kín (`pending` ≠ thành viên) · `038` từ chối (chưa từng ở room) ·    │
- * │   `038` đổi vai (active→active) · `034` xoá nhóm (Q-EVAC (a) — phần dư đua R9 ở API-19 §7).      │
+ * │   `038` đổi vai (active→active) · `034` xoá nhóm (Q-EVAC (a)).                                       │
+ * │ • Luật route GHI: nhóm còn sống kiểm SAU khoá hàng nhóm (`assertGroupLiveTx`/`findLiveGroupTx`). │
  * │ Đếm lời gọi ở `social-groups.realtime.spec.ts` (commit hỏng ⇒ 0 join / 1 leave · OK ⇒ 1 / 2).   │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
@@ -267,8 +268,11 @@ export class SocialGroupsService {
       // xếp hàng chờ `FOR UPDATE` ở giữa hai câu ấy ⇒ chu trình chờ ⇒ deadlock 40P01 ⇒ 500 cho cả
       // hai. Lấy khoá GHI ngay từ đầu thì hai giao dịch chỉ nối đuôi nhau.
       await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
+      // Đọc lại SAU khoá: nhóm xoá mềm / đổi chế độ hiển thị trong lúc chờ ⇒ 404 / `status` đúng lúc ghi.
+      const live = await this.groups.findLiveGroupTx(tx, actor.companyId, groupId);
+      if (!live) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
 
-      const status = group.visibility === "public" ? "active" : "pending";
+      const status = live.visibility === "public" ? "active" : "pending";
       try {
         await this.members.insertMemberTx(
           tx,
@@ -310,6 +314,7 @@ export class SocialGroupsService {
 
       // (b) — neo TRƯỚC câu đếm owner.
       await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
+      await this.groupAccess.assertGroupLiveTx(tx, actor.companyId, groupId);
       const mine = await this.groupAccess.getMembershipTx(
         tx,
         actor.companyId,
