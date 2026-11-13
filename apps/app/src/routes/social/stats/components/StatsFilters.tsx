@@ -99,6 +99,12 @@ interface RangeStepperProps {
   onReset: () => void;
 }
 
+/**
+ * Nút có thể đang giữ focus KHÔNG dùng `disabled` gốc (trình duyệt đẩy focus về BODY khi nút tự khoá):
+ * khoá bằng `aria-disabled` + chặn onClick, chỉ đổi dáng.
+ */
+const LOCKABLE = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
+
 /** ‹ nhãn khoảng › + «Về hiện tại». Hai nút mũi tên mang tên trợ năng có số tuần sẽ dịch. */
 function RangeStepper({
   range,
@@ -119,7 +125,8 @@ function RangeStepper({
         type="button"
         variant="outline"
         size="sm"
-        disabled={back === null}
+        aria-disabled={back === null ? true : undefined}
+        className={LOCKABLE}
         aria-label={t("admin.stats.filters.back", { weeks: range.weeks })}
         onClick={step(back)}
       >
@@ -138,13 +145,21 @@ function RangeStepper({
         type="button"
         variant="outline"
         size="sm"
-        disabled={forward === null}
+        aria-disabled={forward === null ? true : undefined}
+        className={LOCKABLE}
         aria-label={t("admin.stats.filters.forward", { weeks: range.weeks })}
         onClick={step(forward)}
       >
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
       </Button>
-      <Button type="button" variant="ghost" size="sm" disabled={!isCustomRange} onClick={onReset}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-disabled={isCustomRange ? undefined : true}
+        className={LOCKABLE}
+        onClick={isCustomRange ? onReset : undefined}
+      >
         {t("admin.stats.filters.reset")}
       </Button>
     </div>

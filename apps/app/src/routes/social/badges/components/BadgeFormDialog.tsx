@@ -124,10 +124,10 @@ function planSave(
   return { kind: "ready", body: { mode: "edit", badgeId: opened.id, body: updated.body } };
 }
 
-function sendSave(variables: SaveVariables): Promise<KudosBadgeAdminDto> {
+function sendSave(variables: SaveVariables, signal: AbortSignal): Promise<KudosBadgeAdminDto> {
   return variables.mode === "create"
-    ? socialKudosApi.createBadge(variables.body, variables.attemptId)
-    : socialKudosApi.updateBadge(variables.badgeId, variables.body);
+    ? socialKudosApi.createBadge(variables.body, variables.attemptId, signal)
+    : socialKudosApi.updateBadge(variables.badgeId, variables.body, signal);
 }
 
 /**

@@ -205,8 +205,10 @@ export function BadgeSettingsPage(): React.ReactElement {
       invalidateBadgeDisplaySurfaces(queryClient);
     }
     settle(noticeOfForm(outcome), outcome.kind === "done" || outcome.invalidate);
-    // Nút «Sửa» đã mở hộp thoại có thể không còn sau lượt đọc lại; lỗi không làm mới vẫn cần đọc dải ở trang.
-    outcomeFocus.requestFocus();
+    // Nút «Sửa» đã mở hộp thoại có thể không còn sau lượt đọc lại ⇒ kéo focus tới dải. Lỗi KHÔNG làm mới
+    // (vd 403): hàng và nút «Sửa» còn nguyên, hộp thoại đã trả focus về đó — kéo sang dải là bỏ nút người
+    // dùng đang làm việc (dải có `role="alert"` nên vẫn được đọc).
+    if (outcome.kind === "done" || outcome.invalidate) outcomeFocus.requestFocus();
   };
   // Lỗi GIỮ hộp thoại. Ở chế độ SỬA, lượt ghi không có câu trả lời đọc được có thể ĐÃ đổi tên / biểu tượng:
   // bảng đọc lại hiện giá trị mới thì các bề mặt vẽ lời vinh danh cũng phải đọc lại (không biết trường nào đã

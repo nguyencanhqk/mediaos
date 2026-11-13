@@ -157,7 +157,7 @@ describe("F2 — «Ngừng dùng» (051) đi qua bước xác nhận", () => {
     clickConfirm();
 
     await dialogGone();
-    expect(deactivateBadge.mock.calls).toEqual([[BADGE_ID]]);
+    expect(deactivateBadge.mock.calls).toEqual([[BADGE_ID, expect.any(AbortSignal)]]);
     expect(updateBadge).toHaveBeenCalledTimes(0);
     expect(snapshot()).toEqual(REFRESHED);
     await waitFor(() => expect(listBadgesAdmin).toHaveBeenCalledTimes(2));
@@ -198,7 +198,7 @@ describe("F2 — «Bật lại» (050)", () => {
     fireEvent.click(rowButton(REACTIVATE_ROW));
 
     expect(await screen.findByRole("status")).toHaveTextContent(DONE_ON);
-    expect(updateBadge.mock.calls).toEqual([[OFF_ID, { isActive: true }]]);
+    expect(updateBadge.mock.calls).toEqual([[OFF_ID, { isActive: true }, expect.any(AbortSignal)]]);
     expect(updateKudosBadgeSchema.safeParse(updateBadge.mock.calls[0]?.[1]).success).toBe(true);
     expect(deactivateBadge).toHaveBeenCalledTimes(0);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -310,7 +310,10 @@ describe("Lỗi của lượt tắt / bật — dải ở TRANG, chữ của FE"
     fireEvent.click(within(alert).getByRole("button", { name: RETRY }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(DONE_OFF);
-    expect(deactivateBadge.mock.calls).toEqual([[BADGE_ID], [BADGE_ID]]);
+    expect(deactivateBadge.mock.calls).toEqual([
+      [BADGE_ID, expect.any(AbortSignal)],
+      [BADGE_ID, expect.any(AbortSignal)],
+    ]);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -383,5 +386,52 @@ describe("Dải kết cục và lượt đọc lại", () => {
 
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(updateBadge).toHaveBeenCalledTimes(2);
+  });
+});
+
+// S16-SOCIAL-FEADMINSIGNAL-1 — hết hạn chờ phải HUỶ yêu cầu 050 / 051 trên dây.
+describe("signal của lượt tắt / bật", () => {
+  it("051 treo quá 30 giây ⇒ signal (đối số thứ 2) bị HUỶ; trước hạn thì chưa", async () => {
+    deactivateBadge.mockImplementation(() => pending());
+    await renderPage();
+    vi.useFakeTimers();
+
+    openConfirm();
+    clickConfirm();
+    await advanceFakeTimers(29_999);
+    const signal: unknown = deactivateBadge.mock.calls[0]?.[1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+
+    await advanceFakeTimers(1);
+    expect((signal as AbortSignal).aborted).toBe(true);
+  });
+
+  it("050 «Bật lại» treo quá 30 giây ⇒ signal (đối số thứ 3) bị HUỶ", async () => {
+    updateBadge.mockImplementation(() => pending());
+    await renderPage();
+    vi.useFakeTimers();
+
+    fireEvent.click(rowButton(REACTIVATE_ROW));
+    await advanceFakeTimers(0);
+    const signal: unknown = updateBadge.mock.calls[0]?.[2];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+
+    await advanceFakeTimers(30_000);
+    expect((signal as AbortSignal).aborted).toBe(true);
+  });
+
+  it("đối chứng — 051 thành công trước hạn ⇒ signal KHÔNG bị huỷ", async () => {
+    await renderPage();
+    vi.useFakeTimers();
+
+    openConfirm();
+    clickConfirm();
+    await advanceFakeTimers(0);
+    await advanceFakeTimers(30_000);
+    const signal: unknown = deactivateBadge.mock.calls[0]?.[1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
   });
 });

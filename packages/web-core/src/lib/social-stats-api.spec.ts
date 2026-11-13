@@ -139,3 +139,13 @@ describe("053 — exportEngagement", () => {
     expect(blobCalls[0]?.[0]).toBe(`/social/stats/engagement/export?orgUnitId=${UNIT}`);
   });
 });
+
+describe("053 — signal (S16-SOCIAL-FEADMINSIGNAL-1)", () => {
+  it("có `signal` ⇒ `apiFetchBlob` nhận CHÍNH signal đó trong `init`", async () => {
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({ blob: new Blob([]), filename: null });
+    const controller = new AbortController();
+    await socialStatsApi.exportEngagement(undefined, controller.signal);
+    const init = vi.mocked(apiClient.apiFetchBlob).mock.calls[0]?.[1];
+    expect(init?.signal).toBe(controller.signal);
+  });
+});

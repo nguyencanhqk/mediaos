@@ -42,10 +42,13 @@ export type BadgeToggleResult =
 /** Trạng thái `isActive` mà một lượt tắt / bật THÀNH CÔNG phải để lại. */
 const isActiveAfter = (kind: BadgeToggleKind): boolean => kind === "reactivate";
 
-function sendToggle({ kind, badge }: BadgeToggleVariables): Promise<KudosBadgeAdminDto> {
+function sendToggle(
+  { kind, badge }: BadgeToggleVariables,
+  signal: AbortSignal,
+): Promise<KudosBadgeAdminDto> {
   return kind === "deactivate"
-    ? socialKudosApi.deactivateBadge(badge.id)
-    : socialKudosApi.updateBadge(badge.id, { isActive: true });
+    ? socialKudosApi.deactivateBadge(badge.id, signal)
+    : socialKudosApi.updateBadge(badge.id, { isActive: true }, signal);
 }
 
 /**

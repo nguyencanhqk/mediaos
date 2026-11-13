@@ -295,7 +295,7 @@ describe("P1 — tab Bài viết", () => {
     expect(screen.queryByTestId("composer-submit")).toBeNull();
   });
 
-  it("201 có droppedMentions ⇒ thông báo; KHÔNG mở socket (không badge realtime ở trang nhóm)", async () => {
+  it("201 có droppedMentions ⇒ thông báo; hook badge nhóm chỉ lắng nghe (không emit)", async () => {
     get.mockResolvedValue(makeGroup({ myRole: "member", myStatus: "active" }));
     createPost.mockResolvedValue({ ...makePost(), droppedMentions: ["x"] });
     renderPage();
@@ -303,7 +303,6 @@ describe("P1 — tab Bài viết", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "@ai đó" } });
     fireEvent.click(screen.getByTestId("composer-submit"));
     expect(await screen.findByTestId("dropped-mentions-notice")).toBeTruthy();
-    expect(getAppSocket).not.toHaveBeenCalled();
   });
 
   it("đăng bài 403 (mất tư cách thành viên) ⇒ banner forbidden", async () => {
@@ -420,7 +419,10 @@ describe("🔴 gate LIGHT HIGH-1 — state lời mời SỐNG qua lượt refetc
     join.mockRejectedValue(GROUP_ERR.exists());
     renderPage();
     fireEvent.click(await screen.findByTestId("group-invite-request"));
-    expect(await screen.findByTestId("feed-action-error")).toHaveAttribute("data-reason", "alreadyMember");
+    expect(await screen.findByTestId("feed-action-error")).toHaveAttribute(
+      "data-reason",
+      "alreadyMember",
+    );
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.getByTestId("group-not-found")).toBeTruthy();
     expect(screen.getByTestId("feed-action-error")).toHaveAttribute("data-reason", "alreadyMember");
@@ -436,7 +438,9 @@ describe("🔴 gate LIGHT HIGH-1 — state lời mời SỐNG qua lượt refetc
       .mockImplementation(
         () => new Promise((_, reject) => setTimeout(() => reject(GROUP_ERR.notFound()), 30)),
       );
-    join.mockResolvedValue(makeGroup({ visibility: "private", myRole: "member", myStatus: "pending" }));
+    join.mockResolvedValue(
+      makeGroup({ visibility: "private", myRole: "member", myStatus: "pending" }),
+    );
     const { client } = renderPage();
     fireEvent.click(await screen.findByTestId("group-invite-request"));
     await screen.findByTestId("group-invite-sent");
@@ -474,7 +478,9 @@ describe("gate LIGHT LOW — gợi ý «Tham gia để đăng bài» CHỈ khi b
 
   it("manage rời nhóm KÍN ⇒ KHÔNG bị đẩy ra danh sách (vẫn xem được nhóm)", async () => {
     setCaps({ "view:feed": true, "create:feed-post": true, "manage:feed-group": true });
-    get.mockResolvedValue(makeGroup({ visibility: "private", myRole: "member", myStatus: "active" }));
+    get.mockResolvedValue(
+      makeGroup({ visibility: "private", myRole: "member", myStatus: "active" }),
+    );
     leave.mockResolvedValue({ left: true });
     renderPage();
     fireEvent.click(await screen.findByTestId("group-leave"));

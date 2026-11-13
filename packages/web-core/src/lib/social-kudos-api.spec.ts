@@ -94,6 +94,7 @@ describe("048 — listBadges", () => {
 // cần để vẽ «Ngừng dùng»/«Bật lại».
 describe("S16-SOCIAL-FE-3 — huy hiệu quản trị", () => {
   interface FetchInit {
+    signal?: AbortSignal;
     method?: string;
     body?: string;
   }
@@ -194,5 +195,22 @@ describe("S16-SOCIAL-FE-3 — huy hiệu quản trị", () => {
     expect(parsed.isActive).toBe(false);
     // 051 trả HÀNG huy hiệu, không phải `{ deleted: true }` như xoá bài/bình luận.
     expect(schema.safeParse({ deleted: true }).success).toBe(false);
+  });
+
+  describe("049 · 050 · 051 — signal (S16-SOCIAL-FEADMINSIGNAL-1)", () => {
+    it("có `signal` ⇒ cả ba lời gọi chuyển CHÍNH signal đó xuống `init` của apiFetch", async () => {
+      const controller = new AbortController();
+      await socialKudosApi.createBadge(CREATE_BODY, "attempt-1", controller.signal);
+      expect(lastCallFull()[2]?.signal).toBe(controller.signal);
+      await socialKudosApi.updateBadge(BADGE, { isActive: true }, controller.signal);
+      expect(lastCallFull()[2]?.signal).toBe(controller.signal);
+      await socialKudosApi.deactivateBadge(BADGE, controller.signal);
+      expect(lastCallFull()[2]?.signal).toBe(controller.signal);
+    });
+
+    it("vắng `signal` ⇒ `init` KHÔNG mang khoá `signal` (đối chứng)", async () => {
+      await socialKudosApi.deactivateBadge(BADGE);
+      expect(lastCallFull()[2]).not.toHaveProperty("signal");
+    });
   });
 });

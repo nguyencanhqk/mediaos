@@ -34,6 +34,10 @@ import { idempotencyKeyFor } from "./api-idempotency";
  */
 export const KUDOS_BADGE_FETCH_LIMIT = 100;
 
+/** Khoá `signal` CHỈ có mặt khi nơi gọi truyền (hạn chờ của `useGuardedMutation`) — khuôn `moderatePost`. */
+const signalInit = (signal: AbortSignal | undefined): { signal?: AbortSignal } =>
+  signal === undefined ? {} : { signal };
+
 export const socialKudosApi = {
   /**
    * GET /social/kudos (047) — cặp `view:feed`. ⚠️ VẮNG `month` = vinh danh GẦN ĐÂY, KHÔNG phải «tháng
@@ -48,7 +52,10 @@ export const socialKudosApi = {
    * `kudosRecipientSearchQuerySchema` trước khi gọi (≥2 chữ/số — không phải độ dài chuỗi).
    */
   searchRecipients: (q: string): Promise<KudosRecipientSearchResultDto> =>
-    apiFetch(`/social/kudos/recipients${buildQueryString({ q })}`, kudosRecipientSearchResultSchema),
+    apiFetch(
+      `/social/kudos/recipients${buildQueryString({ q })}`,
+      kudosRecipientSearchResultSchema,
+    ),
 
   /** GET /social/kudos-badges (048) — cặp `view:feed`, chỉ huy hiệu ĐANG BẬT. */
   listBadges: (): Promise<KudosBadgePageDto> =>
@@ -78,11 +85,15 @@ export const socialKudosApi = {
    * thuần sẽ phát lại 201 cũ cho ca «tạo → ngừng dùng → tạo lại y hệt» thay vì 409 «mã đã tồn tại».
    * `attemptId` do nơi gọi sinh MỘT lần mỗi lượt mở hộp thoại, giữ nguyên qua các lần thử lại.
    */
-  createBadge: (body: CreateKudosBadgeDto, attemptId: string): Promise<KudosBadgeAdminDto> =>
+  createBadge: (
+    body: CreateKudosBadgeDto,
+    attemptId: string,
+    signal?: AbortSignal,
+  ): Promise<KudosBadgeAdminDto> =>
     apiFetch(
       "/social/kudos-badges",
       kudosBadgeAdminSchema,
-      { method: "POST", body: JSON.stringify(body) },
+      { method: "POST", body: JSON.stringify(body), ...signalInit(signal) },
       { idempotencyKey: idempotencyKeyFor("social-kudos-badge", { attemptId, body }) },
     ),
 
@@ -90,16 +101,24 @@ export const socialKudosApi = {
    * PATCH /social/kudos-badges/:badgeId (050) — body `.strict()`, KHÔNG nhận `code` (bất biến ⇒ 400),
    * ít nhất một trường. Bật lại huy hiệu đã tắt = `{ isActive: true }`. Không `@Idempotent()`.
    */
-  updateBadge: (badgeId: string, body: UpdateKudosBadgeDto): Promise<KudosBadgeAdminDto> =>
+  updateBadge: (
+    badgeId: string,
+    body: UpdateKudosBadgeDto,
+    signal?: AbortSignal,
+  ): Promise<KudosBadgeAdminDto> =>
     apiFetch(`/social/kudos-badges/${badgeId}`, kudosBadgeAdminSchema, {
       method: "PATCH",
       body: JSON.stringify(body),
+      ...signalInit(signal),
     }),
 
   /**
    * DELETE /social/kudos-badges/:badgeId (051) — TẮT huy hiệu (`isActive:false`), không xoá hàng. Trả
    * HÀNG huy hiệu sau khi tắt, không phải `{ deleted: true }`. Không `@Idempotent()`.
    */
-  deactivateBadge: (badgeId: string): Promise<KudosBadgeAdminDto> =>
-    apiFetch(`/social/kudos-badges/${badgeId}`, kudosBadgeAdminSchema, { method: "DELETE" }),
+  deactivateBadge: (badgeId: string, signal?: AbortSignal): Promise<KudosBadgeAdminDto> =>
+    apiFetch(`/social/kudos-badges/${badgeId}`, kudosBadgeAdminSchema, {
+      method: "DELETE",
+      ...signalInit(signal),
+    }),
 };

@@ -130,7 +130,8 @@ export default {
     save: "Lưu thay đổi",
     saving: "Đang lưu…",
     saved: "Đã lưu thay đổi.",
-    toPrivateNote: "Chuyển sang riêng tư: người ngoài nhóm sẽ không còn xem được bài viết của nhóm.",
+    toPrivateNote:
+      "Chuyển sang riêng tư: người ngoài nhóm sẽ không còn xem được bài viết của nhóm.",
     toPublicNote: "Chuyển sang công khai: các yêu cầu đang chờ vẫn cần được duyệt.",
     dangerTitle: "Xoá nhóm",
     dangerBody: "Không thể khôi phục nhóm sau khi xoá. Bài viết trong nhóm sẽ không còn hiển thị.",
@@ -142,5 +143,7 @@ export default {
     title: "Nhóm của tôi",
     viewAll: "Xem tất cả",
     empty: "Bạn chưa tham gia nhóm nào.",
+    newPosts_one: "{{count}} bài mới",
+    newPosts_other: "{{count}} bài mới",
   },
 } as const;

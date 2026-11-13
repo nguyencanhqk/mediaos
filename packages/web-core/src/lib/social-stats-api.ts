@@ -39,6 +39,9 @@ export const socialStatsApi = {
    * ⚠️ `filename` có thể là `null` khi server không gửi `Content-Disposition` (CORS của API expose header
    * này từ S1-FND-CORS-EXPOSE-1) — nơi gọi PHẢI giữ tên dự phòng đuôi `.xlsx` làm lưới.
    */
-  exportEngagement: (query?: FeedEngagementParams): Promise<ApiBlobResult> =>
-    apiFetchBlob(`/social/stats/engagement/export${buildQueryString(query ?? {})}`),
+  exportEngagement: (query?: FeedEngagementParams, signal?: AbortSignal): Promise<ApiBlobResult> =>
+    apiFetchBlob(
+      `/social/stats/engagement/export${buildQueryString(query ?? {})}`,
+      signal === undefined ? undefined : { signal },
+    ),
 };

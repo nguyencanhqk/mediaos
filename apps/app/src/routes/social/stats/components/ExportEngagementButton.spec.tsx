@@ -149,7 +149,7 @@ describe("ALLOW — xuất đúng thứ đang xem", () => {
   it("nút KHÔNG có cổng quyền riêng: chỉ `view:feed` vẫn thấy nút (052 và 053 chung cặp — cổng là của route)", () => {
     setCaps({ "view:feed": true });
     renderButton();
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
   });
 });
 
@@ -159,15 +159,35 @@ describe("đang xuất · chưa có dữ liệu", () => {
     renderButton();
     clickExport();
     const busy = await screen.findByRole("button", { name: EXPORTING });
-    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute("aria-disabled", "true");
+    expect(busy).not.toHaveAttribute("disabled");
     expect(busy.getAttribute("aria-busy")).toBe("true");
 
     await act(async () => {
       pending.resolve(fileResult());
       await Promise.resolve();
     });
-    await waitFor(() => expect(exportButton()).toBeEnabled());
+    await waitFor(() => expect(exportButton()).not.toHaveAttribute("aria-disabled"));
     expect(triggerBlobDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it("kích hoạt bằng bàn phím: nút giữ focus suốt lượt xuất; bấm lại khi đang xuất ⇒ không request thứ hai", async () => {
+    const pending = hangExport();
+    renderButton();
+    exportButton().focus();
+    clickExport();
+    const busy = await screen.findByRole("button", { name: EXPORTING });
+    expect(busy).toHaveFocus();
+    fireEvent.click(busy);
+    expect(exportEngagement).toHaveBeenCalledTimes(1);
+    expect(busy).toHaveFocus();
+
+    await act(async () => {
+      pending.resolve(fileResult());
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(exportButton()).not.toHaveAttribute("aria-disabled"));
+    expect(exportButton()).toHaveFocus();
   });
 
   it("bấm 2 lần trong CÙNG một nhịp ⇒ đúng 1 lời gọi", async () => {
@@ -184,7 +204,7 @@ describe("đang xuất · chưa có dữ liệu", () => {
 
   it("chưa có dữ liệu (`range: null`) ⇒ nút khoá, bấm không gọi gì", () => {
     renderButton({ range: null });
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute("aria-disabled", "true");
     clickExport();
     expect(exportEngagement).not.toHaveBeenCalled();
   });
@@ -203,7 +223,7 @@ describe("DENY / lỗi — có dải lỗi, KHÔNG tải tệp", () => {
     expect(document.body.textContent).not.toContain(err.message);
     expect(triggerBlobDownload).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
   });
 
   it("403 tầng quyền ⇒ `forbidden`, không nút «Thử lại», 0 lần tải", async () => {
@@ -282,15 +302,74 @@ describe("yêu cầu treo", () => {
     clickExport();
     await advanceFakeTimers(TIMEOUT_MS - 1);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("button", { name: EXPORTING })).toBeDisabled();
+    expect(screen.getByRole("button", { name: EXPORTING })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
 
     await advanceFakeTimers(1);
     await advanceFakeTimers(0);
     expect(alertReason()).toBe("generic");
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
 
     pending.resolve(fileResult());
     await advanceFakeTimers(0);
     expect(triggerBlobDownload).not.toHaveBeenCalled();
+  });
+});
+
+// S16-SOCIAL-FEADMINSIGNAL-1 — hết hạn chờ phải HUỶ yêu cầu 053 trên dây (mỗi lời gọi ghi một dòng audit).
+describe("signal của lượt xuất (053)", () => {
+  it("treo quá 30 giây ⇒ signal (đối số thứ 2) bị HUỶ; trước hạn thì chưa", async () => {
+    vi.useFakeTimers();
+    hangExport();
+    renderButton();
+    clickExport();
+    await advanceFakeTimers(TIMEOUT_MS - 1);
+    const signal: unknown = exportEngagement.mock.calls[0]?.[1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+
+    await advanceFakeTimers(1);
+    expect((signal as AbortSignal).aborted).toBe(true);
+  });
+
+  it("đối chứng — xuất thành công trước hạn ⇒ signal KHÔNG bị huỷ", async () => {
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    renderButton();
+    clickExport();
+    await waitFor(() => expect(triggerBlobDownload).toHaveBeenCalledTimes(1));
+    const signal: unknown = exportEngagement.mock.calls[0]?.[1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+  });
+});
+
+describe("thông báo «đã xuất xong» (S16-SOCIAL-FESTATSBUSY-1)", () => {
+  it('xuất xong ⇒ có vùng `role="status"` mang câu «Đã xuất tệp thống kê.»; trước khi xuất thì vùng không có chữ', async () => {
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    renderButton();
+    expect(screen.queryByText("Đã xuất tệp thống kê.")).toBeNull();
+
+    clickExport();
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Đã xuất tệp thống kê.");
+    expect(triggerBlobDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it("đối chứng — xuất LỖI ⇒ không có câu «đã xuất»; xuất lại ⇒ câu cũ bị gỡ trong lúc chờ", async () => {
+    exportEngagement.mockRejectedValueOnce(ADMIN_ERR.forbidden());
+    renderButton();
+    clickExport();
+    await screen.findByRole("alert");
+    expect(screen.queryByText("Đã xuất tệp thống kê.")).toBeNull();
+
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    clickExport();
+    expect(await screen.findByText("Đã xuất tệp thống kê.")).toBeInTheDocument();
+    hangExport();
+    clickExport();
+    await waitFor(() => expect(screen.queryByText("Đã xuất tệp thống kê.")).toBeNull());
   });
 });

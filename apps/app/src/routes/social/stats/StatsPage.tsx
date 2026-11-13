@@ -28,6 +28,7 @@ import { cn } from "@mediaos/ui";
 import { socialKeys, socialStatsApi } from "@mediaos/web-core";
 import type { FeedEngagementResponseDto } from "@mediaos/contracts";
 import { PLACEHOLDER_CLASS, SKELETON_ROWS } from "../moderation/components/list-states";
+import { OUTCOME_FOCUS_CLASS, useOutcomeFocus } from "../moderation/lib/use-outcome-focus";
 import { EngagementTrendChart } from "./components/EngagementTrendChart";
 import { ExportEngagementButton } from "./components/ExportEngagementButton";
 import { StatsFilters } from "./components/StatsFilters";
@@ -36,6 +37,7 @@ import { StatsSummary } from "./components/StatsSummary";
 import { UnitTotalsTable } from "./components/UnitTotalsTable";
 import { WeekTotalsTable } from "./components/WeekTotalsTable";
 import { isEngagementEmpty, unitTotals } from "./lib/stats-aggregate";
+import { requestedRange } from "./lib/stats-range";
 import { describeStatsError } from "./lib/stats-errors";
 import {
   engagementParams,
@@ -45,6 +47,7 @@ import {
   searchForOrgUnit,
   searchForRange,
   validateStatsRouteSearch,
+  type StatsDateRange,
   type StatsRouteSearch,
 } from "./lib/stats-route-search";
 
@@ -108,6 +111,11 @@ function StatsData({ data, orgUnitId, isStale }: StatsDataProps): React.ReactEle
   );
 }
 
+/** Cặp ngày của URL (chỉ gọi khi `hasCustomRange`). */
+function dateRangeOf({ from, to }: StatsRouteSearch): StatsDateRange | null {
+  return from !== undefined && to !== undefined ? { from, to } : null;
+}
+
 export function StatsPage(): React.ReactElement {
   const { t } = useTranslation("social");
   const navigate = useNavigate();
@@ -131,6 +139,8 @@ export function StatsPage(): React.ReactElement {
   // Đích TRÙNG search đang đứng ⇒ navigate không đổi khoá, không lượt đọc nào chạy: đọc lại thay vì đứng im.
   // Ca thật: tab mở ở URL mặc định qua ranh tuần — số liệu còn của tuần trước, › mở, mà đích của nó (8 tuần
   // tới hết tuần hiện tại) lại chính là URL mặc định.
+  // Ba lối thoát của dải lỗi gỡ chính nút đang giữ focus (hoặc khoá nó lúc thử lại) ⇒ đưa focus về tiêu đề.
+  const exitFocus = useOutcomeFocus<HTMLElement, HTMLHeadingElement>();
   const go = (next: StatsRouteSearch): void => {
     if (isSameStatsSearch(next, search)) {
       void query.refetch();
@@ -156,7 +166,13 @@ export function StatsPage(): React.ReactElement {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h1 className="text-lg font-semibold text-foreground">{t("admin.stats.page.title")}</h1>
+        <h1
+          ref={exitFocus.fallbackRef}
+          tabIndex={-1}
+          className={cn("text-lg font-semibold text-foreground", OUTCOME_FOCUS_CLASS)}
+        >
+          {t("admin.stats.page.title")}
+        </h1>
         <ExportEngagementButton params={params} range={exportRange} />
       </div>
 
@@ -164,14 +180,26 @@ export function StatsPage(): React.ReactElement {
         <StatsLoadError
           outcome={describeStatsError(query.error, params)}
           isRetrying={query.isFetching}
-          onRetry={() => void query.refetch()}
-          onClearOrgUnit={() => go(searchForOrgUnit(search, undefined))}
-          onResetRange={() => go(searchForRange(search, null))}
+          onRetry={() => {
+            exitFocus.requestFocus();
+            void query.refetch();
+          }}
+          onClearOrgUnit={() => {
+            exitFocus.requestFocus();
+            go(searchForOrgUnit(search, undefined));
+          }}
+          onResetRange={() => {
+            exitFocus.requestFocus();
+            go(searchForRange(search, null));
+          }}
         />
       )}
       {filterSource !== undefined && !isEngagementEmpty(filterSource) && (
         <StatsFilters
-          range={filterSource.range}
+          range={requestedRange(
+            hasCustomRange(search) ? dateRangeOf(search) : null,
+            filterSource.range,
+          )}
           units={filterSource.units}
           orgUnitId={search.orgUnitId}
           isCustomRange={hasCustomRange(search)}

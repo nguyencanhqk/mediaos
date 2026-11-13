@@ -152,7 +152,7 @@ describe("Khung của màn", () => {
     expect(screen.queryAllByRole("table")).toHaveLength(0);
     expect(screen.queryByRole("group", { name: FILTERS })).toBeNull();
     expect(screen.queryByText(EMPTY_SCOPE)).toBeNull();
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("client mặc định `staleTime` 30 s (như `main.tsx`) + cache đã có số liệu ⇒ vào màn VẪN gọi 052", async () => {
@@ -190,8 +190,12 @@ describe("T1 — khoảng tuần (vế màn)", () => {
     renderPage();
     const bar = await filters();
 
-    expect(within(bar).getByRole("button", { name: "Lùi 2 tuần" })).toBeEnabled();
-    expect(within(bar).getByRole("button", { name: "Tiến 2 tuần" })).toBeEnabled();
+    expect(within(bar).getByRole("button", { name: "Lùi 2 tuần" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
+    expect(within(bar).getByRole("button", { name: "Tiến 2 tuần" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
   });
 
   it("‹ ⇒ URL nhận khoảng lùi đúng 2×7 ngày (thứ Hai 07/09 → Chủ nhật 20/09) và 052 nhận đúng cặp đó", async () => {
@@ -210,10 +214,18 @@ describe("T1 — khoảng tuần (vế màn)", () => {
     renderPage();
     const bar = await filters();
 
-    expect(within(bar).getByRole("button", { name: "Tiến 8 tuần" })).toBeDisabled();
-    expect(within(bar).getByRole("button", { name: "Lùi 8 tuần" })).toBeEnabled();
+    expect(within(bar).getByRole("button", { name: "Tiến 8 tuần" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(within(bar).getByRole("button", { name: "Lùi 8 tuần" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
     // Đang ở mặc định ⇒ «Về hiện tại» cũng khoá.
-    expect(within(bar).getByRole("button", { name: RESET })).toBeDisabled();
+    expect(within(bar).getByRole("button", { name: RESET })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("tab mở qua ranh tuần ở URL mặc định (số liệu còn kết thúc 04/10, tuần hiện tại đã là 11/10): › ⇒ đích trùng CHÍNH URL đang đứng ⇒ không navigate mà ĐỌC LẠI 052; nhãn sang khoảng mới", async () => {
@@ -321,7 +333,7 @@ describe("T5 — 200 rỗng KHÁC «không có quyền»", () => {
     expect(container.querySelector('[data-reason="forbidden"]')).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryAllByRole("table")).toHaveLength(0);
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("đối chứng: có đơn vị nhưng TOÀN SỐ 0 ⇒ vẫn vẽ hai bảng với số 0, KHÔNG dùng câu rỗng; nút xuất MỞ", async () => {
@@ -344,7 +356,7 @@ describe("T5 — 200 rỗng KHÁC «không có quyền»", () => {
     ).toHaveLength(3);
     expect(screen.queryByText(EMPTY_SCOPE)).toBeNull();
     expect(within(card("posts")).getByText("0")).toBeInTheDocument();
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute("aria-disabled");
   });
 });
 

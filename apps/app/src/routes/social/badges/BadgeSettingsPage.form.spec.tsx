@@ -193,7 +193,9 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
     clickSave();
 
     await dialogGone();
-    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { name: "Đồng đội mới" }]]);
+    expect(updateBadge.mock.calls).toEqual([
+      [BADGE_ID, { name: "Đồng đội mới" }, expect.any(AbortSignal)],
+    ]);
     expect(snapshot()).toEqual(REFRESHED_WITH_KUDOS);
     await waitFor(() => expect(listBadgesAdmin).toHaveBeenCalledTimes(2));
     expect(screen.getByRole("status")).toHaveTextContent(DONE_UPDATED);
@@ -208,7 +210,7 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
     clickSave();
 
     await dialogGone();
-    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { icon: "🎉" }]]);
+    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { icon: "🎉" }, expect.any(AbortSignal)]]);
     expect(snapshot()).toEqual(REFRESHED_WITH_KUDOS);
   });
 
@@ -221,7 +223,7 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
     clickSave();
 
     await dialogGone();
-    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { position: 7 }]]);
+    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { position: 7 }, expect.any(AbortSignal)]]);
     expect(snapshot()).toEqual(REFRESHED);
   });
 
@@ -264,6 +266,22 @@ describe("Kết cục LỖI đóng hộp thoại — dải ở TRANG", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(snapshot()).toEqual(UNTOUCHED);
     expect(listBadgesAdmin).toHaveBeenCalledTimes(1);
+  });
+
+  // S16-SOCIAL-FESTATSBUSY-1 — lỗi KHÔNG làm mới ⇒ hàng không đổi, nút «Sửa» còn: focus về đúng nút đã mở
+  // hộp thoại, không bị kéo sang dải (đối chứng: ca 404 hàng đổi ⇒ focus ở dải, ca «sau kết cục» phía trên).
+  it("sửa gặp 403 ⇒ focus trở về nút «Sửa» đã mở hộp thoại, không bị kéo sang dải", async () => {
+    updateBadge.mockImplementation(() => Promise.reject(ADMIN_ERR.forbidden()));
+    await renderPage();
+    const editButton = screen.getByRole("button", { name: EDIT_ROW });
+    editButton.focus();
+    openEditAndRename();
+
+    clickSave();
+
+    await screen.findByRole("alert");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(editButton));
   });
 });
 

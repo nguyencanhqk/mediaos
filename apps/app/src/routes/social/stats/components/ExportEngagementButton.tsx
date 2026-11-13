@@ -15,8 +15,8 @@
  * Lượt xuất đi qua `useGuardedMutation` (một cơ chế cho mọi lượt gửi của cụm quản trị — bài học PR-A):
  *  · khoá ĐỒNG BỘ ⇒ bấm đúp cùng nhịp vẫn là MỘT lời gọi (mỗi lời gọi 053 ghi một dòng audit);
  *  · hạn chờ 30 giây + `networkMode: "always"` ⇒ yêu cầu treo / mất mạng không khoá nút vô hạn; phản hồi về
- *    SAU hạn bị bỏ qua (không có tệp «tự tải» sau khi đã báo lỗi). `exportEngagement` của web-core không nhận
- *    `signal` nên yêu cầu trên dây KHÔNG bị huỷ — chỉ kết quả của nó bị bỏ.
+ *    SAU hạn bị bỏ qua (không có tệp «tự tải» sau khi đã báo lỗi). `signal` nối xuống `exportEngagement` ⇒
+ *    hết hạn thì yêu cầu trên dây bị HUỶ thật (S16-SOCIAL-FEADMINSIGNAL-1).
  *  · mọi lỗi ra dải `AdminErrorNotice` cạnh nút; `message` của server không lên màn.
  *
  * KHÔNG tải tệp hỏng: 2xx mà thân rỗng, hoặc là trang HTML / JSON (proxy, SPA fallback trả 200) ⇒ coi là lỗi.
@@ -84,14 +84,16 @@ function exportParamsOf(params: FeedEngagementParams, range: StatsDateRange): Fe
   };
 }
 
-async function fetchExport(request: ExportRequest): Promise<ApiBlobResult> {
-  const result = await socialStatsApi.exportEngagement(request.params);
+async function fetchExport(request: ExportRequest, signal: AbortSignal): Promise<ApiBlobResult> {
+  const result = await socialStatsApi.exportEngagement(request.params, signal);
   if (!isUsableFile(result.blob)) throw new StatsExportFileError();
   return result;
 }
 
 interface EngagementExport {
   isPending: boolean;
+  /** Lượt xuất gần nhất ĐÃ tải xong cho đúng bộ tham số đang xem ⇒ vùng `role="status"` có chữ. */
+  isDone: boolean;
   /** Lỗi của lượt xuất gần nhất, CHỈ khi nó thuộc về đúng bộ tham số đang xem. */
   failure: StatsErrorOutcome | null;
   runExport: () => void;
@@ -101,11 +103,13 @@ interface EngagementExport {
 /** Lượt xuất 053 + dải lỗi của nó. `range: null` (chưa có dữ liệu) ⇒ `runExport` không làm gì. */
 function useEngagementExport({ params, range }: ExportEngagementButtonProps): EngagementExport {
   const [failure, setFailure] = React.useState<ExportFailure | null>(null);
+  const [doneKey, setDoneKey] = React.useState<string | null>(null);
 
   const { isPending, start } = useGuardedMutation<ApiBlobResult, ExportRequest>({
     mutationFn: fetchExport,
     onSuccess: (result, request) => {
       setFailure(null);
+      setDoneKey(paramsKeyOf(request.params));
       triggerBlobDownload(result.blob, result.filename ?? request.fallbackFilename);
     },
     onError: (error, request) => {
@@ -122,14 +126,17 @@ function useEngagementExport({ params, range }: ExportEngagementButtonProps): En
     if (range === null || exportParams === null) return;
     if (start({ params: exportParams, fallbackFilename: fallbackFilenameFor(range) })) {
       setFailure(null);
+      setDoneKey(null);
     }
   };
 
   // Dải lỗi của một lượt xuất CŨ không được đứng cạnh số liệu của bộ lọc khác.
   const isCurrent =
     failure !== null && exportParams !== null && failure.paramsKey === paramsKeyOf(exportParams);
+  const isDone = exportParams !== null && doneKey === paramsKeyOf(exportParams);
   return {
     isPending,
+    isDone: isDone && !isPending,
     failure: isCurrent ? failure : null,
     runExport,
     dismissFailure: () => setFailure(null),
@@ -141,7 +148,10 @@ export function ExportEngagementButton({
   range,
 }: ExportEngagementButtonProps): React.ReactElement {
   const { t } = useTranslation("social");
-  const { isPending, failure, runExport, dismissFailure } = useEngagementExport({ params, range });
+  const { isPending, isDone, failure, runExport, dismissFailure } = useEngagementExport({
+    params,
+    range,
+  });
   const visibleFailure = isPending ? null : failure;
 
   return (
@@ -150,9 +160,10 @@ export function ExportEngagementButton({
         type="button"
         variant="outline"
         size="sm"
-        disabled={isPending || range === null}
+        aria-disabled={isPending || range === null ? true : undefined}
+        className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         aria-busy={isPending ? true : undefined}
-        onClick={runExport}
+        onClick={isPending || range === null ? undefined : runExport}
         data-testid="stats-export-button"
       >
         {isPending ? (
@@ -162,6 +173,10 @@ export function ExportEngagementButton({
         )}
         {t(isPending ? "admin.stats.export.exporting" : "admin.stats.export.button")}
       </Button>
+      {/* Hộp tải xuống của trình duyệt không tới được trình đọc màn hình: báo bằng vùng trạng thái. */}
+      <p role="status" className="sr-only">
+        {isDone ? t("admin.stats.export.done") : ""}
+      </p>
       {visibleFailure !== null && (
         <AdminErrorNotice
           reason={visibleFailure.reason}

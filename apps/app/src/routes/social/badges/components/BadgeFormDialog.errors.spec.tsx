@@ -357,3 +357,53 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+// S16-SOCIAL-FEADMINSIGNAL-1 — hết hạn chờ phải HUỶ yêu cầu trên dây, không chỉ nhả màn. Đối chứng: lượt
+// thành công trước hạn không bị huỷ. Chỉ đo signal; `outcomeUnknown` đã ghim ở nhóm phía trên.
+describe("signal của lượt ghi (049 · 050)", () => {
+  const signalOf = (mock: typeof createBadge, argIndex: number): AbortSignal => {
+    const signal: unknown = mock.mock.calls[0]?.[argIndex];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    return signal as AbortSignal;
+  };
+
+  it("049 treo quá 30 giây ⇒ signal (đối số thứ 3) bị HUỶ, trước hạn thì chưa", async () => {
+    createBadge.mockImplementationOnce(hang);
+    renderDialog();
+    fillValidCreate();
+    vi.useFakeTimers();
+
+    clickSave();
+    await advanceFakeTimers(29_999);
+    const signal = signalOf(createBadge, 2);
+    expect(signal.aborted).toBe(false);
+
+    await advanceFakeTimers(1);
+    expect(signal.aborted).toBe(true);
+  });
+
+  it("050 treo quá 30 giây ⇒ signal (đối số thứ 3) bị HUỶ", async () => {
+    updateBadge.mockImplementationOnce(hang);
+    renderEditWithChange();
+    vi.useFakeTimers();
+
+    clickSave();
+    await advanceFakeTimers(0);
+    const signal = signalOf(updateBadge, 2);
+    expect(signal.aborted).toBe(false);
+
+    await advanceFakeTimers(30_000);
+    expect(signal.aborted).toBe(true);
+  });
+
+  it("đối chứng — 049 thành công trước hạn ⇒ signal KHÔNG bị huỷ", async () => {
+    renderDialog();
+    fillValidCreate();
+    vi.useFakeTimers();
+
+    clickSave();
+    await advanceFakeTimers(0);
+    await advanceFakeTimers(30_000);
+    expect(signalOf(createBadge, 2).aborted).toBe(false);
+  });
+});
