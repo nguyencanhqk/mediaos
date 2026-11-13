@@ -1535,6 +1535,7 @@ Hiển thị lịch nghỉ gần nhất của team/phòng ban/công ty theo quy�
 - Chỉ lấy leave request Approved hoặc Pending nếu người xem có quyền xử lý.
 - Dữ liệu lịch nghỉ phải lọc theo data scope trước khi phân trang/limit.
 - Thông tin lý do nghỉ có thể bị ẩn nếu không có quyền xem chi tiết.
+- Loại nghỉ (`leaveTypeName`) có thể là `null` kèm `leaveTypeMasked = true` khi người xem không có quyền xem/duyệt đơn đó; client hiển thị “Nghỉ” + khoảng ngày.
 
 **Success response - cấu trúc dữ liệu chính**
 

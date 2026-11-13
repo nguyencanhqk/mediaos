@@ -102,7 +102,7 @@ BACKEND-07 bám theo các quyết định đã chốt:
 | My Leave Request | Tạo, lưu nháp, cập nhật nháp, gửi, xem, hủy đơn nghỉ của chính mình |
 | Leave Request Admin | Manager/HR/Admin xem danh sách, xem chi tiết, duyệt, từ chối, hủy/thu hồi theo quyền |
 | Leave Calculation | Preview số ngày/giờ nghỉ, kiểm tra ngày làm việc, ngày lễ, ca làm, balance và xung đột |
-| Leave Calendar | Lịch nghỉ cá nhân, team, department, company theo data scope |
+| Leave Calendar | Lịch nghỉ cá nhân, team, department, company theo data scope. Mỗi dòng có `leaveTypeMasked`; khi `true` thì `leaveTypeId`/`leaveTypeCode`/`leaveTypeName` là `null` và FE hiện «Nghỉ». Loại nghỉ hiện cho chính người nghỉ, và cho người có `view:leave` hoặc `approve:leave` phủ người đó (xem API-05) |
 | Leave Type | CRUD mềm loại nghỉ phép |
 | Leave Policy | CRUD mềm chính sách nghỉ phép |
 | Leave Balance Admin | Danh sách balance, điều chỉnh số dư, xem ledger transaction |

@@ -35,7 +35,7 @@ Tài liệu này dùng để:
 1. Chuyển thiết kế Dashboard từ UI-08 sang kiến trúc frontend có thể code được.
 2. Chuẩn hóa route, page, component, hook, API service và state cho Dashboard.
 3. Triển khai Dashboard theo vai trò: Employee, Manager, HR, Admin.
-4. Triển khai hệ thống widget: metric, list, status, alert, calendar mini, progress, chart placeholder.
+4. Triển khai hệ thống widget: metric, list, status, alert, calendar mini, progress, chart placeholder. Dòng của widget Leave calendar có `leaveTypeMasked`; khi `true` thì `leaveTypeId`/`leaveTypeCode`/`leaveTypeName` là `null` và FE hiện «Nghỉ». Loại nghỉ hiện cho chính người nghỉ, người có `view:leave` hoặc `approve:leave` phủ người đó (xem API-05).
 5. Triển khai quick action theo permission, data scope và business state do backend trả về.
 6. Đảm bảo Dashboard dùng lại Module Workspace Layout, Design System, API Client và Permission Framework đã chốt ở các bước frontend trước.
 7. Đảm bảo Dashboard chỉ tổng hợp, hiển thị, cảnh báo và điều hướng; không xử lý nghiệp vụ gốc thay các module ATT, LEAVE, TASK, HR, NOTI, AUTH hoặc FOUNDATION.

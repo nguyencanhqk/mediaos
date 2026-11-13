@@ -15,7 +15,6 @@ import { AuthUsersService } from "../users/auth-users.service";
 import { ModuleCatalogService } from "../foundation/module-catalog/module-catalog.service";
 import { AuditQueryService } from "../foundation/audit/audit.service";
 import { LeaveReadService } from "../leave/leave-read.service";
-import { LeaveCalendarService } from "../leave/leave-calendar.service";
 import { ContractService } from "../employees/contract.service";
 import { addDaysToLocalDate, localDateOf } from "../common/tz.util";
 import { resolveCompanyTz } from "./dashboard-company-tz.util";
@@ -28,6 +27,7 @@ import { HrDepartmentService } from "../org/hr-department.service";
 // của CLAUDE.md §5) — registry vẫn MỘT: `add()` bên dưới trỏ thẳng vào method của collaborator.
 import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
 import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
+import { DashboardWidgetLeaveHandlers } from "./dashboard-widget-leave.handlers";
 import { DashboardWidgetPayrollHandlers } from "./dashboard-widget-payroll.handlers";
 import { DashboardWidgetSocialHandlers } from "./dashboard-widget-social.handlers";
 import {
@@ -52,8 +52,6 @@ const DUE_SOON_MS = 48 * 60 * 60 * 1000;
 /** SYSTEM_LOGS: 2 cửa sổ đếm (count-only) — 24h + 7 ngày gần nhất. Đơn vị ms. */
 const AUDIT_WINDOW_24H_MS = 24 * 60 * 60 * 1000;
 const AUDIT_WINDOW_7D_MS = 7 * AUDIT_WINDOW_24H_MS;
-/** LEAVE_CALENDAR: cửa sổ lịch nghỉ team [hôm nay, +N ngày) theo TZ công ty. */
-const LEAVE_CALENDAR_WINDOW_DAYS = 30;
 /** Số dòng đọc tối đa khi quét toàn team để lọc alert (bound query, dashboard "liếc nhanh"). */
 const TEAM_SCAN_PAGE_SIZE = 100;
 /**
@@ -97,7 +95,6 @@ export class DashboardWidgetHandlersService {
     private readonly moduleCatalog: ModuleCatalogService,
     private readonly auditQuery: AuditQueryService,
     private readonly leaveRead: LeaveReadService,
-    private readonly leaveCalendar: LeaveCalendarService,
     private readonly contracts: ContractService,
     // S5-GOAL-DASH-1 (additive): nguồn GOAL_PROGRESS (đã export ở module nguồn).
     private readonly goals: GoalsService,
@@ -110,6 +107,8 @@ export class DashboardWidgetHandlersService {
     private readonly payroll: DashboardWidgetPayrollHandlers,
     // S16-SOCIAL-DASH-1 (additive): handler SOCIAL_ENGAGEMENT_WEEK / SOCIAL_NEWS_UNACKED.
     private readonly social: DashboardWidgetSocialHandlers,
+    // S20-SEC-LEAVETYPEMASK-1: handler LEAVE_CALENDAR (file riêng, cùng MỘT registry).
+    private readonly leave: DashboardWidgetLeaveHandlers,
   ) {
     this.buildRegistry();
   }
@@ -204,7 +203,7 @@ export class DashboardWidgetHandlersService {
     });
     add("leave-calendar", "LEAVE_CALENDAR", {
       gateAndResolve: async (ctx) => this.gateSelf(ctx, "LEAVE_CALENDAR"),
-      fetch: (ctx) => this.fetchLeaveCalendar(ctx),
+      fetch: (ctx) => this.leave.fetchLeaveCalendar(ctx),
     });
     add("attendance-alerts", "ATTENDANCE_ALERTS", {
       gateAndResolve: async (ctx) => this.gateSelf(ctx, "ATTENDANCE_ALERTS"),
@@ -673,33 +672,6 @@ export class DashboardWidgetHandlersService {
       status: res.meta.total === 0 ? "Empty" : "Active",
       data: { items, summary: { total: res.meta.total } },
       emptyState: res.meta.total === 0 ? { message: "Không có hợp đồng sắp hết hạn" } : null,
-    };
-  }
-
-  // ── LEAVE_CALENDAR (LeaveCalendarService.listCalendar scope=team; gate view-team:leave-calendar) ─────
-  private async fetchLeaveCalendar(ctx: WidgetHandlerContext): Promise<WidgetFetchResult> {
-    const tz = await this.resolveCompanyTz(ctx.user.companyId);
-    const from = localDateOf(new Date(), tz); // 'YYYY-MM-DD' theo TZ công ty (REUSE tz.util).
-    const to = addDaysToLocalDate(from, LEAVE_CALENDAR_WINDOW_DAYS);
-    const res = await this.leaveCalendar.listCalendar(
-      { id: ctx.user.id, companyId: ctx.user.companyId },
-      { scope: "team", from, to },
-    );
-    // BỎ `reason` (riêng tư — đã mask null cho dòng người khác nhưng widget "ai nghỉ khi nào" không cần).
-    const items = res.items.slice(0, DASH_WIDGET_LIST_CAP).map((e) => ({
-      id: e.id,
-      userFullName: e.userFullName,
-      employeeCode: e.employeeCode,
-      leaveTypeName: e.leaveTypeName,
-      startDate: e.startDate,
-      endDate: e.endDate,
-      totalDays: e.totalDays,
-      status: e.status,
-    }));
-    return {
-      status: res.items.length === 0 ? "Empty" : "Active",
-      data: { items, summary: { total: res.items.length } },
-      emptyState: res.items.length === 0 ? { message: "Không có lịch nghỉ team" } : null,
     };
   }
 

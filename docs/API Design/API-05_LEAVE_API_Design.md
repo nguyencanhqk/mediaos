@@ -522,6 +522,8 @@ review_note nếu chứa thông tin cá nhân
 
 ### 8.5 Leave calendar item DTO
 
+> Lịch nghỉ chỉ trả loại nghỉ (`leave_type`, các trường `leaveType*` ở bản triển khai) cho đơn của chính người xem, hoặc khi người xem có `LEAVE.REQUEST.VIEW` / `LEAVE.REQUEST.APPROVE` phủ chủ đơn. Dòng còn lại: các trường loại nghỉ = `null`, `leave_type_masked = true`; client hiển thị “Nghỉ” + khoảng ngày.
+
 ```json
 {
   "id": "leave-request-day-uuid",
@@ -541,6 +543,7 @@ review_note nếu chứa thông tin cá nhân
     "name": "Nghỉ phép năm",
     "color": "#4F46E5"
   },
+  "leave_type_masked": false,
   "date": "2026-06-25",
   "duration_type": "FullDay",
   "half_day_session": null,

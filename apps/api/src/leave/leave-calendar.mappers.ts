@@ -7,17 +7,24 @@ import type { CalendarRow } from "./leave-calendar.repository";
  * every other row (teammate/company-wide) always gets `reason: null`, regardless of the requested scope.
  * This is a hard rule (no extra grant unmasks it) — the calendar is "who's off when", not the approval
  * detail view (that surface is GET /leave/requests, already gated on view:leave separately).
+ * Loại nghỉ (id/code/name) chỉ trả khi `canSeeType` (xem leave-calendar-type-visibility.ts); ngược lại null +
+ * `leaveTypeMasked=true`. Server quyết định — client chỉ hiển thị.
  */
-export function toCalendarEntryView(row: CalendarRow, actorUserId: string): LeaveCalendarEntryDto {
+export function toCalendarEntryView(
+  row: CalendarRow,
+  actorUserId: string,
+  canSeeType: boolean,
+): LeaveCalendarEntryDto {
   const isOwn = row.userId === actorUserId;
   return {
     id: row.id,
     userId: row.userId,
     userFullName: row.userFullName,
     employeeCode: row.employeeCode,
-    leaveTypeId: row.leaveTypeId,
-    leaveTypeCode: row.leaveTypeCode,
-    leaveTypeName: row.leaveTypeName,
+    leaveTypeId: canSeeType ? row.leaveTypeId : null,
+    leaveTypeCode: canSeeType ? row.leaveTypeCode : null,
+    leaveTypeName: canSeeType ? row.leaveTypeName : null,
+    leaveTypeMasked: !canSeeType,
     startDate: row.startDate,
     endDate: row.endDate,
     totalDays: Number(row.totalDays),

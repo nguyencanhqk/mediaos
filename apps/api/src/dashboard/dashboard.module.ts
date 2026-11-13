@@ -56,6 +56,7 @@ import { DashboardWidgetDataController } from "./dashboard-widget-data.controlle
 import { DashboardWidgetDataService } from "./dashboard-widget-data.service";
 import { DashboardWidgetHandlersService } from "./dashboard-widget-handlers.service";
 import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
+import { DashboardWidgetLeaveHandlers } from "./dashboard-widget-leave.handlers";
 import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
 import { DashboardWidgetPayrollHandlers } from "./dashboard-widget-payroll.handlers";
 import { DashboardWidgetSocialHandlers } from "./dashboard-widget-social.handlers";
@@ -136,6 +137,8 @@ import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler
     DashboardWidgetCacheService,
     // S11-OFFICE-DASH-1 (additive): handler ROOM_TODAY / ASSET_SUMMARY (file riêng, cùng MỘT registry).
     DashboardWidgetOfficeHandlers,
+    // S20-SEC-LEAVETYPEMASK-1 (additive): handler LEAVE_CALENDAR (file riêng, cùng MỘT registry).
+    DashboardWidgetLeaveHandlers,
     // S12-RECRUIT-DASH-1 (additive): handler RECRUIT_FUNNEL (file riêng, cùng MỘT registry).
     DashboardWidgetRecruitHandlers,
     // S13-PAYROLL-DASH-1 (additive): handler PAYROLL_COST (file riêng, cùng MỘT registry).

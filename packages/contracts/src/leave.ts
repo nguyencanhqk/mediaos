@@ -172,6 +172,8 @@ export type LeaveListQuery = z.infer<typeof leaveListQuerySchema>;
 // nghiệp/cấp dưới) LUÔN null, bất kể scope nào (đây là lịch "ai nghỉ khi nào", KHÔNG phải màn hình duyệt
 // đơn — lý do nghỉ luôn riêng tư ngoài bản thân). Không cần thêm 1 lượt permission-check nữa (đơn giản,
 // fail-safe theo mặc định).
+// MASK loại nghỉ: `leaveTypeId/Code/Name` chỉ trả cho đơn của chính người gọi, hoặc khi người gọi có
+// view:leave / approve:leave phủ chủ đơn; dòng khác = null + `leaveTypeMasked=true`.
 
 export const leaveCalendarScopeSchema = z.enum(["own", "team", "company"]);
 export type LeaveCalendarScope = z.infer<typeof leaveCalendarScopeSchema>;
@@ -194,9 +196,11 @@ export const leaveCalendarEntrySchema = z.object({
   userId: idSchema,
   userFullName: z.string().nullable(),
   employeeCode: z.string().nullable(),
-  leaveTypeId: idSchema,
+  leaveTypeId: idSchema.nullable(),
   leaveTypeCode: z.string().nullable(),
   leaveTypeName: z.string().nullable(),
+  /** true ⇒ server không trả loại nghỉ dòng này (3 trường loại = null): client hiển thị «Nghỉ». */
+  leaveTypeMasked: z.boolean().optional(),
   startDate: z.string().date(),
   endDate: z.string().date(),
   totalDays: z.number(),
