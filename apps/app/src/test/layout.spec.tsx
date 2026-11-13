@@ -723,7 +723,7 @@ describe("AppSwitcher", () => {
       </Wrapper>,
     );
 
-    const searchInput = screen.getAllByPlaceholderText("Tìm ứng dụng…")[0];
+    const searchInput = screen.getAllByPlaceholderText("commandSearch.placeholder")[0];
     fireEvent.change(searchInput, { target: { value: "xxxnotfound" } });
     await waitFor(() => {
       expect(screen.getByText("Không tìm thấy ứng dụng phù hợp.")).toBeInTheDocument();
