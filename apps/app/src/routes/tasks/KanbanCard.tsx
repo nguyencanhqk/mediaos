@@ -6,6 +6,7 @@ import type { TaskCoreStatusDto, TaskKanbanCardDto } from "@mediaos/contracts";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
 import { KanbanCardSubtasks } from "./KanbanCardSubtasks";
 import { TaskLabelChip } from "./TaskLabelPicker";
+import { TaskGoalChip } from "./TaskGoalChip";
 import { KanbanCardMoveMenu, type KanbanMoveProps } from "./KanbanCardMoveMenu";
 
 /**
@@ -225,6 +226,12 @@ export function KanbanCard({
       {showMoveMenu && (
         <div className="absolute right-2 top-2 rounded-md bg-card/90">
           <KanbanCardMoveMenu task={task} currentId={columnId} move={move} />
+        </div>
+      )}
+      {task.goalId && task.goalCode && (
+        // S20-TASK-MYTASKSLOAD-1 — chip mục tiêu NGOÀI mặt thẻ role=button (không lồng điều khiển trong nút).
+        <div className="flex min-w-0 px-2.5 pb-2">
+          <TaskGoalChip goalId={task.goalId} goalCode={task.goalCode} goalName={task.goalName} />
         </div>
       )}
       {(task.subtaskTotal ?? 0) > 0 && (

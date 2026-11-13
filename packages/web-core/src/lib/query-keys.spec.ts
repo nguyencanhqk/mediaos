@@ -498,3 +498,15 @@ describe("socialKeys — moderation / stats / badges-admin (S16-SOCIAL-FE-3 appe
     expect(publicBadges).toEqual(["social", "kudos", "badges"]);
   });
 });
+
+describe("taskKeys.my (S20-TASK-MYTASKSLOAD-1)", () => {
+  it("includeClosed false/undefined chuẩn hoá về khoá không tham số", () => {
+    expect(taskKeys.my({ includeClosed: false })).toEqual(taskKeys.my());
+    expect(taskKeys.my({})).toEqual(taskKeys.my());
+  });
+  it("khoá không tham số là PREFIX của khoá includeClosed=true và hai khoá khác nhau", () => {
+    const closed = taskKeys.my({ includeClosed: true });
+    expect(closed).not.toEqual(taskKeys.my());
+    expect(closed.slice(0, taskKeys.my().length)).toEqual([...taskKeys.my()]);
+  });
+});

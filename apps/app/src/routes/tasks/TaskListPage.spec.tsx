@@ -21,6 +21,10 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     useNavigate: () => navigateMock,
     useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
       select({ location: { pathname: "/tasks", search: searchRef.current } }),
+    // Link → <a href> (chip mục tiêu trong cột tiêu đề) — không dựng router thật.
+    Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+      <a href={to}>{children}</a>
+    ),
   };
 });
 
@@ -336,5 +340,74 @@ describe("TaskListPage — bộ lọc trên URL", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("TaskListPage — lọc theo mục tiêu (S20-TASK-MYTASKSLOAD-1)", () => {
+  const G = "0190a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a6b";
+  type Nav = { search: (prev: Record<string, unknown>) => Record<string, unknown> };
+  const goalRow = (id: string, title: string, goalId: string | null): TaskCoreResponseDto => ({
+    ...MOCK_TASKS[0],
+    id,
+    title,
+    goalId,
+    goalCode: goalId ? "G-1" : null,
+    goalName: goalId ? "Tăng doanh thu" : null,
+  });
+
+  beforeEach(() => {
+    clearCapabilities();
+    vi.clearAllMocks();
+    searchRef.current = {};
+  });
+
+  it("?goalId=<uuid> ⇒ GET /tasks nhận goalId; nhãn «Đang lọc theo mục tiêu» có mã + tên; bỏ lọc xoá khoá", async () => {
+    setCapabilities({ "read:task": true });
+    searchRef.current = { goalId: G, task: "keep" };
+    vi.mocked(taskCoreApi.listTasks).mockResolvedValue([goalRow("a", "Việc thuộc G", G)]);
+    renderWithQuery(<TaskListPage />);
+    await waitFor(() =>
+      expect(taskCoreApi.listTasks).toHaveBeenCalledWith(expect.objectContaining({ goalId: G })),
+    );
+    const notice = await screen.findByTestId("task-goal-filter-notice");
+    expect(notice.textContent).toContain("Đang lọc theo mục tiêu G-1 — Tăng doanh thu");
+    fireEvent.click(screen.getByTestId("task-goal-filter-clear"));
+    const nav = navigateMock.mock.calls.at(-1)?.[0] as Nav;
+    expect(nav.search({ goalId: G, task: "keep" })).toEqual({ task: "keep" });
+  });
+
+  it("?goalId=rác ⇒ không gửi goalId, không nhãn, trang vẫn hiện", async () => {
+    setCapabilities({ "read:task": true });
+    searchRef.current = { goalId: "rác" };
+    vi.mocked(taskCoreApi.listTasks).mockResolvedValue(MOCK_TASKS);
+    renderWithQuery(<TaskListPage />);
+    await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+    expect(vi.mocked(taskCoreApi.listTasks).mock.calls[0]?.[0]).toMatchObject({
+      goalId: undefined,
+    });
+    expect(screen.queryByTestId("task-goal-filter-notice")).toBeNull();
+  });
+
+  it("API cũ bỏ qua goalId (trả danh sách không lọc) ⇒ chỉ hiện dòng đúng mục tiêu", async () => {
+    setCapabilities({ "read:task": true });
+    searchRef.current = { goalId: G };
+    vi.mocked(taskCoreApi.listTasks).mockResolvedValue([
+      goalRow("a", "Việc thuộc G", G),
+      goalRow("b", "Việc khác mục tiêu", "0190a1b2-c3d4-7e5f-8a6b-aaaaaaaaaaaa"),
+      goalRow("c", "Việc không mục tiêu", null),
+    ]);
+    renderWithQuery(<TaskListPage />);
+    await screen.findByText("Việc thuộc G");
+    expect(screen.queryByText("Việc khác mục tiêu")).toBeNull();
+    expect(screen.queryByText("Việc không mục tiêu")).toBeNull();
+  });
+
+  it("danh sách rỗng ⇒ nhãn trung tính (không lộ tên mục tiêu)", async () => {
+    setCapabilities({ "read:task": true });
+    searchRef.current = { goalId: G };
+    vi.mocked(taskCoreApi.listTasks).mockResolvedValue([]);
+    renderWithQuery(<TaskListPage />);
+    const notice = await screen.findByTestId("task-goal-filter-notice");
+    expect(notice.textContent).toContain("Đang lọc theo một mục tiêu");
   });
 });

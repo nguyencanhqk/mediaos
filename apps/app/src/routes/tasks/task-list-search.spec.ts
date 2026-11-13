@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import { defaultParseSearch } from "@tanstack/react-router";
 import {
   TASK_LIST_SEARCH_MAX,
+  clearTaskListFilters,
   hasActiveTaskListFilters,
   toTaskListQuery,
   validateTaskListSearch,
@@ -79,5 +80,20 @@ describe("hasActiveTaskListFilters / toTaskListQuery", () => {
       offset: 20,
     });
     expect(toTaskListQuery({}, 20)).toMatchObject({ offset: 0, search: undefined });
+  });
+});
+
+describe("goalId (S20-TASK-MYTASKSLOAD-1)", () => {
+  const G = "0190a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a6b";
+  it("DENY: goalId rác bị bỏ khỏi search, không ném", () => {
+    expect(validateTaskListSearch({ goalId: "rác" })).toEqual({});
+    expect(validateTaskListSearch({ goalId: 123 })).toEqual({});
+  });
+  it("ALLOW: goalId uuid ⇒ vào search + query GET /tasks + là bộ lọc đang bật; xoá bộ lọc bỏ khoá", () => {
+    const s = validateTaskListSearch({ goalId: G });
+    expect(s.goalId).toBe(G);
+    expect(toTaskListQuery(s, 20).goalId).toBe(G);
+    expect(hasActiveTaskListFilters(s)).toBe(true);
+    expect(clearTaskListFilters({ goalId: G, task: "x" })).toEqual({ task: "x" });
   });
 });

@@ -67,6 +67,10 @@ export default {
     allSources: "Tất cả nguồn",
     sources: { assigned: "Được giao", created: "Tôi tạo", watched: "Theo dõi" },
     showDone: "Hiện việc đã xong",
+    closedCapped: "Chỉ hiện tối đa {{count}} việc đã xong gần nhất.",
+    closedLoadError: "Không tải được việc đã xong. Danh sách việc đang mở vẫn hiển thị.",
+    refreshError: "Không làm mới được danh sách. Đang hiện dữ liệu đã tải trước đó.",
+    closedLoading: "Đang tải việc đã xong…",
     quickFilterLabel: "Lọc nhanh theo tiêu đề",
     quickFilterPlaceholder: "Lọc nhanh theo tiêu đề… (phím /)",
     due: "Hạn {{value}}",
@@ -96,6 +100,12 @@ export default {
     watcherOnly: "Bạn chỉ theo dõi việc này.",
   },
   // S20-SEC-GOALNAMEDTO-1 — việc gắn mục tiêu mà người xem không có quyền xem (server chỉ trả cờ).
+  // S20-TASK-MYTASKSLOAD-1 (US-GOAL-NV-07) — chip mục tiêu trên dòng việc + nhãn lọc /tasks?goalId=.
+  goalChip: {
+    filtering: "Đang lọc theo mục tiêu {{label}}",
+    filteringUnknown: "Đang lọc theo một mục tiêu",
+    clear: "Bỏ lọc mục tiêu",
+  },
   goalRef: {
     restricted: "Có mục tiêu",
     restrictedHint: "Việc này đang gắn một mục tiêu mà bạn không có quyền xem.",
@@ -241,11 +251,36 @@ export default {
     days: "{{count}} ngày",
     unknownName: "(Không rõ tên)",
     unassigned: "Chưa giao",
-    empty: { title: "Đội đang không có việc mở", description: "Mọi việc trong phạm vi của bạn đã xong hoặc chưa có việc nào." },
-    error: { title: "Không tải được dữ liệu việc của đội", description: "Kiểm tra kết nối rồi thử lại." },
+    empty: {
+      title: "Đội đang không có việc mở",
+      description: "Mọi việc trong phạm vi của bạn đã xong hoặc chưa có việc nào.",
+    },
+    error: {
+      title: "Không tải được dữ liệu việc của đội",
+      description: "Kiểm tra kết nối rồi thử lại.",
+    },
     loading: "Đang tải dữ liệu việc của đội…",
     tableLabel: "Số việc đang mở theo từng người",
     overdueLinkFor: "{{label}} — {{name}}",
     truncated: "Chỉ hiện {{max}} người đầu. Lọc theo dự án hoặc phòng ban để xem đủ.",
+  },
+  // S20-GOAL-SUGGEST-1 — ô «Mục tiêu» khi tạo việc / chi tiết việc / việc con.
+  goalSuggest: {
+    label: "Mục tiêu",
+    none: "—",
+    badge: "Gợi ý",
+    chipOffer: "Gắn vào {{goal}}?",
+    chipOn: "Sẽ gắn vào {{goal}}",
+    chipRemove: "Bỏ",
+    createdTitle: "Đã tạo việc «{{code}}»",
+    close: "Đóng",
+    subtask: {
+      label: "Tính vào {{goal}} của việc cha",
+      note: "Mục tiêu đếm từng việc: việc cha và việc con đều được tính.",
+      lockedPersonalOwner:
+        "Mục tiêu cá nhân chỉ nhận việc do chủ mục tiêu phụ trách, mà việc con thêm nhanh chưa có người phụ trách.",
+      lockedNoWriteScope:
+        "Việc con chưa có người phụ trách và việc cha không thuộc dự án nên chưa ghi được vào mục tiêu.",
+    },
   },
 };

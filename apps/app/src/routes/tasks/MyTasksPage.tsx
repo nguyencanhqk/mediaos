@@ -1,13 +1,14 @@
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight, ListTodo, Plus, RefreshCw, Search } from "lucide-react";
 import { companyTimeZone, formatDateTime, taskCoreApi, taskKeys, useCan } from "@mediaos/web-core";
 import { Button, Card, Checkbox, EmptyState, Input, PageHeader } from "@mediaos/ui";
-import type { MyTaskItemDto } from "@mediaos/contracts";
+import { MY_TASKS_CLOSED_LIMIT, type MyTaskItemDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskGoalChip } from "./TaskGoalChip";
 import { TaskRowDeadlineControl, TaskRowStatusControl } from "./TaskRowQuickEdit";
 import { useTaskDrawer } from "./task-drawer-nav";
 import {
@@ -108,6 +109,7 @@ function TaskRow({ item, onOpen }: { item: MyTaskItemDto; onOpen: (id: string) =
         </button>
         <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
           <span>{item.projectName ?? t("tasks.my.noProject")}</span>
+          <TaskGoalChip goalId={item.goalId} goalCode={item.goalCode} goalName={item.goalName} />
           <span aria-hidden="true">·</span>
           <TaskRowDeadlineControl
             task={item}
@@ -345,14 +347,44 @@ export function MyTasksPage() {
   // S20-TASK-DRAWER-1 — mở drawer tại chỗ (`?task=`): bộ lọc + vị trí cuộn giữ nguyên.
   const { openTask } = useTaskDrawer();
 
-  const { data, isLoading, isError, refetch, dataUpdatedAt } = useQuery({
-    queryKey: taskKeys.my(),
-    queryFn: () => taskCoreApi.getMyTasks(),
+  const showDone = search.showDone === 1 || search.group === "done";
+  // S20-TASK-MYTASKSLOAD-1 — mặc định CHỈ việc mở (nhẹ); «Hiện việc đã xong» mới tải việc đóng (có trần 100).
+  // keepPreviousData: bật công tắc không làm trắng danh sách đang hiện; lỗi lần tải việc đóng chỉ báo tại chỗ.
+  const {
+    data: fetched,
+    isLoading,
+    isError,
+    isPlaceholderData,
+    refetch,
+    dataUpdatedAt,
+  } = useQuery({
+    queryKey: taskKeys.my({ includeClosed: showDone }),
+    queryFn: () => taskCoreApi.getMyTasks(showDone ? { includeClosed: true } : undefined),
     enabled: canView,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
-
-  const showDone = search.showDone === 1 || search.group === "done";
+  // Lần tải sau LỖI (query chuyển 'error' ⇒ placeholder biến mất) vẫn giữ dòng đã có để không trắng trang.
+  // Dòng tốt gần nhất nhớ kèm khoá includeClosed: khác khoá ⇒ chỉ dùng lại dòng MỞ (đúng ở cả hai khoá).
+  const lastGoodRef = useRef<{ rows: MyTaskItemDto[]; includeClosed: boolean } | undefined>(
+    undefined,
+  );
+  if (fetched !== undefined && !isPlaceholderData) {
+    lastGoodRef.current = { rows: fetched, includeClosed: showDone };
+  }
+  const lastGood = lastGoodRef.current;
+  const fallback =
+    lastGood === undefined
+      ? undefined
+      : lastGood.includeClosed === showDone
+        ? lastGood.rows
+        : lastGood.rows.filter((r) => r.status !== "Done" && r.status !== "Cancelled");
+  const data = fetched ?? fallback;
+  // Đúng bằng trần ⇒ bị cắt; LỚN HƠN trần ⇒ API cũ chưa hiểu `includeClosed` (trả hết) ⇒ không báo trần.
+  const closedCount = (data ?? []).filter(
+    (r) => r.status === "Done" || r.status === "Cancelled",
+  ).length;
+  const closedCapped = showDone && closedCount === MY_TASKS_CLOSED_LIMIT;
   // «Bây giờ» = lúc tải dữ liệu: cùng mốc server tính `isOverdue`; tải lại (focus cửa sổ) ⇒ nhóm lại.
   const groups = useMemo(
     () =>
@@ -375,7 +407,7 @@ export function MyTasksPage() {
     );
   }
 
-  if (isError) {
+  if (isError && data === undefined) {
     return (
       <div className="p-6">
         <EmptyState
@@ -400,7 +432,7 @@ export function MyTasksPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6" aria-busy={isPlaceholderData || undefined}>
       <PageHeader
         title={t("tasks.my.title")}
         description={t("tasks.my.description")}
@@ -414,6 +446,29 @@ export function MyTasksPage() {
           ) : undefined
         }
       />
+      {isError && data !== undefined && (
+        <p
+          className="text-sm text-destructive"
+          role="alert"
+          data-testid={showDone ? "my-tasks-closed-error" : "my-tasks-refresh-error"}
+        >
+          {t(showDone ? "myTasks.closedLoadError" : "myTasks.refreshError")}
+        </p>
+      )}
+      {showDone && isPlaceholderData && !isError && (
+        <p
+          className="text-xs text-muted-foreground"
+          role="status"
+          data-testid="my-tasks-closed-loading"
+        >
+          {t("myTasks.closedLoading")}
+        </p>
+      )}
+      {closedCapped && (
+        <p className="text-xs text-muted-foreground" data-testid="my-tasks-closed-capped">
+          {t("myTasks.closedCapped", { count: MY_TASKS_CLOSED_LIMIT })}
+        </p>
+      )}
       {canCreate && <MyTasksQuickAdd autoFocus={search.create === 1} />}
       {createOpen && (
         <TaskFormDrawer

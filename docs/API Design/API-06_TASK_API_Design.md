@@ -1174,6 +1174,7 @@ Idempotency-Key: <uuid>
 | `reporter_employee_id` | Lọc reporter |
 | `watcher_employee_id` | Lọc watcher |
 | `department_id` | Lọc department |
+| `goal_id` (code: `goalId`) | UUID mục tiêu; chỉ thu hẹp trong phạm vi đọc task. Không phải UUID ⇒ 400; mục tiêu không tồn tại / công ty khác / người xem không có `view:goal` ⇒ danh sách rỗng (không lộ tồn tại) |
 | `due_from`, `due_to` | Lọc deadline |
 | `is_overdue` | true/false |
 | `has_assignee` | true/false |
@@ -1371,6 +1372,9 @@ Lấy các task liên quan trực tiếp đến user hiện tại:
 ```http
 GET /api/v1/tasks/my-tasks?status=Todo&priority=High&is_overdue=false&sort=due_at:asc
 ```
+
+**Tham số `includeClosed` (code, route thật `GET /tasks/my`)**  
+Mặc định `false` ⇒ chỉ việc đang mở. `true` ⇒ thêm tối đa 100 việc đã đóng (Done/Cancelled) gần nhất; phản hồi vẫn là mảng trần, `pagination.has_next = true` báo còn việc đóng bị cắt (`total` = tổng thật). Giá trị khác `true`/`false` ⇒ 400.
 
 **Business validation**
 

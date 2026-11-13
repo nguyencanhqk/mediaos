@@ -63,7 +63,13 @@ export const taskCoreApi = {
     apiFetch(`/tasks${buildQueryString(query ?? {})}`, z.array(taskCoreResponseSchema)),
 
   /** GET /tasks/my — task của CHÍNH user (read:task): gộp assigned+created+watched, mỗi dòng kèm `source`. */
-  getMyTasks: (): Promise<MyTaskItemDto[]> => apiFetch(`/tasks/my`, z.array(myTaskItemSchema)),
+  // S20-TASK-MYTASKSLOAD-1 — mặc định CHỈ việc mở; `includeClosed: true` thêm tối đa 100 việc đã đóng. Chỉ gửi
+  // tham số khi bật (API cũ bỏ qua khoá lạ — vẫn trả mảng).
+  getMyTasks: (query?: { includeClosed?: boolean }): Promise<MyTaskItemDto[]> =>
+    apiFetch(
+      `/tasks/my${query?.includeClosed === true ? "?includeClosed=true" : ""}`,
+      z.array(myTaskItemSchema),
+    ),
 
   /**
    * GET /tasks/workload — «Đội của tôi» (S20-TASK-WORKLOAD-1, read:task). Parse bằng schema KHÔNG strict:

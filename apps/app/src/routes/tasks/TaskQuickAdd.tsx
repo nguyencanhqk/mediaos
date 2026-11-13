@@ -11,6 +11,7 @@ import {
 } from "@mediaos/web-core";
 import type { CreateTaskCoreRequest, TaskCoreResponseDto } from "@mediaos/contracts";
 import { cn } from "@mediaos/ui";
+import { useGoalOfferAfterCreate } from "@/routes/goals/use-goal-suggestions-offer";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
 import { resolveDeadlinePresets, type DeadlinePreset } from "./deadline-presets";
@@ -191,10 +192,13 @@ export function TaskQuickAdd({
     if (autoFocus && !disabled) inputRef.current?.focus();
   }, [autoFocus, disabled]);
 
+  const offerGoal = useGoalOfferAfterCreate();
   const createMutation = useMutation({
     mutationFn: (body: CreateTaskCoreRequest) => taskCoreApi.createTask(body),
     onSuccess: async (task) => {
       onCreated?.(task);
+      // S20-GOAL-SUGGEST-1 — đúng 1 ứng viên ⇒ toast «Tính vào ‹G›?» (không tự gắn).
+      offerGoal(task);
       // Board KHÔNG nằm dưới taskCoreInvalidation.list() ⇒ khoá kanban của đúng dự án phải TƯỜNG MINH.
       const keys = [
         ...taskCoreInvalidation.list(),

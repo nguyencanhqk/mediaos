@@ -377,7 +377,13 @@ export function TaskSubtaskPanel({
         <p className="text-sm text-muted-foreground">{t("tasks.detail.subtasks.empty")}</p>
       )}
 
-      {canCreate && <SubtaskQuickAdd parentTaskId={taskId} projectId={projectId} />}
+      {canCreate && (
+        <SubtaskQuickAdd
+          parentTaskId={taskId}
+          projectId={projectId}
+          parentGoalId={taskQuery.data?.goalId ?? null}
+        />
+      )}
 
       {editTarget && (
         <EditSubtaskDialog

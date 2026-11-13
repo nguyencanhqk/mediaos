@@ -22,14 +22,16 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     ...actual,
     useCan: (action: string, resourceType: string) => !perm.denied.has(`${action}:${resourceType}`),
     goalApi: { ...actual.goalApi, listGoals: vi.fn(), linkTasks: vi.fn(), unlinkTask: vi.fn() },
+    authApi: { ...actual.authApi, me: vi.fn() },
   };
 });
 
-import { goalApi, ApiError } from "@mediaos/web-core";
+import { goalApi, authApi, ApiError } from "@mediaos/web-core";
 import { TaskGoalField } from "./TaskGoalField";
 
 const mockListGoals = goalApi.listGoals as ReturnType<typeof vi.fn>;
 const mockLinkTasks = goalApi.linkTasks as ReturnType<typeof vi.fn>;
+const mockMe = authApi.me as ReturnType<typeof vi.fn>;
 const mockUnlink = goalApi.unlinkTask as ReturnType<typeof vi.fn>;
 
 function makeGoal(over: Partial<GoalCoreResponseDto>): GoalCoreResponseDto {
@@ -46,8 +48,8 @@ function makeGoal(over: Partial<GoalCoreResponseDto>): GoalCoreResponseDto {
     parentGoalId: null,
     ownerEmployeeId: "emp-1",
     periodType: "quarter",
-    periodStart: "2026-01-01",
-    periodEnd: "2026-03-31",
+    periodStart: "2020-01-01",
+    periodEnd: "2099-12-31",
     measureType: "percent",
     targetValue: null,
     currentValue: null,
@@ -103,6 +105,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   perm.denied.clear();
   mockListGoals.mockResolvedValue([]);
+  mockMe.mockResolvedValue({ employee: { id: "emp-1", fullName: "Nguyễn Văn A" } });
   mockLinkTasks.mockResolvedValue({ goalId: "g-1", linked: 1, alreadyLinked: 0, warnings: [] });
   mockUnlink.mockResolvedValue(undefined);
 });
@@ -163,6 +166,70 @@ describe("TaskGoalField — picker lọc theo neo (GOAL-ERR-008)", () => {
     expect(picker).not.toHaveTextContent("Mục tiêu người khác");
     expect(picker).not.toHaveTextContent("Mục tiêu nháp");
     expect(picker).not.toHaveTextContent("Mục tiêu dự án khác");
+  });
+});
+
+describe("TaskGoalField — S20-GOAL-SUGGEST-1", () => {
+  it("mục tiêu manual/children/project KHÔNG bao giờ vào danh sách gắn (hồi quy: trước đây vẫn hiện)", async () => {
+    mockListGoals.mockResolvedValue([
+      makeGoal({ id: "g-manual", name: "Đo thủ công", progressMode: "manual" }),
+      makeGoal({ id: "g-children", name: "Đo theo con", progressMode: "children" }),
+      makeGoal({ id: "g-tasks", name: "Đo theo việc", progressMode: "tasks" }),
+    ]);
+    renderField();
+    const picker = await screen.findByTestId("task-goal-picker");
+    await waitFor(() => expect(picker).toHaveTextContent("Đo theo việc"));
+    expect(picker).not.toHaveTextContent("Đo thủ công");
+    expect(picker).not.toHaveTextContent("Đo theo con");
+  });
+
+  it("lọc Ở SERVER theo neo + Active + kỳ, không còn limit 200 mục tiêu đầu", async () => {
+    renderField();
+    await screen.findByTestId("task-goal-picker");
+    await waitFor(() => expect(mockListGoals).toHaveBeenCalled());
+    const calls = mockListGoals.mock.calls.map((c) => c[0] as Record<string, unknown>);
+    expect(calls.map((c) => c.employeeId ?? c.projectId ?? c.departmentId).sort()).toEqual(
+      ["dept-1", "emp-1", "p-1"].sort(),
+    );
+    for (const c of calls) {
+      expect(c).toMatchObject({ status: "Active", limit: 50 });
+      expect(c.periodFrom).toBe(c.periodTo);
+    }
+  });
+
+  it("thiếu update:task ⇒ không gọi GET /goals", async () => {
+    perm.denied.add("update:task");
+    renderField();
+    await screen.findByTestId("task-goal-readonly");
+    expect(mockListGoals).not.toHaveBeenCalled();
+  });
+
+  it("việc CHƯA gắn + đúng 1 ứng viên ⇒ chip một chạm gọi linkTasks", async () => {
+    mockListGoals.mockResolvedValue([makeGoal({ id: "g-1", name: "Mục tiêu phòng" })]);
+    renderField();
+    const chip = await screen.findByTestId("task-goal-offer");
+    expect(chip).toHaveTextContent("Mục tiêu phòng");
+    fireEvent.click(chip);
+    await waitFor(() => expect(mockLinkTasks).toHaveBeenCalledWith("g-1", { taskIds: ["t-1"] }));
+  });
+
+  it("việc đang gắn mục tiêu khác ⇒ KHÔNG gợi ý chuyển", async () => {
+    mockListGoals.mockResolvedValue([makeGoal({ id: "g-1", name: "Mục tiêu phòng" })]);
+    renderField({ ...TASK, goalId: "g-old", goalCode: "GOAL-0009", goalName: "Mục tiêu cũ" });
+    const picker = await screen.findByTestId("task-goal-picker");
+    await waitFor(() => expect(picker).toHaveTextContent("Mục tiêu phòng"));
+    expect(screen.queryByTestId("task-goal-offer")).toBeNull();
+  });
+
+  it("nhiều ứng viên ⇒ không chip", async () => {
+    mockListGoals.mockResolvedValue([
+      makeGoal({ id: "g-1", name: "Mục tiêu phòng" }),
+      makeGoal({ id: "g-2", name: "Mục tiêu dự án", level: "project", projectId: "p-1", departmentId: null }),
+    ]);
+    renderField();
+    const picker = await screen.findByTestId("task-goal-picker");
+    await waitFor(() => expect(picker).toHaveTextContent("Mục tiêu dự án"));
+    expect(screen.queryByTestId("task-goal-offer")).toBeNull();
   });
 });
 

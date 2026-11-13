@@ -31,6 +31,11 @@ import { useTaskPatchFieldLocks, type TaskPatchFieldLocks } from "./task-patch-f
 import { TaskFieldLockedHint } from "./TaskFieldLockedHint";
 import { useMyEmployeeLink } from "./use-my-employee";
 import { isAssigneeRejection } from "./task-quick-add-errors";
+import {
+  TaskCreatedUnlinkedDialog,
+  TaskFormGoalField,
+  useCreateGoalLink,
+} from "./TaskGoalField.form";
 
 /**
  * TaskFormDrawer — tạo/sửa task core (S4-FE-TASK-2, SPEC-06 §13.6, TASK-SCREEN-006).
@@ -133,6 +138,8 @@ export function TaskFormDrawer({
       ? initialValues.projectId || undefined
       : defaultProject?.id;
   const assignMeWithProject = !isEdit && defaultAssigneeMe;
+
+  const goalLink = useCreateGoalLink();
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
@@ -255,6 +262,9 @@ export function TaskFormDrawer({
         ...(projectId ? [taskKeys.kanban(projectId), taskKeys.projects.report(projectId)] : []),
       ];
       await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+      // S20-GOAL-SUGGEST-1 — bước 2 «gắn vào mục tiêu» (chỉ TẠO). Lỗi ⇒ việc VẪN còn, hiện «chưa gắn» +
+      // «Thử gắn lại» thay vì đóng form như thành công.
+      if (!isEdit && !(await goalLink.attempt(result))) return;
       onSuccess(result);
     },
     onError: (err) => {
@@ -274,7 +284,23 @@ export function TaskFormDrawer({
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
   const noop = () => {};
+  const goalCtx = {
+    projectId: watch("projectId") || null,
+    assigneeEmployeeId: watch("assigneeEmployeeId") || null,
+    departmentId: watch("departmentId") || null,
+    dueAt: localDatetimeToIso(watch("dueAt")) ?? null,
+  };
   const errFor = (e: FieldError | undefined) => (e ? t(e.message ?? "") : undefined);
+
+  if (goalLink.pending) {
+    return (
+      <TaskCreatedUnlinkedDialog
+        pending={goalLink.pending}
+        onRetry={goalLink.retry}
+        onClose={() => goalLink.pending && onSuccess(goalLink.pending.task)}
+      />
+    );
+  }
 
   return (
     <Dialog
@@ -486,6 +512,7 @@ export function TaskFormDrawer({
             )}
           </div>
         </div>
+        {!isEdit && <TaskFormGoalField ctx={goalCtx} onChange={goalLink.setSelected} />}
         {afterFields}
       </form>
     </Dialog>
